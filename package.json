@@ -4,7 +4,8 @@
   "description": "Zero-friction, rigorous AI workflow engine for non-technical vibe coders.",
   "main": "index.js",
   "bin": {
-    "steroid-workflow": "./bin/cli.js"
+    "steroid-workflow": "./bin/cli.js",
+    "steroid-run": "./bin/steroid-run.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
