@@ -39,10 +39,43 @@ human validation to pivot the architecture or manually intervene.
 // Extract the command to run
 const args = process.argv.slice(2);
 if (args.length === 0) {
-    console.error("Usage: npx steroid-run <command>");
+    console.error("Usage: npx steroid-run <command> OR npx steroid-run verify <file> --min-lines=<number>");
     process.exit(1);
 }
 
+// 2. Verification Mode (Anti-Summarization)
+if (args[0] === 'verify') {
+    const targetFile = args[1];
+    const minLinesArg = args.find(a => a.startsWith('--min-lines='));
+
+    if (!targetFile || !minLinesArg) {
+        console.error("Usage: npx steroid-run verify <file> --min-lines=<number>");
+        process.exit(1);
+    }
+
+    const minLines = parseInt(minLinesArg.split('=')[1], 10);
+    const fullPath = path.resolve(targetDir, targetFile);
+
+    if (!fs.existsSync(fullPath)) {
+        console.error(`[STEROID-VERIFY ERROR]: File does not exist at ${fullPath}`);
+        process.exit(1);
+    }
+
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const lineCount = content.split('\n').length;
+
+    if (lineCount < minLines) {
+        console.error(`\n[STEROID-VERIFY ERROR] 🛑 AI SHORTCUT DETECTED 🛑`);
+        console.error(`File ${targetFile} has ${lineCount} lines, but requires at least ${minLines} lines.`);
+        console.error(`Do not summarize code. You MUST write the full implementation.`);
+        process.exit(1);
+    }
+
+    console.log(`[STEROID-VERIFY SUCCESS] File passes length validation (${lineCount} lines).`);
+    process.exit(0);
+}
+
+// 3. Execution Mode
 const commandStr = args.join(' ');
 console.log(`[steroid-run] Executing: ${commandStr}`);
 
@@ -52,7 +85,7 @@ const child = spawnSync(commandStr, {
     stdio: 'inherit'
 });
 
-// 2. State Machine Update
+// 4. State Machine Update
 if (child.status !== 0) {
     state.error_count += 1;
     state.last_error = `Command failed with exit code ${child.status}`;
