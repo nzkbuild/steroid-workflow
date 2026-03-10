@@ -1,12 +1,19 @@
 {
   "name": "steroid-workflow",
   "version": "1.0.0",
-  "description": "Zero-friction, rigorous AI workflow engine for non-technical vibe coders.",
-  "main": "index.js",
+  "description": "AI agency-in-a-box for non-technical vibe coders. Physically constrained execution with TDD, circuit breakers, and anti-summarization guards.",
   "bin": {
     "steroid-workflow": "./bin/cli.js",
     "steroid-run": "./bin/steroid-run.js"
   },
+  "files": [
+    "bin/",
+    "skills/",
+    "src/forks/",
+    "memory-template/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -16,11 +23,21 @@
   },
   "keywords": [
     "ai",
+    "agentic",
+    "workflow",
+    "vibe-coding",
+    "tdd",
+    "circuit-breaker",
     "claude",
     "cursor",
-    "agentic",
-    "workflow"
+    "gemini",
+    "antigravity",
+    "skills"
   ],
   "author": "nzkbuild",
-  "license": "OFL-1.1"
+  "license": "MIT",
+  "homepage": "https://github.com/nzkbuild/steroid-workflow#readme",
+  "bugs": {
+    "url": "https://github.com/nzkbuild/steroid-workflow/issues"
+  }
 }
