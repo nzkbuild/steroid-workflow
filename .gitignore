@@ -2,7 +2,7 @@ node_modules/
 .memory/
 .agents/
 .cursorrules
-steroid-run.js
+steroid-run.cjs
 test_project/
 test-install/
 tmp-*/

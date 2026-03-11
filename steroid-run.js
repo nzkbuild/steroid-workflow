@@ -18,25 +18,22 @@ steroid-run — The physical pipeline enforcer for AI-driven development.
 
 Usage:
   Circuit Breaker:
-    node steroid-run.js '<command>'                       Execute a command with error tracking
-    node steroid-run.js verify <file> --min-lines=<n>     Verify file meets minimum line count
-    node steroid-run.js reset                             Reset the error counter to 0
-    node steroid-run.js status                            Show current circuit breaker state
+    npx steroid-run '<command>'                       Execute a command with error tracking
+    npx steroid-run verify <file> --min-lines=<n>     Verify file meets minimum line count
+    npx steroid-run reset                             Reset the error counter to 0
+    npx steroid-run status                            Show current circuit breaker state
 
   Pipeline Enforcement:
-    node steroid-run.js init-feature <slug>               Create feature folder structure
-    node steroid-run.js gate <phase> <feature>            Check phase prerequisites
-    node steroid-run.js commit <message>                  Atomic git commit in steroid format
-    node steroid-run.js log <feature> <message>           Append to progress log
-    node steroid-run.js check-plan <feature>              Count remaining tasks in plan
-    node steroid-run.js archive <feature>                 Archive completed feature
+    npx steroid-run init-feature <slug>               Create feature folder structure
+    npx steroid-run gate <phase> <feature>            Check phase prerequisites
+    npx steroid-run commit <message>                  Atomic git commit in steroid format
+    npx steroid-run log <feature> <message>           Append to progress log
+    npx steroid-run check-plan <feature>              Count remaining tasks in plan
+    npx steroid-run archive <feature>                 Archive completed feature
 
   Progress:
-    node steroid-run.js progress                          Show execution learnings log
-    node steroid-run.js progress --patterns               Show only codebase patterns
-
-  Diagnostics:
-    node steroid-run.js audit                             Verify all enforcement layers are installed
+    npx steroid-run progress                          Show execution learnings log
+    npx steroid-run progress --patterns               Show only codebase patterns
 
 The circuit breaker tracks errors in .memory/execution_state.json.
 After 3 consecutive errors, all execution is blocked until you run 'reset'.
@@ -98,126 +95,6 @@ if (args[0] === 'progress') {
         console.log(content);
     }
     process.exit(0);
-}
-
-// --- Audit Command (Verify all enforcement layers) ---
-if (args[0] === 'audit') {
-    console.log('');
-    console.log('[steroid-run] 🔍 Auditing enforcement layers...');
-    console.log('');
-
-    let passed = 0;
-    let failed = 0;
-
-    const checks = [
-        {
-            name: 'Git pre-commit hook',
-            path: path.join(targetDir, '.git', 'hooks', 'pre-commit'),
-            test: 'contains',
-            marker: 'STEROID-WORKFLOW',
-        },
-        {
-            name: 'Skills (vibe-capture)',
-            path: path.join(targetDir, '.agents', 'skills', 'steroid-vibe-capture', 'SKILL.md'),
-            test: 'exists',
-        },
-        {
-            name: 'Skills (specify)',
-            path: path.join(targetDir, '.agents', 'skills', 'steroid-specify', 'SKILL.md'),
-            test: 'exists',
-        },
-        {
-            name: 'Skills (research)',
-            path: path.join(targetDir, '.agents', 'skills', 'steroid-research', 'SKILL.md'),
-            test: 'exists',
-        },
-        {
-            name: 'Skills (architect)',
-            path: path.join(targetDir, '.agents', 'skills', 'steroid-architect', 'SKILL.md'),
-            test: 'exists',
-        },
-        {
-            name: 'Skills (engine)',
-            path: path.join(targetDir, '.agents', 'skills', 'steroid-engine', 'SKILL.md'),
-            test: 'exists',
-        },
-        {
-            name: 'Circuit breaker state',
-            path: path.join(targetDir, '.memory', 'execution_state.json'),
-            test: 'exists',
-        },
-        {
-            name: 'Pipeline enforcer',
-            path: path.join(targetDir, 'steroid-run.js'),
-            test: 'exists',
-        },
-    ];
-
-    // Check IDE configs (at least one should have the marker)
-    const ideConfigs = [
-        { name: 'GEMINI.md', path: path.join(targetDir, 'GEMINI.md') },
-        { name: '.cursorrules', path: path.join(targetDir, '.cursorrules') },
-        { name: 'CLAUDE.md', path: path.join(targetDir, 'CLAUDE.md') },
-        { name: '.windsurfrules', path: path.join(targetDir, '.windsurfrules') },
-        { name: '.github/copilot-instructions.md', path: path.join(targetDir, '.github', 'copilot-instructions.md') },
-    ];
-
-    // Run core checks
-    for (const check of checks) {
-        if (!fs.existsSync(check.path)) {
-            console.log(`  ❌ ${check.name} — missing`);
-            failed++;
-        } else if (check.test === 'contains') {
-            const content = fs.readFileSync(check.path, 'utf-8');
-            if (content.includes(check.marker)) {
-                console.log(`  ✅ ${check.name}`);
-                passed++;
-            } else {
-                console.log(`  ❌ ${check.name} — exists but not steroid hook`);
-                failed++;
-            }
-        } else {
-            console.log(`  ✅ ${check.name}`);
-            passed++;
-        }
-    }
-
-    // Check IDE configs
-    let ideCount = 0;
-    console.log('');
-    console.log('  IDE Maestro rules:');
-    for (const ide of ideConfigs) {
-        if (fs.existsSync(ide.path)) {
-            const content = fs.readFileSync(ide.path, 'utf-8');
-            if (content.includes('STEROID-WORKFLOW-START')) {
-                console.log(`    ✅ ${ide.name}`);
-                ideCount++;
-            } else {
-                console.log(`    ⚠️  ${ide.name} — exists but no Maestro rules`);
-            }
-        } else {
-            console.log(`    ○  ${ide.name} — not installed`);
-        }
-    }
-
-    if (ideCount === 0) {
-        console.log(`    ❌ No IDE config has Maestro rules!`);
-        failed++;
-    } else {
-        passed++;
-    }
-
-    console.log('');
-    console.log(`  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s) configured`);
-
-    if (failed > 0) {
-        console.log('');
-        console.log('  Fix: Run "npx steroid-workflow init" to reinstall missing layers.');
-        process.exit(1);
-    } else {
-        console.log('  All enforcement layers active. 🔒');
-        process.exit(0);
-    }
 }
 
 // ============================================================

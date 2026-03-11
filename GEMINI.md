@@ -3,7 +3,7 @@
 This is the **source repo** for steroid-workflow. DO NOT trigger the steroid pipeline here.
 
 - Skills source: `skills/` (not `.agents/skills/`)
-- Enforcer source: `bin/steroid-run.js`
+- Enforcer source: `bin/steroid-run.cjs`
 - CLI installer: `bin/cli.js`
 - Fork references: `src/forks/`
 
@@ -31,19 +31,19 @@ Each skill automatically hands off to the next. No manual invocation needed.
 
 ## Circuit Breaker Enforcement (CRITICAL — REPEATED IN EVERY SKILL)
 ALL terminal commands during development MUST be wrapped in:
-`node steroid-run.js '<command>'`
+`node steroid-run.cjs '<command>'`
 Direct terminal execution (`npm install`, `npx jest`, `node script.js`, etc.) is STRICTLY FORBIDDEN.
-If you need to run `npm install`, you must run: `node steroid-run.js 'npm install'`
+If you need to run `npm install`, you must run: `node steroid-run.cjs 'npm install'`
 This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
 
 ## Pipeline Enforcement Commands (MUST USE)
 The AI MUST use these physical commands — they cannot be skipped:
-- `node steroid-run.js init-feature <slug>` — Create feature folder (validates kebab-case)
-- `node steroid-run.js gate <phase> <feature>` — Check phase prerequisites before proceeding
-- `node steroid-run.js commit "<message>"` — Atomic git commit in steroid format
-- `node steroid-run.js log <feature> "<message>"` — Append to progress log
-- `node steroid-run.js check-plan <feature>` — Check if all tasks are done
-- `node steroid-run.js archive <feature>` — Archive completed feature
+- `node steroid-run.cjs init-feature <slug>` — Create feature folder (validates kebab-case)
+- `node steroid-run.cjs gate <phase> <feature>` — Check phase prerequisites before proceeding
+- `node steroid-run.cjs commit "<message>"` — Atomic git commit in steroid format
+- `node steroid-run.cjs log <feature> "<message>"` — Append to progress log
+- `node steroid-run.cjs check-plan <feature>` — Check if all tasks are done
+- `node steroid-run.cjs archive <feature>` — Archive completed feature
 
 ## Context Wipe Mandate
 After completing each task in the plan.md, terminate the current sub-agent context and start a fresh one.

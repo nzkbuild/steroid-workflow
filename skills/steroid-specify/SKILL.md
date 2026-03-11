@@ -19,7 +19,7 @@ Activate immediately after `@steroid-vibe-capture` completes. Do not wait for us
 
 Before doing anything, run the gate check:
 ```
-node steroid-run.js gate specify <feature>
+node steroid-run.cjs gate specify <feature>
 ```
 If this command fails, STOP. The vibe capture phase is not complete.
 
@@ -36,7 +36,7 @@ NEVER summarize existing code. Writing "...rest of the code here..." is a critic
 ### 4. Circuit Breaker Mandate
 
 If at any point you need to run a terminal command, you MUST use:
-`node steroid-run.js '<command>'`
+`node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
 ### 5. Schema Obedience

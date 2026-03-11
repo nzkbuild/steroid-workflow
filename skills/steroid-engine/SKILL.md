@@ -12,7 +12,7 @@ This skill autonomously executes the checklist in `.memory/changes/<feature>/pla
 All terminal commands executed by this skill or any sub-agent it dispatches MUST be wrapped in the physical Node.js circuit breaker:
 
 ```
-node steroid-run.js '<command>'
+node steroid-run.cjs '<command>'
 ```
 
 Direct terminal commands (`npm install`, `npx jest`, `node script.js`, etc.) are strictly forbidden. The `steroid-run` wrapper physically tracks errors in `.memory/execution_state.json`. If the error count reaches 3, the wrapper hard-faults and prevents further execution. The AI has no ability to override this.
@@ -24,7 +24,7 @@ NEVER summarize code. NEVER write comments like `// rest of the code here` or `/
 Before marking any task as `[x]`, run the verification guard:
 
 ```
-node steroid-run.js verify <path/to/file> --min-lines=<expected>
+node steroid-run.cjs verify <path/to/file> --min-lines=<expected>
 ```
 
 If the file is shorter than expected, the verify command will exit with an error, blocking the task from completion.
@@ -33,7 +33,7 @@ If the file is shorter than expected, the verify command will exit with an error
 
 Before doing anything, run the gate check:
 ```
-node steroid-run.js gate engine <feature>
+node steroid-run.cjs gate engine <feature>
 ```
 If this command fails, STOP. The architecture phase is not complete.
 
@@ -42,7 +42,7 @@ If this command fails, STOP. The architecture phase is not complete.
 Before starting the checklist, create a rollback safety point:
 
 ```
-node steroid-run.js 'git init && git add -A && git commit -m steroid-checkpoint --allow-empty'
+node steroid-run.cjs 'git init && git add -A && git commit -m steroid-checkpoint --allow-empty'
 ```
 
 If the build goes wrong, the user can recover with `git reset --hard steroid-checkpoint`.
@@ -73,13 +73,13 @@ This gives the user visibility without breaking the silence directive.
 Dispatch a fresh Implementer sub-agent. Provide it with:
 - The full text of the current task from `plan.md`
 - The raw TDD methodology from `src/forks/superpowers/tdd.md`
-- The `steroid-run` mandate (all commands via `node steroid-run.js`)
+- The `steroid-run` mandate (all commands via `node steroid-run.cjs`)
 - The Codebase Patterns section from `progress.md` (if any)
 
 The Implementer sub-agent follows the Red-Green-Refactor cycle from the forked TDD skill:
 
-1. **RED** - Write one minimal failing test. Run: `node steroid-run.js 'npm test <path>'`. Confirm it fails because the feature is missing, not a typo.
-2. **GREEN** - Write the minimal code to pass the test. Run: `node steroid-run.js 'npm test <path>'`. Confirm passing.
+1. **RED** - Write one minimal failing test. Run: `node steroid-run.cjs 'npm test <path>'`. Confirm it fails because the feature is missing, not a typo.
+2. **GREEN** - Write the minimal code to pass the test. Run: `node steroid-run.cjs 'npm test <path>'`. Confirm passing.
 3. **REFACTOR** - Clean up duplication. Confirm tests stay green.
 
 Reference the full TDD rules in `src/forks/superpowers/tdd.md`. The Implementer MUST follow The Iron Law: no production code without a failing test first.
@@ -99,15 +99,15 @@ Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-qual
 
 **Phase 4: Verify, Commit & Log (Physical Enforcement)**
 
-1. Run: `node steroid-run.js verify <primary-file> --min-lines=<expected>`
+1. Run: `node steroid-run.cjs verify <primary-file> --min-lines=<expected>`
 2. If passing, mark the task as `[x]` in `plan.md`
 3. Commit atomically using the physical commit command:
    ```
-   node steroid-run.js commit "<task-description>"
+   node steroid-run.cjs commit "<task-description>"
    ```
 4. Log the task completion using the physical log command:
    ```
-   node steroid-run.js log <feature> "<what was implemented — one sentence>"
+   node steroid-run.cjs log <feature> "<what was implemented — one sentence>"
    ```
 
 5. If you discover reusable patterns, add them to the **Codebase Patterns** section at the TOP of `progress.md`:
@@ -125,7 +125,7 @@ Only add patterns that are **general and reusable**, not task-specific details.
 
 After completing a task, physically check if all tasks are done:
 ```
-node steroid-run.js check-plan <feature>
+node steroid-run.cjs check-plan <feature>
 ```
 - If exit code 0 (all complete) → proceed to Completion
 - If exit code 1 (tasks remaining) → wipe sub-agent contexts, loop back to Step 0 with the next `[ ]` task
@@ -138,8 +138,8 @@ If sub-agent dispatch is NOT available (Cursor, Gemini CLI, etc.), execute the t
 
 1. Does the code implement EVERY requirement from the task specification? (Yes/No)
 2. Are there any comments like `// TODO`, `// rest of code`, or `...` in the output? (Must be No)
-3. Does the primary file pass `node steroid-run.js verify`? (Must pass)
-4. Do all tests pass via `node steroid-run.js 'npm test'`? (Must pass)
+3. Does the primary file pass `node steroid-run.cjs verify`? (Must pass)
+4. Do all tests pass via `node steroid-run.cjs 'npm test'`? (Must pass)
 5. Is the code complete enough that a fresh AI context could understand it without additional explanation? (Must be Yes)
 
 If ANY answer fails, fix the issue before marking `[x]`.
@@ -150,11 +150,11 @@ After completing a task, the current sub-agent contexts MUST be terminated. Each
 
 ## Completion
 
-When `node steroid-run.js check-plan <feature>` exits with code 0 (all tasks complete):
+When `node steroid-run.cjs check-plan <feature>` exits with code 0 (all tasks complete):
 
 1. Archive the feature using the physical archive command:
    ```
-   node steroid-run.js archive <feature>
+   node steroid-run.cjs archive <feature>
    ```
 2. Output to the user: "🎉 The technical blueprint is fully implemented!"
 3. Signal completion: `<promise>COMPLETE</promise>`

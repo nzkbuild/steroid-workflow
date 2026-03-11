@@ -17,7 +17,7 @@ Activate immediately after `@steroid-research` completes. Do not wait for user i
 
 Before doing anything, run the gate check:
 ```
-node steroid-run.js gate architect <feature>
+node steroid-run.cjs gate architect <feature>
 ```
 If this command fails, STOP. The research phase is not complete.
 
@@ -90,7 +90,7 @@ After all components:
 ### 5. Circuit Breaker Mandate
 
 If at any point you need to run a terminal command, you MUST use:
-`node steroid-run.js '<command>'`
+`node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
 ### 6. Automatic System Handoff

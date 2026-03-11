@@ -45,7 +45,7 @@ Examples:
 Once the slug is determined, physically create the feature folder using the steroid-run enforcer:
 
 ```
-node steroid-run.js init-feature <slug>
+node steroid-run.cjs init-feature <slug>
 ```
 
 This is NOT optional. The command validates the slug format and creates `.memory/changes/<slug>/` with the correct structure. If the name is invalid, the command will block you with an error.
@@ -70,7 +70,7 @@ Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
 ### 6. Circuit Breaker Mandate
 
 If at any point you need to run a terminal command, you MUST use:
-`node steroid-run.js '<command>'`
+`node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
 ### 7. Automatic System Handoff

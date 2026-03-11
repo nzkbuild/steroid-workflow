@@ -77,7 +77,7 @@ All configs are auto-generated during install.
 ## Verify Installation
 
 ```bash
-node steroid-run.js audit
+node steroid-run.cjs audit
 ```
 
 This checks that all enforcement layers (git hook, skills, circuit breaker, IDE configs) are properly installed.
@@ -86,7 +86,7 @@ This checks that all enforcement layers (git hook, skills, circuit breaker, IDE 
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - How the pipeline enforcer works
-- Command reference for `steroid-run.js`
+- Command reference for `steroid-run.cjs`
 - Fork credits and sources
 - Project structure
 

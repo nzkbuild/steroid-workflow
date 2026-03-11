@@ -37,7 +37,7 @@ const forceMode = args.includes('--force');
 // --- Detect currently installed version ---
 function getInstalledVersion() {
   try {
-    // Check if steroid-run.js exists and try to find version marker
+    // Check if steroid-run.cjs exists and try to find version marker
     const installedPkg = path.join(targetDir, '.memory', 'execution_state.json');
     const maestroFile = path.join(targetDir, 'GEMINI.md');
     if (fs.existsSync(maestroFile)) {
@@ -142,7 +142,7 @@ const maestroContent = `SPECIAL INSTRUCTION: Think silently if needed. EFFORT LE
 Before writing ANY code:
 1. Check if \`.agents/skills/steroid-vibe-capture/SKILL.md\` exists
 2. If it exists → You are in a steroid-workflow project. Follow the pipeline below.
-3. Run \`node steroid-run.js status\` to confirm circuit breaker is active
+3. Run \`node steroid-run.cjs status\` to confirm circuit breaker is active
 4. Do NOT skip this check. A git pre-commit hook will block commits without pipeline artifacts.
 
 ## Intent Routing
@@ -165,19 +165,19 @@ Each skill automatically hands off to the next. No manual invocation needed.
 
 ## Circuit Breaker Enforcement (CRITICAL — REPEATED IN EVERY SKILL)
 ALL terminal commands during development MUST be wrapped in:
-\`node steroid-run.js '<command>'\`
+\`node steroid-run.cjs '<command>'\`
 Direct terminal execution (\`npm install\`, \`npx jest\`, \`node script.js\`, etc.) is STRICTLY FORBIDDEN.
-If you need to run \`npm install\`, you must run: \`node steroid-run.js 'npm install'\`
+If you need to run \`npm install\`, you must run: \`node steroid-run.cjs 'npm install'\`
 This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
 
 ## Pipeline Enforcement Commands (MUST USE)
 The AI MUST use these physical commands — they cannot be skipped:
-- \`node steroid-run.js init-feature <slug>\` — Create feature folder (validates kebab-case)
-- \`node steroid-run.js gate <phase> <feature>\` — Check phase prerequisites before proceeding
-- \`node steroid-run.js commit "<message>"\` — Atomic git commit in steroid format
-- \`node steroid-run.js log <feature> "<message>"\` — Append to progress log
-- \`node steroid-run.js check-plan <feature>\` — Check if all tasks are done
-- \`node steroid-run.js archive <feature>\` — Archive completed feature
+- \`node steroid-run.cjs init-feature <slug>\` — Create feature folder (validates kebab-case)
+- \`node steroid-run.cjs gate <phase> <feature>\` — Check phase prerequisites before proceeding
+- \`node steroid-run.cjs commit "<message>"\` — Atomic git commit in steroid format
+- \`node steroid-run.cjs log <feature> "<message>"\` — Append to progress log
+- \`node steroid-run.cjs check-plan <feature>\` — Check if all tasks are done
+- \`node steroid-run.cjs archive <feature>\` — Archive completed feature
 
 ## Context Wipe Mandate
 After completing each task in the plan.md, terminate the current sub-agent context and start a fresh one.
@@ -305,12 +305,12 @@ copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
 console.log(`   ✅ Skills installed to ${skillsTarget}/`);
 console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
 
-// Step 3: Install raw forks + steroid-run.js
+// Step 3: Install raw forks + steroid-run.cjs
 console.log('📦 [3/7] Installing ecosystem forks + pipeline enforcer...');
 copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
-fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.js'), path.join(targetDir, 'steroid-run.js'));
+fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.cjs'), path.join(targetDir, 'steroid-run.cjs'));
 console.log('   ✅ Raw ecosystem forks installed to src/forks/');
-console.log('   ✅ steroid-run.js copied to project root (pipeline enforcer)');
+console.log('   ✅ steroid-run.cjs copied to project root (pipeline enforcer)');
 
 // Step 4: Inject IDE Trigger Rules (The Maestro) — ALL major IDEs
 console.log('🔌 [4/7] Injecting Maestro rules into IDE configs...');
@@ -381,7 +381,7 @@ console.log('📋 [6/7] Setting up .gitignore...');
 const userGitignore = path.join(targetDir, '.gitignore');
 
 // Base entries (always gitignored)
-const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.js', '.agents/'];
+const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.cjs', '.agents/'];
 
 // Only gitignore IDE config files that were CREATED by us (not pre-existing)
 for (const config of ideConfigs) {
@@ -439,7 +439,7 @@ if (isUpdate) {
   console.log('Update complete. All enforcement layers refreshed.');
   console.log('');
   console.log('Verify:');
-  console.log('  node steroid-run.js audit');
+  console.log('  node steroid-run.cjs audit');
 } else {
   console.log('Tell your AI what you want to build:');
   console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
@@ -450,7 +450,7 @@ if (isUpdate) {
   console.log('If it doesn\'t, say: "Use the steroid pipeline."');
   console.log('');
   console.log('Verify installation:');
-  console.log('  node steroid-run.js audit');
+  console.log('  node steroid-run.cjs audit');
 }
 console.log('');
 console.log('Future updates:');

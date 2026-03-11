@@ -31,19 +31,19 @@ A shell script at `.git/hooks/pre-commit` that:
 2. If yes, checks that `.memory/changes/*/plan.md` exists
 3. If no plan exists, **blocks the commit** with a message telling the AI to use the pipeline
 
-This is the only enforcement that works regardless of AI model, IDE, or prompt quality. Commits made via `node steroid-run.js commit` use the `feat(steroid):` prefix, which the hook recognizes and allows through.
+This is the only enforcement that works regardless of AI model, IDE, or prompt quality. Commits made via `node steroid-run.cjs commit` use the `feat(steroid):` prefix, which the hook recognizes and allows through.
 
-## Pipeline Enforcer (`steroid-run.js`)
+## Pipeline Enforcer (`steroid-run.cjs`)
 
 All AI terminal commands are routed through this CLI wrapper.
 
 ### Circuit Breaker
 | Command | Purpose |
 |---------|---------|
-| `node steroid-run.js '<command>'` | Execute with error tracking (3 errors → hard stop) |
-| `node steroid-run.js verify <file> --min-lines=<n>` | Block code summarization |
-| `node steroid-run.js reset` | Reset error counter after human intervention |
-| `node steroid-run.js status` | Show circuit breaker state |
+| `node steroid-run.cjs '<command>'` | Execute with error tracking (3 errors → hard stop) |
+| `node steroid-run.cjs verify <file> --min-lines=<n>` | Block code summarization |
+| `node steroid-run.cjs reset` | Reset error counter after human intervention |
+| `node steroid-run.cjs status` | Show circuit breaker state |
 
 ### Pipeline Enforcement
 | Command | Purpose | Origin |
@@ -76,7 +76,7 @@ All AI terminal commands are routed through this CLI wrapper.
 
 ```
 your-project/
-├── steroid-run.js                 ← Pipeline enforcer (copied by installer)
+├── steroid-run.cjs                 ← Pipeline enforcer (copied by installer)
 ├── .git/hooks/pre-commit          ← Physical commit enforcement
 ├── .memory/
 │   ├── execution_state.json       ← Circuit breaker state
@@ -107,7 +107,7 @@ All integrated forks are MIT licensed:
 - **[obra/superpowers](https://github.com/obra/superpowers)** — TDD methodology and subagent-driven development
 - **[Kiyoraka/Project-AI-MemoryCore](https://github.com/Kiyoraka/Project-AI-MemoryCore)** — Continuous state-tracking via markdown/JSON
 
-### Ecosystem Forks (code ported into `steroid-run.js`)
+### Ecosystem Forks (code ported into `steroid-run.cjs`)
 - **[snarktank/ralph](https://github.com/snarktank/ralph)** — Autonomous loop: progress tracking, archive pattern
 - **[gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done)** — Research phase: tech investigation with confidence levels
 - **[Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)** — Per-change folders: kebab-case validation

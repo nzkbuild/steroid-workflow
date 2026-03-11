@@ -19,7 +19,7 @@ Activate immediately after `@steroid-specify` completes. Do not wait for user in
 
 Before doing anything, run the gate check:
 ```
-node steroid-run.js gate research <feature>
+node steroid-run.cjs gate research <feature>
 ```
 If this command fails, STOP. The specification phase is not complete.
 
@@ -39,7 +39,7 @@ Do not ask the user any questions. Read `.memory/changes/<feature>/spec.md`, inv
 ### 3. Circuit Breaker Mandate
 
 If at any point you need to run a terminal command, you MUST use:
-`node steroid-run.js '<command>'`
+`node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
 ### 4. What To Investigate
