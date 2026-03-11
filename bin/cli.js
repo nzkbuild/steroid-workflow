@@ -15,10 +15,11 @@ steroid-workflow v${pkg.version}
 ${pkg.description}
 
 Usage:
-  npx steroid-workflow init          Install Steroid-Workflow into the current project
-  npx steroid-workflow init --force  Overwrite existing .memory/ state
-  npx steroid-workflow --help        Show this help
-  npx steroid-workflow --version     Show version
+  npx steroid-workflow init            Install into the current project
+  npx steroid-workflow update          Update to the latest version
+  npx steroid-workflow init --force    Overwrite existing .memory/ state
+  npx steroid-workflow --help          Show this help
+  npx steroid-workflow --version       Show version
 `);
   process.exit(0);
 }
@@ -28,8 +29,34 @@ if (args.includes('--version') || args.includes('-v')) {
   process.exit(0);
 }
 
-// Default action is 'init'
+// Command detection
+const command = args.find(a => ['init', 'update'].includes(a)) || 'init';
+const isUpdate = command === 'update';
 const forceMode = args.includes('--force');
+
+// --- Detect currently installed version ---
+function getInstalledVersion() {
+  try {
+    // Check if steroid-run.js exists and try to find version marker
+    const installedPkg = path.join(targetDir, '.memory', 'execution_state.json');
+    const maestroFile = path.join(targetDir, 'GEMINI.md');
+    if (fs.existsSync(maestroFile)) {
+      const content = fs.readFileSync(maestroFile, 'utf-8');
+      const match = content.match(/STEROID-WORKFLOW-START/);
+      if (match) {
+        // Check for version stamp in .memory
+        const versionFile = path.join(targetDir, '.memory', '.steroid-version');
+        if (fs.existsSync(versionFile)) {
+          return fs.readFileSync(versionFile, 'utf-8').trim();
+        }
+        return 'unknown (pre-2.1.0)';
+      }
+    }
+    return null; // Not installed
+  } catch {
+    return null;
+  }
+}
 
 // --- Helper Functions ---
 
@@ -50,21 +77,32 @@ function copyRecursiveSync(src, dest, skipGit = true) {
   }
 }
 
-function safeInjectContent(filePath, content, markerStart, markerEnd) {
+/**
+ * Injects content into a config file using markers.
+ * PREPENDS if content doesn't already exist (for maximum LLM priority).
+ * Replaces in-place if markers already found (re-install).
+ */
+function injectContent(filePath, content, markerStart, markerEnd) {
+  const block = `${markerStart}\n${content}\n${markerEnd}`;
+
   if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, `${markerStart}\n${content}\n${markerEnd}\n`);
+    fs.writeFileSync(filePath, `${block}\n`);
     return;
   }
+
   const existing = fs.readFileSync(filePath, 'utf-8');
+
   if (existing.includes(markerStart)) {
+    // Replace existing block in-place
     const regex = new RegExp(
       escapeRegExp(markerStart) + '[\\s\\S]*?' + escapeRegExp(markerEnd),
       'g'
     );
-    const updated = existing.replace(regex, `${markerStart}\n${content}\n${markerEnd}`);
+    const updated = existing.replace(regex, block);
     fs.writeFileSync(filePath, updated);
   } else {
-    fs.appendFileSync(filePath, `\n\n${markerStart}\n${content}\n${markerEnd}\n`);
+    // PREPEND for maximum LLM priority (not append!)
+    fs.writeFileSync(filePath, `${block}\n\n${existing}`);
   }
 }
 
@@ -72,60 +110,43 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// --- Installation Target (unified for all IDEs) ---
-
-const skillsTarget = '.agents/skills';
-
-// --- Main Installation ---
-
-console.log('');
-console.log('╔══════════════════════════════════════════════╗');
-console.log(`║     🧬 Steroid-Workflow Installer v${pkg.version}      ║`);
-console.log('╚══════════════════════════════════════════════╝');
-console.log('');
-
-// Step 1: Install Memory Templates
-const memoryDir = path.join(targetDir, '.memory');
-if (fs.existsSync(memoryDir) && !forceMode) {
-  console.log('📦 [1/5] MemoryCore schema...');
-  console.log('   ⚠️  .memory/ already exists. Skipping to preserve your project state.');
-  console.log('   (Use --force to overwrite)');
-} else {
-  console.log('📦 [1/5] Installing MemoryCore schema...');
-  // Copy base templates
-  copyRecursiveSync(path.join(sourceDir, 'memory-template'), memoryDir);
-  // Create per-change folder structure
-  const changesDir = path.join(memoryDir, 'changes');
-  if (!fs.existsSync(changesDir)) {
-    fs.mkdirSync(changesDir, { recursive: true });
+// --- Track which config files existed BEFORE install ---
+function fileExistedBefore(filePath) {
+  // We check git to see if the file is already tracked
+  try {
+    const { spawnSync } = require('child_process');
+    const result = spawnSync('git', ['ls-files', filePath], {
+      cwd: targetDir,
+      encoding: 'utf-8',
+    });
+    return result.stdout && result.stdout.trim().length > 0;
+  } catch {
+    return fs.existsSync(filePath);
   }
-  console.log('   ✅ .memory/ created with execution_state.json, progress.md, and changes/ folder');
 }
 
-// Step 2: Install Skills
-console.log('🧠 [2/5] Installing Steroid skills (5-skill pipeline)...');
-const destSkills = path.join(targetDir, skillsTarget);
-copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
-console.log(`   ✅ Skills installed to ${skillsTarget}/`);
-console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
-
-// Step 3: Install raw forks + steroid-run.js
-console.log('📦 [3/5] Installing ecosystem forks + pipeline enforcer...');
-copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
-fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.js'), path.join(targetDir, 'steroid-run.js'));
-console.log('   ✅ Raw ecosystem forks installed to src/forks/');
-console.log('   ✅ steroid-run.js copied to project root (pipeline enforcer)');
-
-// Step 4: Inject IDE Trigger Rules (The Maestro)
-console.log('🔌 [4/5] Injecting Maestro IDE triggers...');
+// --- Maestro Content (The Rules) ---
 
 const MARKER_START = '<!-- STEROID-WORKFLOW-START -->';
 const MARKER_END = '<!-- STEROID-WORKFLOW-END -->';
 
-const maestroContent = `# Steroid-Workflow Maestro (Auto-Trigger Rules)
+const maestroContent = `SPECIAL INSTRUCTION: Think silently if needed. EFFORT LEVEL 2.00
+
+> [!CAUTION]
+> You MUST read and follow ALL steroid-workflow rules below BEFORE executing ANY task.
+> This is a PHYSICAL CONSTRAINT, not a suggestion. Violations will be caught by git hooks.
+
+# Steroid-Workflow Maestro (Auto-Trigger Rules)
+
+## Pre-Task Checkpoint (MANDATORY)
+Before writing ANY code:
+1. Check if \`.agents/skills/steroid-vibe-capture/SKILL.md\` exists
+2. If it exists → You are in a steroid-workflow project. Follow the pipeline below.
+3. Run \`node steroid-run.js status\` to confirm circuit breaker is active
+4. Do NOT skip this check. A git pre-commit hook will block commits without pipeline artifacts.
 
 ## Intent Routing
-If the user says words like "build", "create", "design", or "make" in the context of generating a new feature or project:
+For ANY development task (build, create, fix, debug, add, update, refactor, implement, change, improve, or ANY code request):
 - Read the file at \`.agents/skills/steroid-vibe-capture/SKILL.md\` and follow its instructions immediately.
 - Do not ask for permission. Just start the Vibe Translation process.
 - The pipeline will automatically flow: vibe-capture → specify → research → architect → engine
@@ -171,49 +192,267 @@ Read the Codebase Patterns section at the top before starting any new task.
 NEVER summarize code. NEVER write "...rest of code here..." or "// existing code".
 NEVER truncate file contents. Write complete replacements or precise edits.`;
 
-const geminiMdPath = path.join(targetDir, 'GEMINI.md');
-const cursorRulesPath = path.join(targetDir, '.cursorrules');
+// --- Git Pre-Commit Hook ---
 
-safeInjectContent(geminiMdPath, maestroContent, MARKER_START, MARKER_END);
-console.log('   ✅ Maestro rules injected into GEMINI.md');
+const PRE_COMMIT_HOOK = `#!/bin/sh
+# Steroid-Workflow Pre-Commit Enforcement v2.1.0
+# This hook ensures the AI followed the pipeline before committing.
+# Installed by: npx steroid-workflow init
 
-safeInjectContent(cursorRulesPath, maestroContent, MARKER_START, MARKER_END);
-console.log('   ✅ Maestro rules injected into .cursorrules');
+# Allow steroid commits to pass through (already went through pipeline)
+COMMIT_SOURCE="$2"
+if [ "$COMMIT_SOURCE" = "message" ]; then
+  # Check if it's a steroid commit via the message file
+  MSG_FILE="$1"
+  if [ -n "$MSG_FILE" ] && [ -f "$MSG_FILE" ]; then
+    if grep -q "^feat(steroid):" "$MSG_FILE" 2>/dev/null; then
+      exit 0
+    fi
+  fi
+fi
 
-// Step 5: Inject .gitignore for user project
-console.log('📋 [5/5] Setting up .gitignore...');
+# Check: Are source code files being committed?
+CODE_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(js|ts|jsx|tsx|py|go|rs|java|rb|php|vue|svelte|css|html|swift|kt|dart|c|cpp|h|cs|scala|ex|exs|hs|ml|clj|r|jl|lua|zig|nim|v|d|sql)$' || true)
+
+if [ -z "$CODE_FILES" ]; then
+  # No code files staged, allow commit (docs, config, etc.)
+  exit 0
+fi
+
+# Check: Does .memory/changes/ directory exist?
+if [ ! -d ".memory/changes" ]; then
+  echo ""
+  echo "============================================================"
+  echo " STEROID-WORKFLOW: Commit blocked"
+  echo "============================================================"
+  echo ""
+  echo " No .memory/changes/ directory found."
+  echo " The AI must use the steroid pipeline before committing code."
+  echo ""
+  echo " Tell your AI:"
+  echo "   \\"Use the steroid pipeline to implement this.\\""
+  echo ""
+  echo "============================================================"
+  echo ""
+  exit 1
+fi
+
+# Check: Is there at least one plan.md in any feature?
+PLANS=$(find .memory/changes -name "plan.md" -maxdepth 2 2>/dev/null)
+if [ -z "$PLANS" ]; then
+  echo ""
+  echo "============================================================"
+  echo " STEROID-WORKFLOW: Commit blocked"
+  echo "============================================================"
+  echo ""
+  echo " No plan.md found in any feature folder."
+  echo " The AI skipped the pipeline:"
+  echo "   vibe -> spec -> research -> architect -> engine"
+  echo ""
+  echo " Tell your AI:"
+  echo "   \\"Follow the steroid pipeline.\\""
+  echo ""
+  echo "============================================================"
+  echo ""
+  exit 1
+fi
+
+# All checks passed
+exit 0
+`;
+
+// --- Installation Target ---
+const skillsTarget = '.agents/skills';
+
+// --- Main Installation ---
+
+console.log('');
+console.log('╔══════════════════════════════════════════════╗');
+console.log(`║     🧬 Steroid-Workflow v${pkg.version}                ║`);
+console.log('╚══════════════════════════════════════════════╝');
+
+const installedVersion = getInstalledVersion();
+if (isUpdate && !installedVersion) {
+  console.log('');
+  console.log('⚠️  No existing installation found. Running fresh install instead.');
+} else if (isUpdate && installedVersion) {
+  console.log(`   Updating: ${installedVersion} → v${pkg.version}`);
+} else if (!isUpdate && installedVersion) {
+  console.log(`   Reinstalling over: ${installedVersion}`);
+}
+console.log('');
+
+// Step 1: Install Memory Templates
+const memoryDir = path.join(targetDir, '.memory');
+if (fs.existsSync(memoryDir) && !forceMode) {
+  console.log('📦 [1/7] MemoryCore schema...');
+  console.log('   ⚠️  .memory/ already exists. Skipping to preserve your project state.');
+  console.log('   (Use --force to overwrite)');
+} else {
+  console.log('📦 [1/7] Installing MemoryCore schema...');
+  copyRecursiveSync(path.join(sourceDir, 'memory-template'), memoryDir);
+  const changesDir = path.join(memoryDir, 'changes');
+  if (!fs.existsSync(changesDir)) {
+    fs.mkdirSync(changesDir, { recursive: true });
+  }
+  console.log('   ✅ .memory/ created with execution_state.json, progress.md, and changes/ folder');
+}
+
+// Step 2: Install Skills
+console.log('🧠 [2/7] Installing Steroid skills (5-skill pipeline)...');
+const destSkills = path.join(targetDir, skillsTarget);
+copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
+console.log(`   ✅ Skills installed to ${skillsTarget}/`);
+console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
+
+// Step 3: Install raw forks + steroid-run.js
+console.log('📦 [3/7] Installing ecosystem forks + pipeline enforcer...');
+copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
+fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.js'), path.join(targetDir, 'steroid-run.js'));
+console.log('   ✅ Raw ecosystem forks installed to src/forks/');
+console.log('   ✅ steroid-run.js copied to project root (pipeline enforcer)');
+
+// Step 4: Inject IDE Trigger Rules (The Maestro) — ALL major IDEs
+console.log('🔌 [4/7] Injecting Maestro rules into IDE configs...');
+
+// Track which config files existed before install (don't gitignore pre-existing ones)
+const preExistingConfigs = [];
+
+const ideConfigs = [
+  { name: 'GEMINI.md', path: 'GEMINI.md', label: 'Gemini CLI / Antigravity' },
+  { name: '.cursorrules', path: '.cursorrules', label: 'Cursor' },
+  { name: 'CLAUDE.md', path: 'CLAUDE.md', label: 'Claude Code' },
+  { name: '.windsurfrules', path: '.windsurfrules', label: 'Windsurf' },
+  { name: 'copilot-instructions.md', path: '.github/copilot-instructions.md', label: 'GitHub Copilot' },
+];
+
+for (const config of ideConfigs) {
+  const fullPath = path.join(targetDir, config.path);
+
+  // Track pre-existing files
+  if (fs.existsSync(fullPath)) {
+    preExistingConfigs.push(config.path);
+  }
+
+  // Ensure parent directory exists (for .github/copilot-instructions.md)
+  const parentDir = path.dirname(fullPath);
+  if (!fs.existsSync(parentDir)) {
+    fs.mkdirSync(parentDir, { recursive: true });
+  }
+
+  injectContent(fullPath, maestroContent, MARKER_START, MARKER_END);
+  console.log(`   ✅ ${config.label} → ${config.path}`);
+}
+
+// Step 5: Install Git Pre-Commit Hook
+console.log('🔒 [5/7] Installing git pre-commit hook (physical enforcement)...');
+const gitDir = path.join(targetDir, '.git');
+if (fs.existsSync(gitDir)) {
+  const hooksDir = path.join(gitDir, 'hooks');
+  if (!fs.existsSync(hooksDir)) {
+    fs.mkdirSync(hooksDir, { recursive: true });
+  }
+
+  const hookPath = path.join(hooksDir, 'pre-commit');
+  const hookExists = fs.existsSync(hookPath);
+
+  if (hookExists && !forceMode) {
+    // Check if it's our hook or user's own hook
+    const existingHook = fs.readFileSync(hookPath, 'utf-8');
+    if (existingHook.includes('STEROID-WORKFLOW')) {
+      fs.writeFileSync(hookPath, PRE_COMMIT_HOOK, { mode: 0o755 });
+      console.log('   ✅ Pre-commit hook updated');
+    } else {
+      console.log('   ⚠️  Pre-commit hook already exists (not ours). Skipping to avoid conflict.');
+      console.log('   (Use --force to overwrite)');
+    }
+  } else {
+    fs.writeFileSync(hookPath, PRE_COMMIT_HOOK, { mode: 0o755 });
+    console.log('   ✅ Pre-commit hook installed → .git/hooks/pre-commit');
+    console.log('      Commits with code changes are BLOCKED unless a plan.md exists.');
+  }
+} else {
+  console.log('   ⚠️  No .git directory found. Initialize git first: git init');
+  console.log('   Then re-run: npx steroid-workflow init');
+}
+
+// Step 6: Setup .gitignore
+console.log('📋 [6/7] Setting up .gitignore...');
 const userGitignore = path.join(targetDir, '.gitignore');
-const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.js'];
+
+// Base entries (always gitignored)
+const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.js', '.agents/'];
+
+// Only gitignore IDE config files that were CREATED by us (not pre-existing)
+for (const config of ideConfigs) {
+  if (!preExistingConfigs.includes(config.path)) {
+    gitignoreEntries.push(config.path);
+  }
+}
+
 if (fs.existsSync(userGitignore)) {
   const existing = fs.readFileSync(userGitignore, 'utf-8');
   const toAdd = gitignoreEntries.filter(e => !existing.includes(e));
   if (toAdd.length > 0) {
     fs.appendFileSync(userGitignore, '\n# Steroid-Workflow (auto-added)\n' + toAdd.join('\n') + '\n');
-    console.log(`   ✅ Added ${toAdd.join(', ')} to .gitignore`);
+    console.log(`   ✅ Added ${toAdd.length} entries to .gitignore`);
   } else {
     console.log('   ✅ .gitignore already has steroid entries');
   }
 } else {
-  fs.writeFileSync(userGitignore, '# Steroid-Workflow\n.memory/\nsrc/forks/\nnode_modules/\n');
-  console.log('   ✅ Created .gitignore with .memory/ and src/forks/ excluded');
+  fs.writeFileSync(
+    userGitignore,
+    '# Steroid-Workflow\n' + gitignoreEntries.join('\n') + '\nnode_modules/\n'
+  );
+  console.log('   ✅ Created .gitignore');
 }
 
+if (preExistingConfigs.length > 0) {
+  console.log(`   ℹ️  Kept ${preExistingConfigs.join(', ')} tracked (pre-existing)`);
+}
+
+// Step 7: Shared Maestro reference for YAML-based IDEs (Aider)
+console.log('📄 [7/7] Creating shared Maestro reference...');
+const sharedMaestro = path.join(targetDir, '.agents', 'steroid-maestro.md');
+if (!fs.existsSync(path.dirname(sharedMaestro))) {
+  fs.mkdirSync(path.dirname(sharedMaestro), { recursive: true });
+}
+fs.writeFileSync(sharedMaestro, `${MARKER_START}\n${maestroContent}\n${MARKER_END}\n`);
+console.log('   ✅ .agents/steroid-maestro.md created (shared reference for all IDEs)');
+
+// Stamp installed version
+const versionFile = path.join(targetDir, '.memory', '.steroid-version');
+fs.writeFileSync(versionFile, pkg.version);
+
 // Done
+const verb = isUpdate ? 'updated' : 'installed';
 console.log('');
 console.log('╔══════════════════════════════════════════════════════════════╗');
-console.log('║  ✅ Steroid-Workflow v2 installed successfully!              ║');
+console.log(`║  ✅ Steroid-Workflow v${pkg.version} ${verb}!${' '.repeat(Math.max(0, 25 - verb.length))}║`);
 console.log('║                                                              ║');
-console.log('║  Pipeline: vibe → spec → research → architect → engine      ║');
+console.log('║  🔒 Git hook active — AI cannot commit without pipeline      ║');
+console.log('║  🧠 6 IDE configs injected — universal coverage              ║');
+console.log('║  📋 Pipeline: vibe → spec → research → architect → engine   ║');
 console.log('╚══════════════════════════════════════════════════════════════╝');
 console.log('');
-console.log('Just tell your AI what you want to build:');
-console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
-console.log('  👉 "Create a dashboard for tracking my daily habits"');
+if (isUpdate) {
+  console.log('Update complete. All enforcement layers refreshed.');
+  console.log('');
+  console.log('Verify:');
+  console.log('  node steroid-run.js audit');
+} else {
+  console.log('Tell your AI what you want to build:');
+  console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
+  console.log('  👉 "Add user authentication to my app"');
+  console.log('  👉 "Fix the login bug and refactor the auth module"');
+  console.log('');
+  console.log('The AI will automatically activate the steroid pipeline.');
+  console.log('If it doesn\'t, say: "Use the steroid pipeline."');
+  console.log('');
+  console.log('Verify installation:');
+  console.log('  node steroid-run.js audit');
+}
 console.log('');
-console.log('Helpful commands:');
-console.log('  node steroid-run.js status              — Check circuit breaker state');
-console.log('  node steroid-run.js reset               — Reset error counter after fixing');
-console.log('  node steroid-run.js progress             — View execution learnings log');
-console.log('  node steroid-run.js init-feature <slug>  — Create feature folder');
-console.log('  node steroid-run.js gate <phase> <feat>  — Check phase prerequisites');
+console.log('Future updates:');
+console.log('  npx steroid-workflow@latest update');
 console.log('');

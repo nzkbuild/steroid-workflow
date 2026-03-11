@@ -1,6 +1,6 @@
 {
   "name": "steroid-workflow",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "AI agency-in-a-box for non-technical vibe coders. 5-skill pipeline with spec-driven development, tech research, TDD, circuit breakers, autonomous execution loop, and anti-summarization guards.",
   "bin": {
     "steroid-workflow": "bin/cli.js"
@@ -12,6 +12,7 @@
     "src/forks/",
     "memory-template/",
     "README.md",
+    "ARCHITECTURE.md",
     "LICENSE"
   ],
   "scripts": {
