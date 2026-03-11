@@ -123,6 +123,10 @@ copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'sr
 console.log('   ✅ Raw ecosystem forks installed to src/forks/');
 console.log('      → superpowers, memorycore, ralph, gsd, openspec, spec-kit, cc-sdd, bmad-method');
 
+// Step 3b: Copy steroid-run.js into project root (so `node steroid-run.js` always works)
+fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.js'), path.join(targetDir, 'steroid-run.js'));
+console.log('   ✅ steroid-run.js copied to project root (pipeline enforcer)');
+
 if (!installed) {
   console.error('   ❌ No valid skill target directory found.');
   process.exit(1);
@@ -156,10 +160,19 @@ Each skill automatically hands off to the next. No manual invocation needed.
 
 ## Circuit Breaker Enforcement (CRITICAL — REPEATED IN EVERY SKILL)
 ALL terminal commands during development MUST be wrapped in:
-\`npx steroid-run '<command>'\`
+\`node steroid-run.js '<command>'\`
 Direct terminal execution (\`npm install\`, \`npx jest\`, \`node script.js\`, etc.) is STRICTLY FORBIDDEN.
-If you need to run \`npm install\`, you must run: \`npx steroid-run 'npm install'\`
+If you need to run \`npm install\`, you must run: \`node steroid-run.js 'npm install'\`
 This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
+
+## Pipeline Enforcement Commands (MUST USE)
+The AI MUST use these physical commands — they cannot be skipped:
+- \`node steroid-run.js init-feature <slug>\` — Create feature folder (validates kebab-case)
+- \`node steroid-run.js gate <phase> <feature>\` — Check phase prerequisites before proceeding
+- \`node steroid-run.js commit "<message>"\` — Atomic git commit in steroid format
+- \`node steroid-run.js log <feature> "<message>"\` — Append to progress log
+- \`node steroid-run.js check-plan <feature>\` — Check if all tasks are done
+- \`node steroid-run.js archive <feature>\` — Archive completed feature
 
 ## Context Wipe Mandate
 After completing each task in the plan.md, terminate the current sub-agent context and start a fresh one.
@@ -186,7 +199,7 @@ console.log('   ✅ Maestro rules injected into .cursorrules');
 // Step 5: Inject .gitignore for user project
 console.log('📋 [4/5] Setting up .gitignore...');
 const userGitignore = path.join(targetDir, '.gitignore');
-const gitignoreEntries = ['.memory/', 'src/forks/'];
+const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.js'];
 if (fs.existsSync(userGitignore)) {
   const existing = fs.readFileSync(userGitignore, 'utf-8');
   const toAdd = gitignoreEntries.filter(e => !existing.includes(e));
@@ -214,8 +227,9 @@ console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
 console.log('  👉 "Create a dashboard for tracking my daily habits"');
 console.log('');
 console.log('Helpful commands:');
-console.log('  npx steroid-run status              — Check circuit breaker state');
-console.log('  npx steroid-run reset               — Reset error counter after fixing');
-console.log('  npx steroid-run progress             — View execution learnings log');
-console.log('  npx steroid-run progress --patterns  — View codebase patterns only');
+console.log('  node steroid-run.js status              — Check circuit breaker state');
+console.log('  node steroid-run.js reset               — Reset error counter after fixing');
+console.log('  node steroid-run.js progress             — View execution learnings log');
+console.log('  node steroid-run.js init-feature <slug>  — Create feature folder');
+console.log('  node steroid-run.js gate <phase> <feat>  — Check phase prerequisites');
 console.log('');

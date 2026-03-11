@@ -210,7 +210,7 @@ if (args[0] === 'commit') {
         process.exit(1);
     }
 
-    const commit = spawnSync('git', ['commit', '-m', commitMsg, '--allow-empty'], { cwd: targetDir, stdio: 'inherit' });
+    const commit = spawnSync('git', ['commit', '-m', commitMsg], { cwd: targetDir, stdio: 'inherit' });
     if (commit.status !== 0) {
         state.error_count += 1;
         state.last_error = `git commit failed: "${commitMsg}"`;
@@ -270,7 +270,7 @@ if (args[0] === 'check-plan') {
     }
 
     const content = fs.readFileSync(planFile, 'utf-8');
-    const total = (content.match(/- \[[ x]\]/g) || []).length;
+    const total = (content.match(/- \[[ x/]\]/g) || []).length;
     const done = (content.match(/- \[x\]/g) || []).length;
     const remaining = total - done;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;

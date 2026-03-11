@@ -6,3 +6,6 @@ tmp-*/
 # Cloned fork git history (we keep source files, not git metadata)
 src/forks/*/.git/
 src/forks/*/.github/
+
+# Steroid-Workflow (auto-added)
+steroid-run.js

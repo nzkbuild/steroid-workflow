@@ -33,26 +33,26 @@ Unlike other AI coding tools that rely on prompt instructions alone, steroid-wor
 ### Circuit Breaker (Original)
 | Command | What It Physically Enforces |
 |---------|---------------------------|
-| `npx steroid-run '<command>'` | Every terminal command tracked, 3 errors → hard stop |
-| `npx steroid-run verify <file> --min-lines=<n>` | Blocks code summarization (AI can't fake implementations) |
-| `npx steroid-run reset` | Reset error counter after human intervention |
-| `npx steroid-run status` | Show circuit breaker state |
+| `node steroid-run.js '<command>'` | Every terminal command tracked, 3 errors → hard stop |
+| `node steroid-run.js verify <file> --min-lines=<n>` | Blocks code summarization (AI can't fake implementations) |
+| `node steroid-run.js reset` | Reset error counter after human intervention |
+| `node steroid-run.js status` | Show circuit breaker state |
 
 ### Pipeline Enforcement (Ported from ecosystem forks)
 | Command | What It Physically Enforces | Ported From |
 |---------|---------------------------|-------------|
-| `npx steroid-run init-feature <slug>` | Validates kebab-case, creates folder structure | OpenSpec |
-| `npx steroid-run gate <phase> <feature>` | Can't skip phases (spec must exist before architect) | New |
-| `npx steroid-run commit <message>` | Atomic commits in `feat(steroid):` format | Ralph/GSD |
-| `npx steroid-run log <feature> <message>` | Progress tracking that can't be forgotten | Ralph |
-| `npx steroid-run check-plan <feature>` | Physical task completion counter | New |
-| `npx steroid-run archive <feature>` | Date-stamped feature archival | Ralph |
+| `node steroid-run.js init-feature <slug>` | Validates kebab-case, creates folder structure | OpenSpec |
+| `node steroid-run.js gate <phase> <feature>` | Can't skip phases (spec must exist before architect) | New |
+| `node steroid-run.js commit <message>` | Atomic commits in `feat(steroid):` format | Ralph/GSD |
+| `node steroid-run.js log <feature> <message>` | Progress tracking that can't be forgotten | Ralph |
+| `node steroid-run.js check-plan <feature>` | Physical task completion counter | New |
+| `node steroid-run.js archive <feature>` | Date-stamped feature archival | Ralph |
 
 ### Progress Tracking
 | Command | What It Shows |
 |---------|--------------|
-| `npx steroid-run progress` | Full execution learnings log |
-| `npx steroid-run progress --patterns` | Only codebase patterns discovered |
+| `node steroid-run.js progress` | Full execution learnings log |
+| `node steroid-run.js progress --patterns` | Only codebase patterns discovered |
 
 ## The 5-Skill Pipeline
 
