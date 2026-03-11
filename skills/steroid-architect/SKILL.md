@@ -52,13 +52,19 @@ Write the output to `.memory/project_state.md` using this exact format:
 
 Each checklist item must be specific enough that an AI sub-agent with fresh context can execute it without ambiguity.
 
-### 4. Automatic System Handoff
+### 4. Circuit Breaker Mandate
+
+If at any point you need to run a terminal command, you MUST use:
+`npx steroid-run '<command>'`
+Direct terminal execution is strictly forbidden.
+
+### 5. Automatic System Handoff
 
 Once `.memory/project_state.md` is written, do NOT ask the user for permission. Output exactly one sentence:
 
 "The technical blueprint is finalized. Let's start building."
 
-Then immediately invoke `@steroid-engine`.
+Then immediately read the file at `.agents/skills/steroid-engine/SKILL.md` and follow its instructions.
 
 ## Example
 

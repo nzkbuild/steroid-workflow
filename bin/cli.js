@@ -4,8 +4,34 @@ const path = require('path');
 
 const targetDir = process.cwd();
 const sourceDir = path.join(__dirname, '..');
+const pkg = require(path.join(sourceDir, 'package.json'));
 
-// --- Helper Functions (adapted from antigravity-awesome-skills/tools/bin/install.js) ---
+// --- Argument Parsing (P0 Fix A4) ---
+const args = process.argv.slice(2);
+
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(`
+steroid-workflow v${pkg.version}
+${pkg.description}
+
+Usage:
+  npx steroid-workflow init          Install Steroid-Workflow into the current project
+  npx steroid-workflow init --force  Overwrite existing .memory/ state
+  npx steroid-workflow --help        Show this help
+  npx steroid-workflow --version     Show version
+`);
+  process.exit(0);
+}
+
+if (args.includes('--version') || args.includes('-v')) {
+  console.log(`steroid-workflow v${pkg.version}`);
+  process.exit(0);
+}
+
+// Default action is 'init'
+const forceMode = args.includes('--force');
+
+// --- Helper Functions ---
 
 function copyRecursiveSync(src, dest, skipGit = true) {
   if (!fs.existsSync(dest)) {
@@ -25,15 +51,12 @@ function copyRecursiveSync(src, dest, skipGit = true) {
 }
 
 function safeInjectContent(filePath, content, markerStart, markerEnd) {
-  // If file doesn't exist, create it with the content
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, `${markerStart}\n${content}\n${markerEnd}\n`);
     return;
   }
-  // If file exists, check if our content is already injected
   const existing = fs.readFileSync(filePath, 'utf-8');
   if (existing.includes(markerStart)) {
-    // Replace existing injected block
     const regex = new RegExp(
       escapeRegExp(markerStart) + '[\\s\\S]*?' + escapeRegExp(markerEnd),
       'g'
@@ -41,7 +64,6 @@ function safeInjectContent(filePath, content, markerStart, markerEnd) {
     const updated = existing.replace(regex, `${markerStart}\n${content}\n${markerEnd}`);
     fs.writeFileSync(filePath, updated);
   } else {
-    // Append new block
     fs.appendFileSync(filePath, `\n\n${markerStart}\n${content}\n${markerEnd}\n`);
   }
 }
@@ -61,38 +83,45 @@ const targets = [
 
 console.log('');
 console.log('╔══════════════════════════════════════════════╗');
-console.log('║     🧬 Steroid-Workflow Installer v1.0       ║');
+console.log(`║     🧬 Steroid-Workflow Installer v${pkg.version}      ║`);
 console.log('╚══════════════════════════════════════════════╝');
 console.log('');
 
-// Step 1: Install Memory Templates
-console.log('📦 [1/4] Installing MemoryCore schema...');
-copyRecursiveSync(path.join(sourceDir, 'memory-template'), path.join(targetDir, '.memory'));
-console.log('   ✅ .memory/ directory created with execution_state.json, user_vibe.md, project_state.md');
+// Step 1: Install Memory Templates (P0 Fix A2: overwrite protection)
+const memoryDir = path.join(targetDir, '.memory');
+if (fs.existsSync(memoryDir) && !forceMode) {
+  console.log('📦 [1/5] MemoryCore schema...');
+  console.log('   ⚠️  .memory/ already exists. Skipping to preserve your project state.');
+  console.log('   (Use --force to overwrite)');
+} else {
+  console.log('📦 [1/5] Installing MemoryCore schema...');
+  copyRecursiveSync(path.join(sourceDir, 'memory-template'), memoryDir);
+  console.log('   ✅ .memory/ created with execution_state.json, user_vibe.md, project_state.md');
+}
 
 // Step 2: Install Skills into all detected IDE targets
-console.log('🧠 [2/4] Installing Steroid skills...');
+console.log('🧠 [2/5] Installing Steroid skills...');
 let installed = false;
 for (const target of targets) {
   const destPath = path.join(targetDir, target.dir);
-  // Always install to the first target. For others, only if the parent dir exists.
   if (target === targets[0] || fs.existsSync(path.dirname(destPath))) {
     copyRecursiveSync(path.join(sourceDir, 'skills'), destPath);
     console.log(`   ✅ Skills installed to ${target.dir}/ (${target.label})`);
     installed = true;
   }
 }
-// Also install the raw forks so the engine can reference them
+
+// Step 3: Install raw forks
 copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
-console.log('   ✅ Raw ecosystem forks installed to src/forks/ (superpowers, memorycore)');
+console.log('   ✅ Raw ecosystem forks installed to src/forks/');
 
 if (!installed) {
   console.error('   ❌ No valid skill target directory found.');
   process.exit(1);
 }
 
-// Step 3: Inject IDE Trigger Rules (The Maestro)
-console.log('🔌 [3/4] Injecting Maestro IDE triggers...');
+// Step 4: Inject IDE Trigger Rules (The Maestro)
+console.log('🔌 [3/5] Injecting Maestro IDE triggers...');
 
 const MARKER_START = '<!-- STEROID-WORKFLOW-START -->';
 const MARKER_END = '<!-- STEROID-WORKFLOW-END -->';
@@ -101,15 +130,15 @@ const maestroContent = `# Steroid-Workflow Maestro (Auto-Trigger Rules)
 
 ## Intent Routing
 If the user says words like "build", "create", "design", or "make" in the context of generating a new feature or project:
-- AUTOMATICALLY invoke the \`@steroid-vibe-capture\` skill to begin the workflow.
+- Read the file at \`.agents/skills/steroid-vibe-capture/SKILL.md\` and follow its instructions immediately.
 - Do not ask for permission. Just start the Vibe Translation process.
 
-If \`synapse-skills\` is detected in this environment, map specific intents (e.g., "build ui") to specialized skills, but default high-level vibe intents to \`@steroid-vibe-capture\`.
-
-## Circuit Breaker Enforcement
+## Circuit Breaker Enforcement (CRITICAL — REPEATED IN EVERY SKILL)
 ALL terminal commands during development MUST be wrapped in:
 \`npx steroid-run '<command>'\`
-Direct terminal execution is strictly forbidden.
+Direct terminal execution (\`npm install\`, \`npx jest\`, \`node script.js\`, etc.) is STRICTLY FORBIDDEN.
+If you need to run \`npm install\`, you must run: \`npx steroid-run 'npm install'\`
+This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
 
 ## Context Wipe Mandate
 After completing each task in \`.memory/project_state.md\`, terminate the current sub-agent context and start a fresh one.
@@ -118,7 +147,7 @@ Each new task reads ONLY from \`.memory/project_state.md\` — no inherited cont
 
 ## Anti-Summarization Rule
 NEVER summarize code. NEVER write "...rest of code here..." or "// existing code".
-If a file needs modification, write the complete replacement or use precise edits.`;
+NEVER truncate file contents. Write complete replacements or precise edits.`;
 
 const geminiMdPath = path.join(targetDir, 'GEMINI.md');
 const cursorRulesPath = path.join(targetDir, '.cursorrules');
@@ -129,15 +158,35 @@ console.log('   ✅ Maestro rules injected into GEMINI.md');
 safeInjectContent(cursorRulesPath, maestroContent, MARKER_START, MARKER_END);
 console.log('   ✅ Maestro rules injected into .cursorrules');
 
-// Step 4: Done
+// Step 5: Inject .gitignore for user project
+console.log('📋 [4/5] Setting up .gitignore...');
+const userGitignore = path.join(targetDir, '.gitignore');
+const gitignoreEntries = ['.memory/', 'src/forks/'];
+if (fs.existsSync(userGitignore)) {
+  const existing = fs.readFileSync(userGitignore, 'utf-8');
+  const toAdd = gitignoreEntries.filter(e => !existing.includes(e));
+  if (toAdd.length > 0) {
+    fs.appendFileSync(userGitignore, '\n# Steroid-Workflow (auto-added)\n' + toAdd.join('\n') + '\n');
+    console.log(`   ✅ Added ${toAdd.join(', ')} to .gitignore`);
+  } else {
+    console.log('   ✅ .gitignore already has steroid entries');
+  }
+} else {
+  fs.writeFileSync(userGitignore, '# Steroid-Workflow\n.memory/\nsrc/forks/\nnode_modules/\n');
+  console.log('   ✅ Created .gitignore with .memory/ and src/forks/ excluded');
+}
+
+// Done
 console.log('');
 console.log('╔══════════════════════════════════════════════╗');
 console.log('║  ✅ Steroid-Workflow installed successfully!  ║');
 console.log('╚══════════════════════════════════════════════╝');
 console.log('');
-console.log('The environment is locked and loaded.');
 console.log('Just tell your AI what you want to build:');
-console.log('');
 console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
 console.log('  👉 "Create a dashboard for tracking my daily habits"');
+console.log('');
+console.log('Helpful commands:');
+console.log('  npx steroid-run status    — Check circuit breaker state');
+console.log('  npx steroid-run reset     — Reset error counter after fixing issues');
 console.log('');

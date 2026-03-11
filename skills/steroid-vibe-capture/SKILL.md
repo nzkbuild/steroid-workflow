@@ -42,13 +42,19 @@ Write the output to `.memory/user_vibe.md` using this exact format:
 - Key Features: [3-5 non-negotiable features listed explicitly]
 ```
 
-### 5. Automatic System Handoff
+### 5. Circuit Breaker Mandate
+
+If at any point you need to run a terminal command, you MUST use:
+`npx steroid-run '<command>'`
+Direct terminal execution is strictly forbidden.
+
+### 6. Automatic System Handoff
 
 Once `.memory/user_vibe.md` is written, do NOT ask the user for permission to continue. Output exactly one sentence:
 
 "I've locked in the vibe. Translating this into a technical blueprint now..."
 
-Then immediately invoke `@steroid-architect`.
+Then immediately read the file at `.agents/skills/steroid-architect/SKILL.md` and follow its instructions.
 
 ## Example
 
@@ -69,7 +75,7 @@ Action: Write to .memory/user_vibe.md:
 ```
 
 Output: "I've locked in the vibe. Translating this into a technical blueprint now..."
-Invoke: @steroid-architect
+Action: Read `.agents/skills/steroid-architect/SKILL.md` and follow its instructions.
 </good>
 
 <bad>

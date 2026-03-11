@@ -29,11 +29,30 @@ npx steroid-run verify <path/to/file> --min-lines=<expected>
 
 If the file is shorter than expected, the verify command will exit with an error, blocking the task from completion.
 
-## The Execution Loop (Subagent-Driven Development)
+## Pre-Execution Setup
 
-To process the checklist in `.memory/project_state.md`, follow the raw `subagent-driven-development` methodology from `src/forks/superpowers/subagent.md`:
+Before starting the checklist, create a rollback safety point:
+
+```
+npx steroid-run 'git init && git add -A && git commit -m steroid-checkpoint --allow-empty'
+```
+
+If the build goes wrong, the user can recover with `git reset --hard steroid-checkpoint`.
+
+## The Execution Loop
+
+### Detecting Environment Capabilities
+
+Before starting, determine if the current IDE supports sub-agent dispatch (e.g., Claude Code with tool_use). If sub-agents are available, use **Full Mode**. If not (e.g., Cursor, Gemini CLI), use **Fallback Mode**.
 
 ### For each `[ ]` task in `.memory/project_state.md`:
+
+**Step 0: Progress Signal**
+
+Before starting each task, output one line to the user:
+"🔨 Working on: [Task Name]..."
+
+This gives the user visibility without breaking the silence directive.
 
 **Phase 1: Implementation**
 
@@ -68,19 +87,32 @@ Run: `npx steroid-run verify <primary-file> --min-lines=<expected>`
 
 If passing, update `.memory/project_state.md` to mark the task as `[x]`.
 
+---
+
+### Fallback Mode (Single-Context IDEs)
+
+If sub-agent dispatch is NOT available (Cursor, Gemini CLI, etc.), execute the task yourself using the TDD cycle above, then perform a self-review by answering these 5 questions before marking `[x]`:
+
+1. Does the code implement EVERY requirement from the task specification? (Yes/No)
+2. Are there any comments like `// TODO`, `// rest of code`, or `...` in the output? (Must be No)
+3. Does the primary file pass `npx steroid-run verify`? (Must pass)
+4. Do all tests pass via `npx steroid-run 'npm test'`? (Must pass)
+5. Is the code complete enough that a fresh AI context could understand it without additional explanation? (Must be Yes)
+
+If ANY answer fails, fix the issue before marking `[x]`.
+
 ### Context Wipe Between Tasks
 
 After completing a task, the current sub-agent contexts MUST be terminated. Each new task starts with completely fresh sub-agent contexts reading only from `.memory/project_state.md`. This prevents the hallucination cascade where one bad shortcut poisons the rest of the project.
 
 ## The Silence Directive
 
-The human sitting at the keyboard is a non-technical System Builder. NEVER dump sub-agent logs, stack traces, or TDD bash outputs to the main chat window.
+The human at the keyboard is a non-technical System Builder. NEVER dump sub-agent logs, stack traces, or TDD bash outputs to the main chat window.
 
-When an entire task completes both Implementation and Review, output EXACTLY one line to the human:
+Instead of showing raw error output, summarize issues in one non-technical sentence. Example: "I hit a snag installing dependencies. Working on fixing it."
 
-"✅ [Task Name] completed and verified."
-
-When all tasks are complete, output: "🎉 The technical blueprint is fully implemented!"
+When a task completes, output: "✅ [Task Name] completed and verified."
+When ALL tasks are complete, output: "🎉 The technical blueprint is fully implemented!"
 
 ## Referenced Forks
 
