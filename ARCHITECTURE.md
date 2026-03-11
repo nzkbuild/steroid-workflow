@@ -49,28 +49,59 @@ All AI terminal commands are routed through this CLI wrapper.
 | Command | Purpose | Origin |
 |---------|---------|--------|
 | `init-feature <slug>` | Create feature folder (validates kebab-case) | OpenSpec |
+| `scan <feature>` | Bootstrap codebase context (writes context.md) | GSD/Ralph |
 | `gate <phase> <feature>` | Check phase prerequisites | New |
 | `commit <message>` | Atomic commit in `feat(steroid):` format | Ralph/GSD |
 | `log <feature> <message>` | Append to progress log | Ralph |
 | `check-plan <feature>` | Count remaining tasks | New |
+| `verify-feature <feature>` | Pre-check before verification skill | GSD |
 | `archive <feature>` | Date-stamped feature archival | Ralph |
+
+### Intelligence (v3.0)
+| Command | Purpose | Origin |
+|---------|---------|--------|
+| `detect-intent "<message>"` | Classify user intent (build/fix/refactor/migrate/document) | New |
+| `detect-tests` | Detect test framework in current project | GSD |
 
 ### Progress & Diagnostics
 | Command | Purpose |
 |---------|---------|
 | `progress` | Show execution learnings log |
 | `progress --patterns` | Show only codebase patterns |
-| `audit` | Verify all enforcement layers are installed |
+| `audit` | Verify all enforcement layers are installed (7 skills) |
 
-## The 5-Skill Pipeline
+## The 8-Skill Pipeline (v3.0)
 
+### Build Intent (Full Pipeline)
 | # | Skill | Input | Output |
 |---|-------|-------|--------|
+| 0 | `steroid-scan` | Project codebase | `.memory/changes/<feature>/context.md` |
 | 1 | `steroid-vibe-capture` | User's natural language | `.memory/changes/<feature>/vibe.md` |
 | 2 | `steroid-specify` | `vibe.md` | `.memory/changes/<feature>/spec.md` |
 | 3 | `steroid-research` | `spec.md` | `.memory/changes/<feature>/research.md` |
 | 4 | `steroid-architect` | `spec.md` + `research.md` | `.memory/changes/<feature>/plan.md` |
 | 5 | `steroid-engine` | `plan.md` | Working code (TDD loop) |
+| 6 | `steroid-verify` | Completed code | `.memory/changes/<feature>/verify.md` |
+| 7 | `steroid-diagnose` | Bug/error report | `.memory/changes/<feature>/diagnosis.md` |
+
+### Intent Routing (v3.0)
+| Intent | Pipeline |
+|--------|---------|
+| **build** | scan → vibe → specify → research → architect → engine → verify |
+| **fix** | scan → diagnose → engine (targeted) → verify |
+| **refactor** | scan → specify → architect → engine → verify |
+| **migrate** | scan → research → architect → engine → verify |
+| **document** | scan → specify → engine → verify |
+
+### Gate Map
+| Phase | Requires | Min Lines |
+|-------|----------|-----------|
+| `vibe` | `context.md` | 5 |
+| `specify` | `vibe.md` | 5 |
+| `research` | `spec.md` | 10 |
+| `architect` | `research.md` | 10 |
+| `engine` | `plan.md` | 10 |
+| `verify` | `plan.md` | 10 |
 
 ## Project Structure
 
@@ -83,15 +114,18 @@ your-project/
 │   ├── progress.md                ← Cross-task learnings log
 │   └── changes/
 │       └── <feature>/
+│           ├── context.md         ← Codebase scan results (v3.0)
 │           ├── vibe.md            ← Captured user intent
 │           ├── spec.md            ← Acceptance criteria
 │           ├── research.md        ← Tech investigation results
 │           ├── plan.md            ← Atomic execution checklist
+│           ├── verify.md          ← Verification report (v3.0)
+│           ├── diagnosis.md       ← Bug diagnosis (v3.0, fix intent only)
 │           └── archive/           ← Completed features
 ├── .agents/
-│   ├── skills/                    ← The 5 steroid skills
+│   ├── skills/                    ← The 8 steroid skills
 │   └── steroid-maestro.md         ← Shared Maestro reference
-├── src/forks/                     ← Referenced fork sources (112KB)
+├── src/forks/                     ← Referenced fork sources (60 files)
 ├── GEMINI.md                      ← Maestro rules (Gemini/Antigravity)
 ├── CLAUDE.md                      ← Maestro rules (Claude Code)
 ├── .cursorrules                   ← Maestro rules (Cursor)
@@ -104,13 +138,13 @@ your-project/
 All integrated forks are MIT licensed:
 
 ### Core Forks (integrated into skills)
-- **[obra/superpowers](https://github.com/obra/superpowers)** — TDD methodology and subagent-driven development
+- **[obra/superpowers](https://github.com/obra/superpowers)** — TDD, subagent-driven development, systematic debugging, verification-before-completion, code review
 - **[Kiyoraka/Project-AI-MemoryCore](https://github.com/Kiyoraka/Project-AI-MemoryCore)** — Continuous state-tracking via markdown/JSON
 
 ### Ecosystem Forks (code ported into `steroid-run.cjs`)
-- **[snarktank/ralph](https://github.com/snarktank/ralph)** — Autonomous loop: progress tracking, archive pattern
-- **[gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done)** — Research phase: tech investigation with confidence levels
+- **[snarktank/ralph](https://github.com/snarktank/ralph)** — Autonomous loop: progress tracking, archive pattern, AGENTS.md system
+- **[gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done)** — Verifier, codebase mapper, debugger, phase researcher, planner, executor, roadmapper
 - **[Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)** — Per-change folders: kebab-case validation
-- **[github/spec-kit](https://github.com/github/spec-kit)** — Spec-driven development: Given/When/Then acceptance criteria
+- **[github/spec-kit](https://github.com/github/spec-kit)** — Spec-driven development: Given/When/Then acceptance criteria, templates
 - **[gotalab/cc-sdd](https://github.com/gotalab/cc-sdd)** — Requirements→design→tasks pipeline (reference)
 - **[bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)** — Agile AI-driven development (reference)

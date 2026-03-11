@@ -1,5 +1,53 @@
 # Changelog
 
+## [3.0.0] "Complete the Loop" - 2026-03-12
+
+### The Vision
+v2.x proved the pipeline (vibe → spec → research → architect → engine) works. But it was blind — no codebase awareness, no verification, and only one pipeline for all intents. v3.0 closes the loop: the AI now scans before it builds, verifies after it builds, and routes to different pipelines based on what you ask for.
+
+### Added — New Skills (3)
+- **`steroid-scan`** — Codebase awareness skill (Skill #0). Runs BEFORE vibe capture. Auto-detects tech stack, project structure, test infrastructure, existing patterns, and related code. Writes `context.md`. Adapted from GSD codebase-mapper (773 lines) and Ralph AGENTS.md system.
+- **`steroid-verify`** — Proof of work skill (Skill #6). Runs AFTER engine completes all tasks. Performs spec compliance review, code quality review, test execution, lint/type checks, and anti-pattern scanning. Writes `verify.md` with PASS/FAIL/CONDITIONAL status. Adapted from GSD verifier (582 lines) and superpowers spec/code quality reviewers.
+- **`steroid-diagnose`** — Fix/debug pipeline skill (Skill #7). Replaces the full build pipeline when the user wants to fix a bug. 4-phase root cause investigation → targeted fix plan → TDD → verify. Adapted from superpowers systematic-debugging (297 lines) and GSD debugger.
+
+### Added — New CLI Commands (5)
+- **`scan <feature>`** — Bootstraps `context.md` with auto-detected tech stack, framework, test runner, and test count
+- **`detect-intent "<message>"`** — Classifies user intent into build/fix/refactor/migrate/document with confidence scoring
+- **`detect-tests`** — Detects test framework configs (Jest, Vitest, Mocha, Pytest, Playwright, Cypress)
+- **`verify-feature <feature>`** — Pre-check that all plan.md tasks are complete before verification
+- **`--verbose` flag for detect-intent** — Shows confidence score and pipeline variant
+
+### Added — Intent Routing
+- 5 pipeline variants based on user intent:
+  - **build**: scan → vibe → specify → research → architect → engine → verify
+  - **fix**: scan → diagnose → engine (targeted) → verify
+  - **refactor**: scan → specify → architect → engine → verify
+  - **migrate**: scan → research → architect → engine → verify
+  - **document**: scan → specify → engine → verify
+
+### Changed — Pipeline (5 → 8 skills)
+- Pipeline now starts with `steroid-scan` and ends with `steroid-verify`
+- Gate map expanded: `vibe` gate requires `context.md`, `verify` gate requires `plan.md`
+- Archive command now handles 7 files (was 4): added context.md, verify.md, diagnosis.md
+- Engine completion flow updated: now hands off to verify before archiving (was archiving directly)
+
+### Changed — Maestro Rules (IDE Configs)
+- Rewritten for v3.0 with intent routing table, 8-skill pipeline table, and 10 CLI commands
+- Pre-task checkpoint now checks for `steroid-scan` (was `steroid-vibe-capture`)
+- Detection-first workflow: AI runs `detect-intent` before choosing pipeline
+
+### Changed — Installer
+- Step 2 now installs 8 skills (was 5)
+- Final banner shows verification enforcement and intent routing
+- Audit command checks for 7 skills (was 5): added scan and verify
+
+### Added — Fork Library Expansion
+- `src/forks/` expanded from 23 to 60 files (37 new files extracted)
+- 9 new superpowers skills: systematic-debugging, verification-before-completion, dispatching-parallel-agents, brainstorming, executing-plans, writing-plans, finishing-a-development-branch, requesting-code-review, receiving-code-review
+- 10 new GSD agents: gsd-verifier, gsd-codebase-mapper, gsd-debugger, gsd-executor, gsd-planner, gsd-roadmapper, gsd-integration-checker, gsd-nyquist-auditor, gsd-plan-checker, gsd-project-researcher
+- 3 new spec-kit templates: agent-file, checklist, constitution
+- 3 ralph extras: AGENTS.md, prd.json.example, CLAUDE.md
+
 ## [2.1.1] "ESM Hotfix" - 2026-03-11
 
 ### Fixed

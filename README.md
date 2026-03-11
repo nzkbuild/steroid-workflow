@@ -2,7 +2,7 @@
 
 **Turn one sentence into working software.**
 
-An AI pipeline that takes your idea through 5 enforced phases — vibe capture, specification, research, architecture, and TDD implementation — so the AI can't cut corners, skip steps, or hallucinate solutions.
+An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v3.0 adds intent routing: say "fix" and it debugs, say "build" and it creates.
 
 ## Install
 
@@ -26,27 +26,34 @@ Just tell your AI what you want:
 
 > "Build me a minimal habit tracker like Apple Health"
 
-> "Add user authentication with Google sign-in"
+> "Fix the login bug that crashes on empty password"
 
-> "Create a dashboard page for tracking daily sales"
+> "Refactor the API layer to use proper error handling"
 
-The AI automatically activates the steroid pipeline and works through 5 phases:
+The AI automatically detects your intent and routes to the right pipeline:
 
-```
-Your idea → Vibe → Spec → Research → Architecture → Working Code
-```
+| You say | AI does |
+|---------|---------|
+| "Build a dashboard" | Full pipeline: scan → vibe → spec → research → architect → engine → verify |
+| "Fix the login bug" | Debug pipeline: scan → diagnose → targeted fix → verify |
+| "Refactor the API" | Refactor pipeline: scan → specify target state → architect → engine → verify |
+| "Upgrade to React 19" | Migration pipeline: scan → research → architect → engine → verify |
+| "Document the API" | Docs pipeline: scan → specify → engine → verify |
 
 If the AI doesn't activate automatically, say: **"Use the steroid pipeline."**
 
-## The 5 Phases
+## The 8 Phases
 
 | Phase | What happens | Output |
 |-------|-------------|--------|
+| 📡 **Scan** | Detects tech stack, project structure, test infra | `context.md` |
 | 🎯 **Vibe Capture** | Translates your idea into a structured brief | `vibe.md` |
 | 📋 **Specify** | Converts the brief into user stories with acceptance criteria | `spec.md` |
 | 🔬 **Research** | Investigates the best tech stack and approaches | `research.md` |
 | 🏗️ **Architect** | Creates an atomic execution plan with testable tasks | `plan.md` |
 | ⚡ **Engine** | Builds it using TDD, commits atomically, captures learnings | Working code |
+| ✅ **Verify** | Proves spec compliance, code quality, tests pass | `verify.md` |
+| 🔍 **Diagnose** | Root cause analysis for bugs (fix intent only) | `diagnosis.md` |
 
 Each phase hands off to the next. No manual intervention needed.
 
@@ -56,6 +63,8 @@ Most AI coding tools rely on **suggestions** — hoping the AI follows instructi
 
 - 🔒 **Git hook** — Commits are blocked unless the AI went through the pipeline. No plan.md = no commit.
 - ⚡ **Circuit breaker** — 3 errors and the AI is forced to stop and ask for help instead of spiraling.
+- ✅ **Verification** — The AI must prove its code works before archiving. No more "trust me, it's done."
+- 🔍 **Intent routing** — Different pipelines for build, fix, refactor, migrate, and document tasks.
 - 🚫 **Anti-summarization** — The AI can't write "...rest of code here..." and call it done.
 - 🔀 **Gate checks** — Each phase requires the previous phase's output to exist. Can't skip steps.
 
@@ -80,13 +89,14 @@ All configs are auto-generated during install.
 node steroid-run.cjs audit
 ```
 
-This checks that all enforcement layers (git hook, skills, circuit breaker, IDE configs) are properly installed.
+This checks that all enforcement layers (git hook, 8 skills, circuit breaker, IDE configs) are properly installed.
 
 ## Technical Details
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - How the pipeline enforcer works
-- Command reference for `steroid-run.cjs`
+- Full command reference for `steroid-run.cjs` (15+ commands)
+- Intent routing and gate map
 - Fork credits and sources
 - Project structure
 

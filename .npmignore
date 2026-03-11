@@ -1,6 +1,0 @@
-.memory/
-test-install/
-.gemini/
-.agents/
-node_modules/
-*.log

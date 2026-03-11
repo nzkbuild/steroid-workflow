@@ -6,7 +6,7 @@ steroid-run.cjs
 test_project/
 test-install/
 tmp-*/
+test-*.md
 
-# Cloned fork git history (we keep source files, not git metadata)
-src/forks/*/.git/
-src/forks/*/.github/
+# Fork source files — kept in npm package via "files" field, not tracked in git
+src/forks/

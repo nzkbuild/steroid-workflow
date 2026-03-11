@@ -136,48 +136,67 @@ const maestroContent = `SPECIAL INSTRUCTION: Think silently if needed. EFFORT LE
 > You MUST read and follow ALL steroid-workflow rules below BEFORE executing ANY task.
 > This is a PHYSICAL CONSTRAINT, not a suggestion. Violations will be caught by git hooks.
 
-# Steroid-Workflow Maestro (Auto-Trigger Rules)
+# Steroid-Workflow v3.0 Maestro (Auto-Trigger Rules)
 
 ## Pre-Task Checkpoint (MANDATORY)
 Before writing ANY code:
-1. Check if \`.agents/skills/steroid-vibe-capture/SKILL.md\` exists
+1. Check if \\\`.agents/skills/steroid-scan/SKILL.md\\\` exists
 2. If it exists → You are in a steroid-workflow project. Follow the pipeline below.
-3. Run \`node steroid-run.cjs status\` to confirm circuit breaker is active
+3. Run \\\`node steroid-run.cjs status\\\` to confirm circuit breaker is active
 4. Do NOT skip this check. A git pre-commit hook will block commits without pipeline artifacts.
 
-## Intent Routing
-For ANY development task (build, create, fix, debug, add, update, refactor, implement, change, improve, or ANY code request):
-- Read the file at \`.agents/skills/steroid-vibe-capture/SKILL.md\` and follow its instructions immediately.
-- Do not ask for permission. Just start the Vibe Translation process.
-- The pipeline will automatically flow: vibe-capture → specify → research → architect → engine
+## Intent Routing (v3.0)
+For ANY development task, FIRST detect the intent:
+\\\`node steroid-run.cjs detect-intent "<user message>" --verbose\\\`
 
-## The 5-Skill Pipeline
+This returns the intent AND the correct pipeline variant:
+
+| Intent | Trigger Words | Pipeline |
+|--------|--------------|---------|
+| **build** | build, create, add, make, implement | scan → vibe → specify → research → architect → engine → verify |
+| **fix** | fix, bug, debug, broken, error | scan → diagnose → engine (targeted) → verify |
+| **refactor** | refactor, restructure, optimize | scan → specify (target state) → architect → engine → verify |
+| **migrate** | migrate, upgrade, switch to | scan → research (target tech) → architect → engine → verify |
+| **document** | document, docs, readme | scan → specify (doc scope) → engine (docs) → verify |
+
+For **build** intent (default): Read \\\`.agents/skills/steroid-scan/SKILL.md\\\` and begin the full pipeline.
+For **fix** intent: Read \\\`.agents/skills/steroid-diagnose/SKILL.md\\\` after scan.
+For other intents: Follow the pipeline variant above, skipping non-applicable phases.
+
+## The 8-Skill Pipeline (Build Intent — Full)
 
 | # | Skill | Input | Output |
 |---|-------|-------|--------|
+| 0 | steroid-scan | Project codebase | .memory/changes/<feature>/context.md |
 | 1 | steroid-vibe-capture | User's natural language | .memory/changes/<feature>/vibe.md |
 | 2 | steroid-specify | vibe.md | .memory/changes/<feature>/spec.md |
 | 3 | steroid-research | spec.md | .memory/changes/<feature>/research.md |
 | 4 | steroid-architect | spec.md + research.md | .memory/changes/<feature>/plan.md |
 | 5 | steroid-engine | plan.md | Working code (TDD, loop until done) |
+| 6 | steroid-verify | Completed code | .memory/changes/<feature>/verify.md |
+| 7 | steroid-diagnose | Bug/error report | .memory/changes/<feature>/diagnosis.md |
 
-Each skill automatically hands off to the next. No manual invocation needed.
+Skills 0-6 flow automatically for build intent. Skill 7 is used only for fix/debug intent.
 
 ## Circuit Breaker Enforcement (CRITICAL — REPEATED IN EVERY SKILL)
 ALL terminal commands during development MUST be wrapped in:
-\`node steroid-run.cjs '<command>'\`
-Direct terminal execution (\`npm install\`, \`npx jest\`, \`node script.js\`, etc.) is STRICTLY FORBIDDEN.
-If you need to run \`npm install\`, you must run: \`node steroid-run.cjs 'npm install'\`
+\\\`node steroid-run.cjs '<command>'\\\`
+Direct terminal execution (\\\`npm install\\\`, \\\`npx jest\\\`, \\\`node script.js\\\`, etc.) is STRICTLY FORBIDDEN.
+If you need to run \\\`npm install\\\`, you must run: \\\`node steroid-run.cjs 'npm install'\\\`
 This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
 
 ## Pipeline Enforcement Commands (MUST USE)
 The AI MUST use these physical commands — they cannot be skipped:
-- \`node steroid-run.cjs init-feature <slug>\` — Create feature folder (validates kebab-case)
-- \`node steroid-run.cjs gate <phase> <feature>\` — Check phase prerequisites before proceeding
-- \`node steroid-run.cjs commit "<message>"\` — Atomic git commit in steroid format
-- \`node steroid-run.cjs log <feature> "<message>"\` — Append to progress log
-- \`node steroid-run.cjs check-plan <feature>\` — Check if all tasks are done
-- \`node steroid-run.cjs archive <feature>\` — Archive completed feature
+- \\\`node steroid-run.cjs init-feature <slug>\\\` — Create feature folder (validates kebab-case)
+- \\\`node steroid-run.cjs scan <feature>\\\` — Bootstrap codebase context (writes context.md)
+- \\\`node steroid-run.cjs gate <phase> <feature>\\\` — Check phase prerequisites before proceeding
+- \\\`node steroid-run.cjs commit "<message>"\\\` — Atomic git commit in steroid format
+- \\\`node steroid-run.cjs log <feature> "<message>"\\\` — Append to progress log
+- \\\`node steroid-run.cjs check-plan <feature>\\\` — Check if all tasks are done
+- \\\`node steroid-run.cjs verify-feature <feature>\\\` — Pre-check before verification skill
+- \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature
+- \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
+- \\\`node steroid-run.cjs detect-tests\\\` — Detect test framework in project
 
 ## Context Wipe Mandate
 After completing each task in the plan.md, terminate the current sub-agent context and start a fresh one.
@@ -185,12 +204,13 @@ This prevents hallucination cascades from poisoning multiple tasks.
 Each new task reads ONLY from plan.md and progress.md — no inherited context.
 
 ## Progress Tracking
-The engine captures learnings in \`.memory/progress.md\` after each task.
+The engine captures learnings in \\\`.memory/progress.md\\\` after each task.
 Read the Codebase Patterns section at the top before starting any new task.
 
 ## Anti-Summarization Rule
 NEVER summarize code. NEVER write "...rest of code here..." or "// existing code".
 NEVER truncate file contents. Write complete replacements or precise edits.`;
+
 
 // --- Git Pre-Commit Hook ---
 
@@ -299,11 +319,11 @@ if (fs.existsSync(memoryDir) && !forceMode) {
 }
 
 // Step 2: Install Skills
-console.log('🧠 [2/7] Installing Steroid skills (5-skill pipeline)...');
+console.log('🧠 [2/7] Installing Steroid skills (8-skill pipeline)...');
 const destSkills = path.join(targetDir, skillsTarget);
 copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
 console.log(`   ✅ Skills installed to ${skillsTarget}/`);
-console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
+console.log(`      → scan → vibe-capture → specify → research → architect → engine → verify (+ diagnose)`);
 
 // Step 3: Install raw forks + steroid-run.cjs
 console.log('📦 [3/7] Installing ecosystem forks + pipeline enforcer...');
@@ -432,7 +452,9 @@ console.log(`║  ✅ Steroid-Workflow v${pkg.version} ${verb}!${' '.repeat(Math
 console.log('║                                                              ║');
 console.log('║  🔒 Git hook active — AI cannot commit without pipeline      ║');
 console.log('║  🧠 6 IDE configs injected — universal coverage              ║');
-console.log('║  📋 Pipeline: vibe → spec → research → architect → engine   ║');
+console.log('║  📋 Pipeline: scan → vibe → spec → research → arch → engine ║');
+console.log('║  ✅ Verification: steroid-verify enforces proof of work       ║');
+console.log('║  🔍 Intent routing: build/fix/refactor/migrate/document      ║');
 console.log('╚══════════════════════════════════════════════════════════════╝');
 console.log('');
 if (isUpdate) {
