@@ -1,7 +1,7 @@
 {
   "name": "steroid-workflow",
-  "version": "1.0.0",
-  "description": "AI agency-in-a-box for non-technical vibe coders. Physically constrained execution with TDD, circuit breakers, and anti-summarization guards.",
+  "version": "2.0.0",
+  "description": "AI agency-in-a-box for non-technical vibe coders. 5-skill pipeline with spec-driven development, tech research, TDD, circuit breakers, autonomous execution loop, and anti-summarization guards.",
   "bin": {
     "steroid-workflow": "./bin/cli.js",
     "steroid-run": "./bin/steroid-run.js"
@@ -28,6 +28,10 @@
     "vibe-coding",
     "tdd",
     "circuit-breaker",
+    "spec-driven",
+    "autonomous",
+    "research",
+    "openspec",
     "claude",
     "cursor",
     "gemini",

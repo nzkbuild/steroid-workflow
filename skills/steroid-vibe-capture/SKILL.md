@@ -1,11 +1,11 @@
 ---
 name: steroid-vibe-capture
-description: This skill should be used when a non-technical user describes what they want to build using natural language. It translates vague aesthetic ideas into a rigorous, structured technical spec written to .memory/user_vibe.md.
+description: This skill should be used when a non-technical user describes what they want to build using natural language. It translates vague aesthetic ideas into a rigorous, structured vibe profile written to .memory/changes/<feature>/vibe.md.
 ---
 
 # Steroid Vibe Capture
 
-This skill captures a non-technical user's intent and translates it into a structured specification.
+This skill captures a non-technical user's intent and translates it into a structured vibe profile.
 
 ## When To Use
 
@@ -31,39 +31,65 @@ NEVER summarize the user's intent with "..." or leave fields blank. NEVER use pl
 
 NEVER summarize existing code. If instructed to reproduce or fork a file, reproduce it line-by-line. Writing "...rest of the code here..." is a critical failure.
 
-### 4. Schema Obedience
+### 4. Feature Slug Extraction
 
-Write the output to `.memory/user_vibe.md` using this exact format:
+Extract a short, URL-safe slug from the user's prompt for the feature folder name.
+
+Examples:
+- "Build me a habit tracker" → `habit-tracker`
+- "Create a minimal to-do app like Notion" → `todo-app`
+- "Design a dashboard for my crypto portfolio" → `crypto-dashboard`
+
+### 5. Physical Folder Creation
+
+Once the slug is determined, physically create the feature folder using the steroid-run enforcer:
+
+```
+npx steroid-run init-feature <slug>
+```
+
+This is NOT optional. The command validates the slug format and creates `.memory/changes/<slug>/` with the correct structure. If the name is invalid, the command will block you with an error.
+
+### 6. Schema Obedience
+
+Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
 
 ```markdown
 # User Vibe Profile
+- Feature: <slug>
 - Target Aesthetic: [specific visual references, e.g., Apple Health, Dark Mode, Minimalist]
 - Core User Flow: [step-by-step description of the primary user journey]
-- Key Features: [3-5 non-negotiable features listed explicitly]
+- Key Features:
+  1. [non-negotiable feature]
+  2. [non-negotiable feature]
+  3. [non-negotiable feature]
+  4. [additional feature]
+  5. [additional feature]
 ```
 
-### 5. Circuit Breaker Mandate
+### 6. Circuit Breaker Mandate
 
 If at any point you need to run a terminal command, you MUST use:
 `npx steroid-run '<command>'`
 Direct terminal execution is strictly forbidden.
 
-### 6. Automatic System Handoff
+### 7. Automatic System Handoff
 
-Once `.memory/user_vibe.md` is written, do NOT ask the user for permission to continue. Output exactly one sentence:
+Once `.memory/changes/<slug>/vibe.md` is written, do NOT ask the user for permission to continue. Output exactly one sentence:
 
-"I've locked in the vibe. Translating this into a technical blueprint now..."
+"I've locked in the vibe. Turning this into a formal spec now..."
 
-Then immediately read the file at `.agents/skills/steroid-architect/SKILL.md` and follow its instructions.
+Then immediately read the file at `.agents/skills/steroid-specify/SKILL.md` and follow its instructions.
 
 ## Example
 
 <good>
 User: "Build me a minimal habit tracker like Apple Health that I can use every day."
 
-Action: Write to .memory/user_vibe.md:
+Action: Extract slug "habit-tracker", create `.memory/changes/habit-tracker/`, write to `.memory/changes/habit-tracker/vibe.md`:
 ```markdown
 # User Vibe Profile
+- Feature: habit-tracker
 - Target Aesthetic: Apple Health-inspired, clean white/light gray backgrounds, rounded cards, SF Pro typography, subtle green accent for completed habits
 - Core User Flow: Open app → see today's habits as a card list → tap to mark complete → see streak count update → swipe to see weekly overview
 - Key Features:
@@ -74,8 +100,8 @@ Action: Write to .memory/user_vibe.md:
   5. Motivational micro-animations on completion
 ```
 
-Output: "I've locked in the vibe. Translating this into a technical blueprint now..."
-Action: Read `.agents/skills/steroid-architect/SKILL.md` and follow its instructions.
+Output: "I've locked in the vibe. Turning this into a formal spec now..."
+Action: Read `.agents/skills/steroid-specify/SKILL.md` and follow its instructions.
 </good>
 
 <bad>

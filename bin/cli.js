@@ -6,7 +6,7 @@ const targetDir = process.cwd();
 const sourceDir = path.join(__dirname, '..');
 const pkg = require(path.join(sourceDir, 'package.json'));
 
-// --- Argument Parsing (P0 Fix A4) ---
+// --- Argument Parsing ---
 const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
@@ -87,7 +87,7 @@ console.log(`║     🧬 Steroid-Workflow Installer v${pkg.version}      ║`);
 console.log('╚══════════════════════════════════════════════╝');
 console.log('');
 
-// Step 1: Install Memory Templates (P0 Fix A2: overwrite protection)
+// Step 1: Install Memory Templates
 const memoryDir = path.join(targetDir, '.memory');
 if (fs.existsSync(memoryDir) && !forceMode) {
   console.log('📦 [1/5] MemoryCore schema...');
@@ -95,25 +95,33 @@ if (fs.existsSync(memoryDir) && !forceMode) {
   console.log('   (Use --force to overwrite)');
 } else {
   console.log('📦 [1/5] Installing MemoryCore schema...');
+  // Copy base templates
   copyRecursiveSync(path.join(sourceDir, 'memory-template'), memoryDir);
-  console.log('   ✅ .memory/ created with execution_state.json, user_vibe.md, project_state.md');
+  // Create per-change folder structure
+  const changesDir = path.join(memoryDir, 'changes');
+  if (!fs.existsSync(changesDir)) {
+    fs.mkdirSync(changesDir, { recursive: true });
+  }
+  console.log('   ✅ .memory/ created with execution_state.json, progress.md, and changes/ folder');
 }
 
 // Step 2: Install Skills into all detected IDE targets
-console.log('🧠 [2/5] Installing Steroid skills...');
+console.log('🧠 [2/5] Installing Steroid skills (5-skill pipeline)...');
 let installed = false;
 for (const target of targets) {
   const destPath = path.join(targetDir, target.dir);
   if (target === targets[0] || fs.existsSync(path.dirname(destPath))) {
     copyRecursiveSync(path.join(sourceDir, 'skills'), destPath);
     console.log(`   ✅ Skills installed to ${target.dir}/ (${target.label})`);
+    console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
     installed = true;
   }
 }
 
-// Step 3: Install raw forks
+// Step 3: Install raw forks (including new ecosystem forks)
 copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
 console.log('   ✅ Raw ecosystem forks installed to src/forks/');
+console.log('      → superpowers, memorycore, ralph, gsd, openspec, spec-kit, cc-sdd, bmad-method');
 
 if (!installed) {
   console.error('   ❌ No valid skill target directory found.');
@@ -132,6 +140,19 @@ const maestroContent = `# Steroid-Workflow Maestro (Auto-Trigger Rules)
 If the user says words like "build", "create", "design", or "make" in the context of generating a new feature or project:
 - Read the file at \`.agents/skills/steroid-vibe-capture/SKILL.md\` and follow its instructions immediately.
 - Do not ask for permission. Just start the Vibe Translation process.
+- The pipeline will automatically flow: vibe-capture → specify → research → architect → engine
+
+## The 5-Skill Pipeline
+
+| # | Skill | Input | Output |
+|---|-------|-------|--------|
+| 1 | steroid-vibe-capture | User's natural language | .memory/changes/<feature>/vibe.md |
+| 2 | steroid-specify | vibe.md | .memory/changes/<feature>/spec.md |
+| 3 | steroid-research | spec.md | .memory/changes/<feature>/research.md |
+| 4 | steroid-architect | spec.md + research.md | .memory/changes/<feature>/plan.md |
+| 5 | steroid-engine | plan.md | Working code (TDD, loop until done) |
+
+Each skill automatically hands off to the next. No manual invocation needed.
 
 ## Circuit Breaker Enforcement (CRITICAL — REPEATED IN EVERY SKILL)
 ALL terminal commands during development MUST be wrapped in:
@@ -141,9 +162,13 @@ If you need to run \`npm install\`, you must run: \`npx steroid-run 'npm install
 This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
 
 ## Context Wipe Mandate
-After completing each task in \`.memory/project_state.md\`, terminate the current sub-agent context and start a fresh one.
+After completing each task in the plan.md, terminate the current sub-agent context and start a fresh one.
 This prevents hallucination cascades from poisoning multiple tasks.
-Each new task reads ONLY from \`.memory/project_state.md\` — no inherited context.
+Each new task reads ONLY from plan.md and progress.md — no inherited context.
+
+## Progress Tracking
+The engine captures learnings in \`.memory/progress.md\` after each task.
+Read the Codebase Patterns section at the top before starting any new task.
 
 ## Anti-Summarization Rule
 NEVER summarize code. NEVER write "...rest of code here..." or "// existing code".
@@ -178,15 +203,19 @@ if (fs.existsSync(userGitignore)) {
 
 // Done
 console.log('');
-console.log('╔══════════════════════════════════════════════╗');
-console.log('║  ✅ Steroid-Workflow installed successfully!  ║');
-console.log('╚══════════════════════════════════════════════╝');
+console.log('╔══════════════════════════════════════════════════════════════╗');
+console.log('║  ✅ Steroid-Workflow v2 installed successfully!              ║');
+console.log('║                                                              ║');
+console.log('║  Pipeline: vibe → spec → research → architect → engine      ║');
+console.log('╚══════════════════════════════════════════════════════════════╝');
 console.log('');
 console.log('Just tell your AI what you want to build:');
 console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
 console.log('  👉 "Create a dashboard for tracking my daily habits"');
 console.log('');
 console.log('Helpful commands:');
-console.log('  npx steroid-run status    — Check circuit breaker state');
-console.log('  npx steroid-run reset     — Reset error counter after fixing issues');
+console.log('  npx steroid-run status              — Check circuit breaker state');
+console.log('  npx steroid-run reset               — Reset error counter after fixing');
+console.log('  npx steroid-run progress             — View execution learnings log');
+console.log('  npx steroid-run progress --patterns  — View codebase patterns only');
 console.log('');

@@ -1,11 +1,11 @@
 ---
 name: steroid-engine
-description: The execution orchestrator for Steroid-Workflow. This skill should be used when executing an implementation plan from .memory/project_state.md. It enforces rigorous Test-Driven Development and the Implementer/Reviewer sub-agent split, physically constrained by the steroid-run Node.js circuit breaker.
+description: The autonomous execution orchestrator for Steroid-Workflow. This skill reads .memory/changes/<feature>/plan.md and loops through the execution checklist using TDD, committing atomically per task, capturing learnings, and stopping only on completion or circuit breaker trip.
 ---
 
-# Steroid Engine (Execution Orchestrator)
+# Steroid Engine (Autonomous Execution Orchestrator)
 
-This skill orchestrates the execution of the project checklist in `.memory/project_state.md`. It uses the Subagent-Driven Development model forked from `obra/superpowers` (see `src/forks/superpowers/subagent.md` and `src/forks/superpowers/tdd.md` for the raw, unmodified source logic).
+This skill autonomously executes the checklist in `.memory/changes/<feature>/plan.md`. It uses the Subagent-Driven Development model forked from `obra/superpowers` (see `src/forks/superpowers/subagent.md` and `src/forks/superpowers/tdd.md`) combined with the autonomous loop pattern from Ralph (see `src/forks/ralph/prompt.md`).
 
 ## The Circuit Breaker Mandate
 
@@ -39,13 +39,19 @@ npx steroid-run 'git init && git add -A && git commit -m steroid-checkpoint --al
 
 If the build goes wrong, the user can recover with `git reset --hard steroid-checkpoint`.
 
-## The Execution Loop
+## The Autonomous Execution Loop
+
+This engine is a **loop**, not a single pass. It processes tasks one at a time until ALL tasks are `[x]` or the circuit breaker trips.
 
 ### Detecting Environment Capabilities
 
 Before starting, determine if the current IDE supports sub-agent dispatch (e.g., Claude Code with tool_use). If sub-agents are available, use **Full Mode**. If not (e.g., Cursor, Gemini CLI), use **Fallback Mode**.
 
-### For each `[ ]` task in `.memory/project_state.md`:
+### Reading Progress First
+
+Before starting any task, read `.memory/progress.md` — especially the **Codebase Patterns** section at the top (if it exists). Previous task iterations may have documented patterns and gotchas that help you avoid repeating mistakes.
+
+### Loop: For each `[ ]` task in `.memory/changes/<feature>/plan.md`:
 
 **Step 0: Progress Signal**
 
@@ -54,12 +60,13 @@ Before starting each task, output one line to the user:
 
 This gives the user visibility without breaking the silence directive.
 
-**Phase 1: Implementation**
+**Phase 1: Implementation (TDD)**
 
 Dispatch a fresh Implementer sub-agent. Provide it with:
-- The full text of the current task from `.memory/project_state.md`
+- The full text of the current task from `plan.md`
 - The raw TDD methodology from `src/forks/superpowers/tdd.md`
 - The `steroid-run` mandate (all commands via `npx steroid-run`)
+- The Codebase Patterns section from `progress.md` (if any)
 
 The Implementer sub-agent follows the Red-Green-Refactor cycle from the forked TDD skill:
 
@@ -72,7 +79,8 @@ Reference the full TDD rules in `src/forks/superpowers/tdd.md`. The Implementer 
 **Phase 2: Spec Compliance Review**
 
 Dispatch a SEPARATE, fresh Reviewer sub-agent using the prompt template from `src/forks/superpowers/spec-reviewer-prompt.md`. Give it:
-- The original task specification from `.memory/project_state.md`
+- The original task specification from `plan.md`
+- The acceptance criteria from `.memory/changes/<feature>/spec.md` (if referenced)
 - The code that was committed by the Implementer
 
 The Reviewer's ONLY job is to compare the committed code against the spec. If the Implementer took a shortcut, summarized code, or missed a requirement, the Reviewer flags it as `❌ Issues Found` and the Implementer must fix it.
@@ -81,11 +89,38 @@ The Reviewer's ONLY job is to compare the committed code against the spec. If th
 
 Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-quality-reviewer-prompt.md`. This reviewer checks for code quality issues independently of the spec.
 
-**Phase 4: Verify & Mark Done**
+**Phase 4: Verify, Commit & Log (Physical Enforcement)**
 
-Run: `npx steroid-run verify <primary-file> --min-lines=<expected>`
+1. Run: `npx steroid-run verify <primary-file> --min-lines=<expected>`
+2. If passing, mark the task as `[x]` in `plan.md`
+3. Commit atomically using the physical commit command:
+   ```
+   npx steroid-run commit "<task-description>"
+   ```
+4. Log the task completion using the physical log command:
+   ```
+   npx steroid-run log <feature> "<what was implemented — one sentence>"
+   ```
 
-If passing, update `.memory/project_state.md` to mark the task as `[x]`.
+5. If you discover reusable patterns, add them to the **Codebase Patterns** section at the TOP of `progress.md`:
+
+```markdown
+## Codebase Patterns
+- Example: Use `date-fns startOfDay()` for all date comparisons
+- Example: Tailwind class `rounded-xl shadow-sm` for Apple Health card style
+- Example: Always wrap localStorage.setItem in try/catch
+```
+
+Only add patterns that are **general and reusable**, not task-specific details.
+
+**Step 5: Check Completion & Loop**
+
+After completing a task, physically check if all tasks are done:
+```
+npx steroid-run check-plan <feature>
+```
+- If exit code 0 (all complete) → proceed to Completion
+- If exit code 1 (tasks remaining) → wipe sub-agent contexts, loop back to Step 0 with the next `[ ]` task
 
 ---
 
@@ -103,7 +138,18 @@ If ANY answer fails, fix the issue before marking `[x]`.
 
 ### Context Wipe Between Tasks
 
-After completing a task, the current sub-agent contexts MUST be terminated. Each new task starts with completely fresh sub-agent contexts reading only from `.memory/project_state.md`. This prevents the hallucination cascade where one bad shortcut poisons the rest of the project.
+After completing a task, the current sub-agent contexts MUST be terminated. Each new task starts with completely fresh sub-agent contexts reading only from `plan.md` and `progress.md`. This prevents the hallucination cascade where one bad shortcut poisons the rest of the project.
+
+## Completion
+
+When `npx steroid-run check-plan <feature>` exits with code 0 (all tasks complete):
+
+1. Archive the feature using the physical archive command:
+   ```
+   npx steroid-run archive <feature>
+   ```
+2. Output to the user: "🎉 The technical blueprint is fully implemented!"
+3. Signal completion: `<promise>COMPLETE</promise>`
 
 ## The Silence Directive
 
@@ -124,3 +170,5 @@ To understand the full, unmodified logic behind this skill, read:
 - `src/forks/superpowers/spec-reviewer-prompt.md` - The Spec Reviewer dispatch template
 - `src/forks/superpowers/code-quality-reviewer-prompt.md` - The Quality Reviewer dispatch template
 - `src/forks/memorycore/save-protocol.md` - The continuous state-tracking protocol (222 lines)
+- `src/forks/ralph/prompt.md` - The Ralph autonomous loop prompt (109 lines)
+- `src/forks/ralph/ralph.sh` - The Ralph loop script (114 lines)
