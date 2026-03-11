@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.0.2] - 2026-03-11
+
+### Fixed
+- Cursor handoff paths: all IDEs now install to `.agents/skills/` (unified target)
+- Removed `.agents/skills/` and `.cursorrules` from git (installer-generated, shouldn't be versioned)
+- Removed `steroid-run` bin entry from package.json (users use `node steroid-run.js`)
+- `steroid-run.js` help text now shows `node steroid-run.js` instead of `npx steroid-run`
+- CLI step numbering fixed (was showing 3/5, 4/5 — now properly 1/5 through 5/5)
+- `.gitignore` now excludes `.agents/`, `.cursurrules`, `steroid-run.js`, `test-install/`
+
+### Added
+- `engines` field in package.json (`node >= 14.0.0`)
+- `main` field in package.json
+- `steroid-run.js` shown in README project structure
+
 ## [2.0.1] - 2026-03-11
 
 ### Fixed

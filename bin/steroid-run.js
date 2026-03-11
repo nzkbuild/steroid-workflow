@@ -18,22 +18,22 @@ steroid-run — The physical pipeline enforcer for AI-driven development.
 
 Usage:
   Circuit Breaker:
-    npx steroid-run '<command>'                       Execute a command with error tracking
-    npx steroid-run verify <file> --min-lines=<n>     Verify file meets minimum line count
-    npx steroid-run reset                             Reset the error counter to 0
-    npx steroid-run status                            Show current circuit breaker state
+    node steroid-run.js '<command>'                       Execute a command with error tracking
+    node steroid-run.js verify <file> --min-lines=<n>     Verify file meets minimum line count
+    node steroid-run.js reset                             Reset the error counter to 0
+    node steroid-run.js status                            Show current circuit breaker state
 
   Pipeline Enforcement:
-    npx steroid-run init-feature <slug>               Create feature folder structure
-    npx steroid-run gate <phase> <feature>            Check phase prerequisites
-    npx steroid-run commit <message>                  Atomic git commit in steroid format
-    npx steroid-run log <feature> <message>           Append to progress log
-    npx steroid-run check-plan <feature>              Count remaining tasks in plan
-    npx steroid-run archive <feature>                 Archive completed feature
+    node steroid-run.js init-feature <slug>               Create feature folder structure
+    node steroid-run.js gate <phase> <feature>            Check phase prerequisites
+    node steroid-run.js commit <message>                  Atomic git commit in steroid format
+    node steroid-run.js log <feature> <message>           Append to progress log
+    node steroid-run.js check-plan <feature>              Count remaining tasks in plan
+    node steroid-run.js archive <feature>                 Archive completed feature
 
   Progress:
-    npx steroid-run progress                          Show execution learnings log
-    npx steroid-run progress --patterns               Show only codebase patterns
+    node steroid-run.js progress                          Show execution learnings log
+    node steroid-run.js progress --patterns               Show only codebase patterns
 
 The circuit breaker tracks errors in .memory/execution_state.json.
 After 3 consecutive errors, all execution is blocked until you run 'reset'.

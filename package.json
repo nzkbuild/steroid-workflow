@@ -1,11 +1,11 @@
 {
   "name": "steroid-workflow",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "AI agency-in-a-box for non-technical vibe coders. 5-skill pipeline with spec-driven development, tech research, TDD, circuit breakers, autonomous execution loop, and anti-summarization guards.",
   "bin": {
-    "steroid-workflow": "./bin/cli.js",
-    "steroid-run": "./bin/steroid-run.js"
+    "steroid-workflow": "bin/cli.js"
   },
+  "main": "bin/cli.js",
   "files": [
     "bin/",
     "skills/",
@@ -43,5 +43,8 @@
   "homepage": "https://github.com/nzkbuild/steroid-workflow#readme",
   "bugs": {
     "url": "https://github.com/nzkbuild/steroid-workflow/issues"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }

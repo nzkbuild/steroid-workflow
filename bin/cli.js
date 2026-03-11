@@ -72,12 +72,9 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// --- Installation Targets ---
+// --- Installation Target (unified for all IDEs) ---
 
-const targets = [
-  { dir: '.agents/skills', label: 'Antigravity / Claude Code' },
-  { dir: '.cursor/skills', label: 'Cursor' },
-];
+const skillsTarget = '.agents/skills';
 
 // --- Main Installation ---
 
@@ -105,35 +102,22 @@ if (fs.existsSync(memoryDir) && !forceMode) {
   console.log('   ✅ .memory/ created with execution_state.json, progress.md, and changes/ folder');
 }
 
-// Step 2: Install Skills into all detected IDE targets
+// Step 2: Install Skills
 console.log('🧠 [2/5] Installing Steroid skills (5-skill pipeline)...');
-let installed = false;
-for (const target of targets) {
-  const destPath = path.join(targetDir, target.dir);
-  if (target === targets[0] || fs.existsSync(path.dirname(destPath))) {
-    copyRecursiveSync(path.join(sourceDir, 'skills'), destPath);
-    console.log(`   ✅ Skills installed to ${target.dir}/ (${target.label})`);
-    console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
-    installed = true;
-  }
-}
+const destSkills = path.join(targetDir, skillsTarget);
+copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
+console.log(`   ✅ Skills installed to ${skillsTarget}/`);
+console.log(`      → steroid-vibe-capture → steroid-specify → steroid-research → steroid-architect → steroid-engine`);
 
-// Step 3: Install raw forks (including new ecosystem forks)
+// Step 3: Install raw forks + steroid-run.js
+console.log('📦 [3/5] Installing ecosystem forks + pipeline enforcer...');
 copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
-console.log('   ✅ Raw ecosystem forks installed to src/forks/');
-console.log('      → superpowers, memorycore, ralph, gsd, openspec, spec-kit, cc-sdd, bmad-method');
-
-// Step 3b: Copy steroid-run.js into project root (so `node steroid-run.js` always works)
 fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.js'), path.join(targetDir, 'steroid-run.js'));
+console.log('   ✅ Raw ecosystem forks installed to src/forks/');
 console.log('   ✅ steroid-run.js copied to project root (pipeline enforcer)');
 
-if (!installed) {
-  console.error('   ❌ No valid skill target directory found.');
-  process.exit(1);
-}
-
 // Step 4: Inject IDE Trigger Rules (The Maestro)
-console.log('🔌 [3/5] Injecting Maestro IDE triggers...');
+console.log('🔌 [4/5] Injecting Maestro IDE triggers...');
 
 const MARKER_START = '<!-- STEROID-WORKFLOW-START -->';
 const MARKER_END = '<!-- STEROID-WORKFLOW-END -->';
@@ -197,7 +181,7 @@ safeInjectContent(cursorRulesPath, maestroContent, MARKER_START, MARKER_END);
 console.log('   ✅ Maestro rules injected into .cursorrules');
 
 // Step 5: Inject .gitignore for user project
-console.log('📋 [4/5] Setting up .gitignore...');
+console.log('📋 [5/5] Setting up .gitignore...');
 const userGitignore = path.join(targetDir, '.gitignore');
 const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.js'];
 if (fs.existsSync(userGitignore)) {

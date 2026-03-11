@@ -96,6 +96,7 @@ When the AI detects "build", "create", or "design" intent, it automatically star
 
 ```
 your-project/
+├── steroid-run.js                 ← Pipeline enforcer (copied by installer)
 ├── .memory/
 │   ├── execution_state.json       ← Circuit breaker state
 │   ├── progress.md                ← Cross-task learnings log
@@ -106,16 +107,8 @@ your-project/
 │           ├── research.md        ← Tech investigation results
 │           ├── plan.md            ← Atomic execution checklist
 │           └── archive/           ← Completed features
+├── .agents/skills/                ← The 5 steroid skills (all IDEs)
 ├── src/forks/                     ← Referenced fork source (112KB total)
-│   ├── superpowers/               ← TDD + subagent logic (5 files)
-│   ├── memorycore/                ← State tracking (3 files)
-│   ├── ralph/                     ← Autonomous loop pattern (4 files)
-│   ├── gsd/                       ← Research agent (3 files)
-│   ├── openspec/                  ← Per-change folder pattern (2 files)
-│   ├── spec-kit/                  ← Spec templates (4 files)
-│   ├── cc-sdd/                    ← SDD reference (1 file)
-│   └── bmad-method/               ← Agile AI reference (1 file)
-├── .agents/skills/                ← The 5 steroid skills
 ├── GEMINI.md                      ← Auto-trigger rules
 └── .cursorrules                   ← Auto-trigger rules
 ```
