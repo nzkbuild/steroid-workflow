@@ -55,6 +55,30 @@ This engine is a **loop**, not a single pass. It processes tasks one at a time u
 
 Before starting, determine if the current IDE supports sub-agent dispatch (e.g., Claude Code with tool_use). If sub-agents are available, use **Full Mode**. If not (e.g., Cursor, Gemini CLI), use **Fallback Mode**.
 
+### Knowledge Check (v4.0)
+
+Before writing any code, check structured memory for project context:
+
+```bash
+node steroid-run.cjs memory show-all
+```
+
+Use the patterns, decisions, and gotchas to inform your implementation approach. If you discover new patterns or gotchas during implementation, record them:
+
+```bash
+node steroid-run.cjs memory write gotchas '{"key": "description"}'
+```
+
+### Story Selection (v4.0)
+
+If the plan uses prioritized stories (P1/P2/P3), check which story to work on:
+
+```bash
+node steroid-run.cjs stories <feature> next
+```
+
+Complete P1 stories before moving to P2/P3. Use `node steroid-run.cjs recover` if an error occurs instead of immediately retrying.
+
 ### Reading Progress First
 
 Before starting any task, read `.memory/progress.md` — especially the **Codebase Patterns** section at the top (if it exists). Previous task iterations may have documented patterns and gotchas that help you avoid repeating mistakes.

@@ -40,10 +40,11 @@ All AI terminal commands are routed through this CLI wrapper.
 ### Circuit Breaker
 | Command | Purpose |
 |---------|---------|
-| `node steroid-run.cjs '<command>'` | Execute with error tracking (3 errors → hard stop) |
+| `node steroid-run.cjs '<command>'` | Execute with error tracking (5 errors → graduated recovery → hard stop) |
 | `node steroid-run.cjs verify <file> --min-lines=<n>` | Block code summarization |
-| `node steroid-run.cjs reset` | Reset error counter after human intervention |
-| `node steroid-run.cjs status` | Show circuit breaker state |
+| `node steroid-run.cjs reset` | Reset error counter + clear recovery state |
+| `node steroid-run.cjs status` | Show circuit breaker state + recovery level |
+| `node steroid-run.cjs recover` | Smart recovery guidance based on error level (v4.0) |
 
 ### Pipeline Enforcement
 | Command | Purpose | Origin |
@@ -68,7 +69,22 @@ All AI terminal commands are routed through this CLI wrapper.
 |---------|---------|
 | `progress` | Show execution learnings log |
 | `progress --patterns` | Show only codebase patterns |
-| `audit` | Verify all enforcement layers are installed (8 skills, 7 gates) |
+| `audit` | Verify all enforcement layers (8 skills, 7 gates, 4 knowledge stores) |
+
+### Knowledge & Memory (v4.0)
+| Command | Purpose | Origin |
+|---------|---------|--------|
+| `memory show <store>` | Display a knowledge store (tech-stack, patterns, decisions, gotchas) | MemoryCore |
+| `memory show-all` | Display all knowledge stores | MemoryCore |
+| `memory write <store> <json>` | Write/merge data into a store | MemoryCore/Ralph |
+| `memory stats` | Show entry counts and metrics | MemoryCore |
+
+### Stories & Recovery (v4.0)
+| Command | Purpose | Origin |
+|---------|---------|--------|
+| `stories <feature>` | List prioritized stories (P1/P2/P3) | spec-kit |
+| `stories <feature> next` | Show next story (P1 foundational blocking) | spec-kit/Ralph |
+| `recover` | Smart recovery guidance (5 levels) | superpowers |
 
 ## The 8-Skill Pipeline (v3.0)
 
@@ -112,15 +128,23 @@ your-project/
 ├── steroid-run.cjs                 ← Pipeline enforcer (copied by installer)
 ├── .git/hooks/pre-commit          ← Physical commit enforcement
 ├── .memory/
-│   ├── execution_state.json       ← Circuit breaker state
+│   ├── execution_state.json       ← Circuit breaker state (error_count, error_history, recovery_actions)
 │   ├── progress.md                ← Cross-task learnings log
+│   ├── knowledge/                 ← Structured memory (v4.0)
+│   │   ├── tech-stack.json        ← Language, framework, deps (auto-populated by scan)
+│   │   ├── patterns.json          ← Codebase patterns and conventions
+│   │   ├── decisions.json         ← Locked architectural decisions
+│   │   └── gotchas.json           ← Known pitfalls and workarounds
+│   ├── metrics/                   ← Performance tracking (v4.0)
+│   │   ├── error-patterns.json    ← Auto-recorded error patterns (last 50)
+│   │   └── features.json          ← Feature completion data
 │   └── changes/
 │       └── <feature>/
 │           ├── context.md         ← Codebase scan results (v3.0)
 │           ├── vibe.md            ← Captured user intent
 │           ├── spec.md            ← Acceptance criteria
 │           ├── research.md        ← Tech investigation results
-│           ├── plan.md            ← Atomic execution checklist
+│           ├── plan.md            ← Atomic execution checklist (supports P1/P2/P3 priorities)
 │           ├── verify.md          ← Verification report (v3.0)
 │           ├── diagnosis.md       ← Bug diagnosis (v3.0, fix intent only)
 │           └── archive/           ← Completed features

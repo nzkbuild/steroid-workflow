@@ -71,5 +71,19 @@ test('check-plan with no args exits 1', () => run('check-plan', 1));
 test('archive with no args exits 1', () => run('archive', 1));
 test('detect-intent with no message exits 1', () => run('detect-intent', 1));
 
+// --- v4.0: Memory Commands ---
+test('memory --help exits 0', () => run('memory --help'));
+test('memory show with bad store exits 1', () => run('memory show badstore', 1));
+test('memory show-all exits 0', () => run('memory show-all'));
+test('memory stats exits 0', () => run('memory stats'));
+test('memory write with no json exits 1', () => run('memory write tech-stack', 1));
+test('memory write with bad json exits 1', () => run('memory write tech-stack {bad', 1));
+
+// --- v4.0: Recovery Commands ---
+test('recover exits 0 when no errors', () => run('recover'));
+
+// --- v4.0: Stories Commands ---
+test('stories with no feature exits 1', () => run('stories', 1));
+
 console.log(`\n[smoke] ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

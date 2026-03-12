@@ -1,5 +1,49 @@
 # Changelog
 
+## [4.0.0] "Make It Learn" - 2026-03-12
+
+### The Vision
+v3.1 hardened gate enforcement and added smoke tests. But the pipeline still forgot everything between features — no structured memory, a blunt 3-strike kill switch, and flat task lists with no priority. v4.0 gives the AI a brain: structured knowledge stores that persist across features, graduated error recovery, and prioritized story execution.
+
+### Added — Structured Memory System
+- **`memory` command** — 4 knowledge stores: `tech-stack`, `patterns`, `decisions`, `gotchas`
+- **`memory show <store>`** — Display a specific knowledge store
+- **`memory show-all`** — Display all knowledge stores
+- **`memory write <store> <json>`** — Write/merge data into a store (arrays deduplicate, objects deep-merge)
+- **`memory stats`** — Show entry counts, last update times, and metrics summary
+- **`.memory/knowledge/`** — New directory auto-created by scan, writable by AI skills
+- **Scan auto-populates `tech-stack.json`** — language, framework, test framework captured on every scan
+
+### Added — Smart Recovery (Graduated Error Handling)
+- **`recover` command** — 5-level recovery guidance based on error count:
+  - Level 1: Retry with different approach
+  - Level 2: Pause and re-read plan
+  - Level 3: Self-diagnose using error-patterns.json
+  - Level 4: Escalate with full error history to user
+  - Level 5: Hard stop (circuit breaker tripped)
+- **Error history tracking** — `execution_state.json` now records `error_history[]` and `recovery_actions[]`
+- **Auto-recorded error patterns** — `.memory/metrics/error-patterns.json` populated on every error (last 50 kept)
+
+### Added — Prioritized Story Execution
+- **`stories <feature>`** — Lists all stories grouped by P1/P2/P3 priority
+- **`stories <feature> next`** — Shows next story respecting foundational blocking (P1 must complete before P2/P3)
+- **P1 breakdown in check-plan** — `check-plan` now shows P1 vs P2/P3 completion when priorities exist
+- **Priority format** — Plans can use `- [ ] P1: Story title` for priorities, `- [ ] [P] P2: Story` for parallel markers
+
+### Added — Metrics Tracking
+- **Feature metrics** — `archive` now records feature completion data to `.memory/metrics/features.json`
+- **Knowledge store health in audit** — `audit` now shows which knowledge stores are populated
+
+### Changed
+- Circuit breaker threshold from 3 → 5 errors (graduated recovery at each level)
+- Each error level provides specific recovery guidance via `recover` command
+- `status` command shows recovery level (🟢 CLEAR → 🟡 LOGGED → 🟠 RE-READ → 🔶 DIAGNOSING → 🔴 ESCALATED → 🛑 TRIPPED)
+- `reset` command clears recovery state and error history
+- Tripped banner now shows `recover` and `reset` commands
+- Audit summary includes knowledge store count
+- Skills updated: `steroid-scan` writes to knowledge stores, `steroid-engine` reads knowledge + checks story priority, `steroid-diagnose` uses smart recovery
+- Smoke tests expanded from 16 → 24 (8 new tests for memory, recover, stories)
+
 ## [3.1.0] "Polish & Harden" - 2026-03-12
 
 ### The Vision

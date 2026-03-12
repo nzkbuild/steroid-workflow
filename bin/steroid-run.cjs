@@ -8,6 +8,24 @@ const stateFile = path.join(targetDir, '.memory', 'execution_state.json');
 const memoryDir = path.join(targetDir, '.memory');
 const changesDir = path.join(memoryDir, 'changes');
 const progressFile = path.join(memoryDir, 'progress.md');
+const knowledgeDir = path.join(memoryDir, 'knowledge');
+const metricsDir = path.join(memoryDir, 'metrics');
+
+// --- Knowledge Merge Helper (v4.0) ---
+function mergeKnowledge(existing, incoming) {
+    const result = { ...existing };
+    for (const [key, value] of Object.entries(incoming)) {
+        if (Array.isArray(value) && Array.isArray(result[key])) {
+            result[key] = [...new Set([...result[key], ...value])];
+        } else if (value && typeof value === 'object' && !Array.isArray(value)
+            && result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+            result[key] = mergeKnowledge(result[key], value);
+        } else {
+            result[key] = value;
+        }
+    }
+    return result;
+}
 
 // --- Argument Parsing ---
 const args = process.argv.slice(2);
@@ -33,6 +51,13 @@ Usage:
     node steroid-run.cjs archive <feature>                 Archive completed feature
     node steroid-run.cjs verify-feature <feature>          Run verification (writes verify.md)
 
+  Stories:
+    node steroid-run.cjs stories <feature>                 List prioritized stories (P1/P2/P3)
+    node steroid-run.cjs stories <feature> next            Show next story to work on
+
+  Recovery:
+    node steroid-run.cjs recover                           Smart recovery guidance (levels 1-5)
+
   Intelligence:
     node steroid-run.cjs detect-intent "<message>"         Detect user intent (build/fix/refactor/migrate/document)
     node steroid-run.cjs detect-tests                      Detect test framework in current project
@@ -41,11 +66,18 @@ Usage:
     node steroid-run.cjs progress                          Show execution learnings log
     node steroid-run.cjs progress --patterns               Show only codebase patterns
 
+  Knowledge:
+    node steroid-run.cjs memory show <store>               Show a knowledge store
+    node steroid-run.cjs memory show-all                   Show all knowledge stores
+    node steroid-run.cjs memory write <store> <json>       Write data to a store
+    node steroid-run.cjs memory stats                      Show memory statistics
+
   Diagnostics:
     node steroid-run.cjs audit                             Verify all enforcement layers are installed
 
 The circuit breaker tracks errors in .memory/execution_state.json.
-After 3 consecutive errors, all execution is blocked until you run 'reset'.
+After 5 consecutive errors (graduated recovery at each level), execution is blocked until you run 'reset'.
+Run 'recover' after any error for smart fix suggestions.
 `);
     process.exit(0);
 }
@@ -55,14 +87,14 @@ if (!fs.existsSync(stateFile)) {
     if (!fs.existsSync(path.dirname(stateFile))) {
         fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     }
-    fs.writeFileSync(stateFile, JSON.stringify({ error_count: 0, last_error: null, status: 'active' }, null, 2));
+    fs.writeFileSync(stateFile, JSON.stringify({ error_count: 0, last_error: null, status: 'active', recovery_actions: [], error_history: [] }, null, 2));
 }
 
 let state;
 try {
     state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
 } catch (e) {
-    state = { error_count: 0, last_error: null, status: 'active' };
+    state = { error_count: 0, last_error: null, status: 'active', recovery_actions: [], error_history: [] };
 }
 
 // --- Reset Command (P0 Fix B2) ---
@@ -70,17 +102,114 @@ if (args[0] === 'reset') {
     state.error_count = 0;
     state.last_error = null;
     state.status = 'active';
+    state.recovery_actions = [];
+    state.error_history = [];
     fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
-    console.log('[steroid-run] ✅ Circuit breaker reset. Error count is now 0/3. You may resume.');
+    console.log('[steroid-run] ✅ Circuit breaker reset. Error count is now 0/5. You may resume.');
     process.exit(0);
+}
+
+// --- Recover Command (Smart recovery — v4.0) ---
+// Source: src/forks/superpowers implementer-prompt.md status types
+if (args[0] === 'recover') {
+    const level = state.error_count;
+
+    if (level === 0) {
+        console.log('[steroid-run] ✅ No errors to recover from. Circuit breaker is clear.');
+        process.exit(0);
+    }
+
+    let errorPatterns = { patterns: [] };
+    const errorPatternsFile = path.join(metricsDir, 'error-patterns.json');
+    if (fs.existsSync(errorPatternsFile)) {
+        try { errorPatterns = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8')); } catch (e) { /* ignore */ }
+    }
+
+    console.log(`\n[steroid-run] 🔧 Smart Recovery — Error Level ${level}/5\n`);
+
+    if (!state.recovery_actions) state.recovery_actions = [];
+
+    if (level === 1) {
+        console.log('  📋 Level 1: LOGGED — Retry with a different approach.');
+        console.log(`  Last error: ${state.last_error}`);
+        console.log('');
+        console.log('  Suggested actions:');
+        console.log('    1. Re-read the error message carefully');
+        console.log('    2. Try a different implementation approach');
+        console.log('    3. Check if the command syntax is correct');
+        state.recovery_actions.push(`L1 recovery: retry suggested at ${new Date().toISOString()}`);
+    } else if (level === 2) {
+        console.log('  📖 Level 2: RE-READ — Pause and re-read your plan.');
+        console.log(`  Last error: ${state.last_error}`);
+        console.log('');
+        console.log('  Suggested actions:');
+        console.log('    1. Re-read plan.md or diagnosis.md for the current feature');
+        console.log('    2. Verify your approach matches the architecture');
+        console.log('    3. Check if dependencies are installed');
+        state.recovery_actions.push(`L2 recovery: re-read suggested at ${new Date().toISOString()}`);
+    } else if (level === 3) {
+        console.log('  🔍 Level 3: SELF-DIAGNOSE — Checking error-patterns.json...');
+        console.log(`  Last error: ${state.last_error}`);
+        console.log('');
+        if (errorPatterns.patterns.length > 0) {
+            const lastErr = (state.last_error || '').toLowerCase();
+            const matches = errorPatterns.patterns.filter(p =>
+                lastErr.includes((p.keyword || '').toLowerCase())
+            );
+            if (matches.length > 0) {
+                console.log('  🎯 Matching error patterns found:');
+                for (const m of matches) {
+                    console.log(`    Pattern: ${m.keyword}`);
+                    console.log(`    Fix: ${m.fix || m.error}`);
+                    console.log('');
+                }
+            } else {
+                console.log('  No matching patterns. Recording this error for future diagnosis.');
+            }
+        } else {
+            console.log('  No error patterns recorded yet. This error will be tracked.');
+        }
+        state.recovery_actions.push(`L3 recovery: self-diagnosis at ${new Date().toISOString()}`);
+    } else if (level === 4) {
+        console.log('  🚨 Level 4: ESCALATED — Present diagnosis to user.');
+        console.log(`  Last error: ${state.last_error}`);
+        console.log('');
+        console.log('  ⚠️  This feature has hit 4 errors. The AI should:');
+        console.log('    1. STOP all terminal execution');
+        console.log('    2. Present ALL errors encountered (check error_history in execution_state.json)');
+        console.log('    3. Propose 2-3 alternative approaches');
+        console.log('    4. Wait for human decision before continuing');
+        console.log('');
+        console.log('  Error history:');
+        if (state.error_history && state.error_history.length > 0) {
+            for (const err of state.error_history) {
+                console.log(`    - ${err}`);
+            }
+        }
+        state.recovery_actions.push(`L4 recovery: escalation at ${new Date().toISOString()}`);
+    } else {
+        console.log('  🛑 Level 5: HARD STOP — Circuit breaker tripped.');
+        console.log('  Run: node steroid-run.cjs reset');
+    }
+
+    fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+    process.exit(level >= 5 ? 1 : 0);
 }
 
 // --- Status Command ---
 if (args[0] === 'status') {
+    const levels = ['🟢 CLEAR', '🟡 LOGGED', '🟠 RE-READ', '🔶 DIAGNOSING', '🔴 ESCALATED', '🛑 TRIPPED'];
+    const level = Math.min(state.error_count, 5);
     console.log(`[steroid-run] Circuit Breaker Status:`);
-    console.log(`  Error Count: ${state.error_count}/3`);
-    console.log(`  Status: ${state.error_count >= 3 ? '🔴 TRIPPED' : '🟢 ACTIVE'}`);
+    console.log(`  Error Count: ${state.error_count}/5`);
+    console.log(`  Level: ${levels[level]}`);
     if (state.last_error) console.log(`  Last Error: ${state.last_error}`);
+    if (state.recovery_actions && state.recovery_actions.length > 0) {
+        console.log(`  Recovery Actions:`);
+        for (const action of state.recovery_actions) {
+            console.log(`    - ${action}`);
+        }
+    }
     process.exit(0);
 }
 
@@ -104,6 +233,153 @@ if (args[0] === 'progress') {
         console.log(content);
     }
     process.exit(0);
+}
+
+// --- Memory Command (Structured knowledge store — v4.0) ---
+// Source: src/forks/memorycore/master-memory.md + src/forks/ralph/AGENTS.md
+if (args[0] === 'memory') {
+    const sub = args[1];
+
+    if (!sub || sub === '--help') {
+        console.log(`
+[steroid-run] memory — Structured project knowledge store.
+
+Usage:
+  node steroid-run.cjs memory show [store]       Show a knowledge store (tech-stack|patterns|decisions|gotchas)
+  node steroid-run.cjs memory show-all           Show all knowledge stores
+  node steroid-run.cjs memory write <store> <json>  Write/merge data into a store
+  node steroid-run.cjs memory stats              Show memory statistics
+
+Stores:
+  tech-stack   — Language, framework, deps (from scan/research)
+  patterns     — Codebase patterns and conventions (from AGENTS.md/scan)
+  decisions    — Locked architectural decisions (from architect phase)
+  gotchas      — Known pitfalls and workarounds (from engine/verify)
+`);
+        process.exit(0);
+    }
+
+    if (!fs.existsSync(knowledgeDir)) {
+        fs.mkdirSync(knowledgeDir, { recursive: true });
+    }
+
+    const validStores = ['tech-stack', 'patterns', 'decisions', 'gotchas'];
+
+    if (sub === 'show') {
+        const store = args[2];
+        if (!store || !validStores.includes(store)) {
+            console.error(`[steroid-run] ❌ Unknown store: "${store}". Valid: ${validStores.join(', ')}`);
+            process.exit(1);
+        }
+        const storeFile = path.join(knowledgeDir, `${store}.json`);
+        if (!fs.existsSync(storeFile)) {
+            console.log(`[steroid-run] 📭 Store "${store}" is empty. It will be populated as the pipeline runs.`);
+            process.exit(0);
+        }
+        try {
+            const data = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+            console.log(JSON.stringify(data, null, 2));
+        } catch (e) {
+            console.error(`[steroid-run] ⚠️  Store "${store}" has invalid JSON. Resetting.`);
+            fs.unlinkSync(storeFile);
+            process.exit(1);
+        }
+        process.exit(0);
+    }
+
+    if (sub === 'show-all') {
+        let hasData = false;
+        for (const store of validStores) {
+            const storeFile = path.join(knowledgeDir, `${store}.json`);
+            if (fs.existsSync(storeFile)) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+                    console.log(`\n## ${store}`);
+                    console.log(JSON.stringify(data, null, 2));
+                    hasData = true;
+                } catch (e) {
+                    console.log(`\n## ${store} — ⚠️ corrupt (will reset on next write)`);
+                }
+            }
+        }
+        if (!hasData) {
+            console.log('[steroid-run] 📭 No knowledge stored yet. Run a scan to populate tech-stack.');
+        }
+        process.exit(0);
+    }
+
+    if (sub === 'write') {
+        const store = args[2];
+        const jsonStr = args.slice(3).join(' ');
+        if (!store || !validStores.includes(store)) {
+            console.error(`[steroid-run] ❌ Unknown store: "${store}". Valid: ${validStores.join(', ')}`);
+            process.exit(1);
+        }
+        if (!jsonStr) {
+            console.error('[steroid-run] ❌ No JSON data provided.');
+            process.exit(1);
+        }
+        let newData;
+        try {
+            newData = JSON.parse(jsonStr);
+        } catch (e) {
+            console.error(`[steroid-run] ❌ Invalid JSON: ${e.message}`);
+            process.exit(1);
+        }
+
+        const storeFile = path.join(knowledgeDir, `${store}.json`);
+        let existing = {};
+        if (fs.existsSync(storeFile)) {
+            try { existing = JSON.parse(fs.readFileSync(storeFile, 'utf-8')); } catch (e) { existing = {}; }
+        }
+
+        const merged = mergeKnowledge(existing, newData);
+        merged._lastUpdated = new Date().toISOString();
+        fs.writeFileSync(storeFile, JSON.stringify(merged, null, 2));
+        console.log(`[steroid-run] ✅ Knowledge written to ${store}.json`);
+        process.exit(0);
+    }
+
+    if (sub === 'stats') {
+        let totalEntries = 0;
+        console.log('\n[steroid-run] 🧠 Memory Statistics\n');
+        for (const store of validStores) {
+            const storeFile = path.join(knowledgeDir, `${store}.json`);
+            if (fs.existsSync(storeFile)) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+                    const keys = Object.keys(data).filter(k => k !== '_lastUpdated');
+                    console.log(`  ${store}: ${keys.length} entries (updated: ${data._lastUpdated || 'unknown'})`);
+                    totalEntries += keys.length;
+                } catch (e) {
+                    console.log(`  ${store}: ⚠️ corrupt`);
+                }
+            } else {
+                console.log(`  ${store}: empty`);
+            }
+        }
+        const errorPatternsFile = path.join(metricsDir, 'error-patterns.json');
+        const featuresFile = path.join(metricsDir, 'features.json');
+        if (fs.existsSync(errorPatternsFile)) {
+            try {
+                const ep = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8'));
+                const patterns = ep.patterns || [];
+                console.log(`  error-patterns: ${patterns.length} patterns tracked`);
+            } catch (e) { /* ignore */ }
+        }
+        if (fs.existsSync(featuresFile)) {
+            try {
+                const feat = JSON.parse(fs.readFileSync(featuresFile, 'utf-8'));
+                const features = Object.keys(feat).filter(k => k !== '_lastUpdated');
+                console.log(`  features: ${features.length} features tracked`);
+            } catch (e) { /* ignore */ }
+        }
+        console.log(`\n  Total knowledge entries: ${totalEntries}`);
+        process.exit(0);
+    }
+
+    console.error(`[steroid-run] ❌ Unknown memory subcommand: "${sub}". Run: node steroid-run.cjs memory --help`);
+    process.exit(1);
 }
 
 // --- Audit Command (Verify all enforcement layers) ---
@@ -270,7 +546,28 @@ if (args[0] === 'audit') {
     }
 
     console.log('');
-    console.log(`  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s) configured, ${skillCount} skills, ${gateCount} gates`);
+
+    // v4.0: Knowledge store health
+    console.log('  Knowledge stores:');
+    const knowledgeStores = ['tech-stack', 'patterns', 'decisions', 'gotchas'];
+    let knowledgeCount = 0;
+    for (const store of knowledgeStores) {
+        const storeFile = path.join(knowledgeDir, `${store}.json`);
+        if (fs.existsSync(storeFile)) {
+            try {
+                JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+                console.log(`    ✅ ${store}.json`);
+                knowledgeCount++;
+            } catch (e) {
+                console.log(`    ⚠️  ${store}.json — corrupt JSON`);
+            }
+        } else {
+            console.log(`    ○  ${store}.json — not populated`);
+        }
+    }
+
+    console.log('');
+    console.log(`  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s) configured, ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores`);
 
     if (failed > 0) {
         console.log('');
@@ -485,6 +782,16 @@ if (args[0] === 'check-plan') {
 
     console.log(`[steroid-run] 📊 Plan: ${done}/${total} tasks complete (${percent}%)`);
 
+    // v4.0: If plan has priorities, show breakdown
+    const p1 = (content.match(/- \[[ x/]\] (?:\[P\] )?P1:/g) || []).length;
+    const p1Done = (content.match(/- \[x\] (?:\[P\] )?P1:/g) || []).length;
+    if (p1 > 0) {
+        console.log(`[steroid-run]    P1: ${p1Done}/${p1} | P2/P3: ${done - p1Done}/${total - p1}`);
+        if (p1Done < p1) {
+            console.log(`[steroid-run] ⚠️  ${p1 - p1Done} P1 (foundational) stories remaining. Complete these first.`);
+        }
+    }
+
     if (remaining === 0 && total > 0) {
         console.log('[steroid-run] ✅ All tasks complete! Ready to archive.');
         process.exit(0);
@@ -492,6 +799,115 @@ if (args[0] === 'check-plan') {
         console.log(`[steroid-run] ⏳ ${remaining} tasks remaining.`);
         process.exit(1);
     }
+}
+
+// --- Stories Command (Prioritized story execution — v4.0) ---
+// Source: src/forks/spec-kit tasks-template.md + src/forks/ralph prd.json
+if (args[0] === 'stories') {
+    const feature = args[1];
+    const sub = args[2];
+
+    if (!feature) {
+        console.error('[steroid-run] Usage: npx steroid-run stories <feature> [next|list]');
+        process.exit(1);
+    }
+
+    const planFile = path.join(changesDir, feature, 'plan.md');
+    if (!fs.existsSync(planFile)) {
+        console.error(`[steroid-run] ❌ No plan found at .memory/changes/${feature}/plan.md`);
+        process.exit(1);
+    }
+
+    const content = fs.readFileSync(planFile, 'utf-8');
+
+    const storyRegex = /^- \[([ x/])\] (\[P\] )?(?:(P[123]):)?\s*(.+)$/gm;
+    const stories = [];
+    let match;
+    let index = 0;
+    while ((match = storyRegex.exec(content)) !== null) {
+        index++;
+        stories.push({
+            index,
+            status: match[1] === 'x' ? 'done' : match[1] === '/' ? 'in-progress' : 'todo',
+            parallel: !!match[2],
+            priority: match[3] || 'P2',
+            title: match[4].trim(),
+        });
+    }
+
+    if (stories.length === 0) {
+        console.log('[steroid-run] ⚠️  No stories found in plan.md. Use format: - [ ] P1: Story title');
+        console.log('  Stories without priority markers are treated as P2.');
+        const total2 = (content.match(/- \[[ x/]\]/g) || []).length;
+        const done2 = (content.match(/- \[x\]/g) || []).length;
+        console.log(`  (Plain tasks: ${done2}/${total2} complete)`);
+        process.exit(0);
+    }
+
+    if (!sub || sub === 'list') {
+        const p1 = stories.filter(s => s.priority === 'P1');
+        const p2 = stories.filter(s => s.priority === 'P2');
+        const p3 = stories.filter(s => s.priority === 'P3');
+
+        console.log(`\n[steroid-run] 📋 Stories for "${feature}"\n`);
+
+        const renderGroup = (label, group) => {
+            if (group.length === 0) return;
+            console.log(`  ${label}:`);
+            for (const s of group) {
+                const icon = s.status === 'done' ? '✅' : s.status === 'in-progress' ? '🔄' : '⬜';
+                const par = s.parallel ? ' [P]' : '';
+                console.log(`    ${icon} #${s.index} ${s.title}${par}`);
+            }
+            console.log('');
+        };
+
+        renderGroup('🔴 P1 — Must Have (MVP)', p1);
+        renderGroup('🟡 P2 — Should Have', p2);
+        renderGroup('🟢 P3 — Nice to Have', p3);
+
+        const doneCount = stories.filter(s => s.status === 'done').length;
+        console.log(`  Progress: ${doneCount}/${stories.length} stories complete`);
+
+        const p1Incomplete = p1.filter(s => s.status !== 'done');
+        if (p1Incomplete.length > 0) {
+            console.log(`\n  ⚠️  FOUNDATIONAL BLOCK: ${p1Incomplete.length} P1 stories incomplete.`);
+            console.log('  Complete all P1 stories before starting P2/P3 work.');
+        }
+
+        process.exit(0);
+    }
+
+    if (sub === 'next') {
+        const p1Todo = stories.filter(s => s.priority === 'P1' && s.status === 'todo');
+        const p2Todo = stories.filter(s => s.priority === 'P2' && s.status === 'todo');
+        const p3Todo = stories.filter(s => s.priority === 'P3' && s.status === 'todo');
+
+        const p1Incomplete = stories.filter(s => s.priority === 'P1' && s.status !== 'done');
+        if (p1Incomplete.length > 0 && p1Todo.length > 0) {
+            console.log(`[steroid-run] 🎯 Next story: #${p1Todo[0].index} ${p1Todo[0].title} (P1 — foundational)`);
+            process.exit(0);
+        }
+        if (p1Incomplete.length > 0 && p1Todo.length === 0) {
+            const inProgress = p1Incomplete.filter(s => s.status === 'in-progress');
+            if (inProgress.length > 0) {
+                console.log(`[steroid-run] ⏳ P1 story in progress: #${inProgress[0].index} ${inProgress[0].title}`);
+                console.log('  Complete this before moving to the next story.');
+                process.exit(0);
+            }
+        }
+
+        const next = p2Todo[0] || p3Todo[0];
+        if (next) {
+            console.log(`[steroid-run] 🎯 Next story: #${next.index} ${next.title} (${next.priority})`);
+        } else {
+            console.log('[steroid-run] ✅ All stories complete!');
+        }
+        process.exit(0);
+    }
+
+    console.error(`[steroid-run] ❌ Unknown stories subcommand: "${sub}". Use: list, next`);
+    process.exit(1);
 }
 
 // --- Archive Command (Ported from Ralph ralph.sh archive pattern) ---
@@ -551,6 +967,24 @@ if (args[0] === 'archive') {
 
     console.log(`[steroid-run] ✅ Archived ${archived} files to .memory/changes/${feature}/archive/`);
     console.log(`[steroid-run] 🎉 Feature "${feature}" archived. Ready for next build.`);
+
+    // v4.0: Record feature metrics
+    if (!fs.existsSync(metricsDir)) fs.mkdirSync(metricsDir, { recursive: true });
+    const featuresFile = path.join(metricsDir, 'features.json');
+    let featuresData = {};
+    if (fs.existsSync(featuresFile)) {
+        try { featuresData = JSON.parse(fs.readFileSync(featuresFile, 'utf-8')); } catch (e) { featuresData = {}; }
+    }
+    featuresData[feature] = {
+        archived: new Date().toISOString(),
+        filesArchived: archived,
+        errorCount: state.error_count,
+        status: 'complete',
+    };
+    featuresData._lastUpdated = new Date().toISOString();
+    fs.writeFileSync(featuresFile, JSON.stringify(featuresData, null, 2));
+    console.log(`[steroid-run]    Metrics: feature "${feature}" recorded in features.json`);
+
     process.exit(0);
 }
 
@@ -724,6 +1158,24 @@ if (args[0] === 'scan') {
     console.log(`[steroid-run]    Written to: .memory/changes/${feature}/context.md`);
     console.log(`[steroid-run]    The steroid-scan skill will enrich this with detailed analysis.`);
 
+    // v4.0: Write tech-stack knowledge store
+    if (!fs.existsSync(knowledgeDir)) {
+        fs.mkdirSync(knowledgeDir, { recursive: true });
+    }
+    const techStackFile = path.join(knowledgeDir, 'tech-stack.json');
+    const techStackData = {
+        language,
+        framework,
+        packageManager,
+        testFramework,
+        testCommand,
+        testCount,
+        _lastUpdated: new Date().toISOString(),
+        _source: 'scan',
+    };
+    fs.writeFileSync(techStackFile, JSON.stringify(techStackData, null, 2));
+    console.log(`[steroid-run]    Knowledge: tech-stack.json updated.`);
+
     // Enrich progress.md with codebase patterns
     if (!fs.existsSync(progressFile)) {
         const progressContent = `# Steroid Progress Log\nStarted: ${timestamp}\n\n## Codebase Patterns\n\n- **Language**: ${language}\n- **Framework**: ${framework}\n- **Package Manager**: ${packageManager}\n- **Test Framework**: ${testFramework}\n- **Test Command**: \`${testCommand}\`\n- **Existing Tests**: ${testCount}\n\n---\n`;
@@ -880,17 +1332,19 @@ if (args[0] === 'verify-feature') {
 }
 
 // --- Circuit Breaker Check ---
-if (state.error_count >= 3) {
+if (state.error_count >= 5) {
     console.error(`
 ========================================================================
 [STEROID-CIRCUIT-BREAKER TRIPPED] 🛑
-Maximum error tolerance reached (3/3).
+Maximum error tolerance reached (5/5).
+All 5 recovery levels exhausted.
 AI Agent: YOU ARE ORDERED TO STOP TERMINAL EXECUTION IMMEDIATELY.
 DO NOT RUN DESTRUCTIVE COMMANDS. DO NOT ATTEMPT TO SILENTLY FIX THIS.
 Present the user with the exact error log and file context, and ask for
 human validation to pivot the architecture or manually intervene.
 
-To resume after fixing the issue, run:   npx steroid-run reset
+Run: npx steroid-run recover     (to review error history)
+Run: npx steroid-run reset       (to resume after fixing)
 ========================================================================
 `);
     process.exit(1);
@@ -941,8 +1395,38 @@ const child = spawnSync(commandStr, {
 if (child.status !== 0) {
     state.error_count += 1;
     state.last_error = `Command failed: "${commandStr}" (exit code ${child.status})`;
-    state.status = state.error_count >= 3 ? 'tripped' : 'active';
-    console.error(`\n[steroid-run] ❌ ERROR ${state.error_count}/3. ${state.error_count >= 3 ? 'CIRCUIT BREAKER TRIPPED. Run "npx steroid-run reset" to resume.' : 'Tracking error.'}`);
+    if (!state.error_history) state.error_history = [];
+    state.error_history.push(`[${new Date().toISOString()}] ${state.last_error}`);
+    if (!state.recovery_actions) state.recovery_actions = [];
+    state.status = state.error_count >= 5 ? 'tripped' : 'active';
+
+    // v4.0: Graduated recovery messages
+    const recoveryHints = {
+        1: 'Try a different approach. Run: node steroid-run.cjs recover',
+        2: 'Re-read your plan. Run: node steroid-run.cjs recover',
+        3: 'Self-diagnosing... Run: node steroid-run.cjs recover',
+        4: '⚠️ STOP and present errors to user. Run: node steroid-run.cjs recover',
+        5: 'CIRCUIT BREAKER TRIPPED. Run "npx steroid-run reset" to resume.',
+    };
+    const hint = recoveryHints[Math.min(state.error_count, 5)];
+    console.error(`\n[steroid-run] ❌ ERROR ${state.error_count}/5. ${hint}`);
+
+    // v4.0: Record error pattern for future self-diagnosis
+    if (!fs.existsSync(metricsDir)) fs.mkdirSync(metricsDir, { recursive: true });
+    const errorPatternsFile = path.join(metricsDir, 'error-patterns.json');
+    let errorPatterns = { patterns: [] };
+    if (fs.existsSync(errorPatternsFile)) {
+        try { errorPatterns = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8')); } catch (e) { /* ignore */ }
+    }
+    errorPatterns.patterns.push({
+        keyword: commandStr.split(' ')[0],
+        error: state.last_error,
+        timestamp: new Date().toISOString(),
+    });
+    if (errorPatterns.patterns.length > 50) {
+        errorPatterns.patterns = errorPatterns.patterns.slice(-50);
+    }
+    fs.writeFileSync(errorPatternsFile, JSON.stringify(errorPatterns, null, 2));
 } else {
     state.error_count = 0;
     state.last_error = null;

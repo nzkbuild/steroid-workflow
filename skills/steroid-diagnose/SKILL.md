@@ -159,6 +159,20 @@ If 3 or more fix attempts fail, this is NOT a bug — it's likely an **architect
 
 **STOP and escalate to the user:** "This issue appears to be architectural, not a simple bug. Here's what I've found: [diagnosis]. I recommend [approach]. Would you like me to proceed or take a different approach?"
 
+## Recovery-Aware Diagnosis (v4.0)
+
+Instead of retrying blindly, use smart recovery:
+
+```bash
+node steroid-run.cjs recover
+```
+
+This provides graduated guidance based on how many errors have occurred (1-5). After diagnosis, record the pattern for future reference:
+
+```bash
+node steroid-run.cjs memory write gotchas '{"issue-keyword": "fix description"}'
+```
+
 ## Referenced Forks
 
 - `src/forks/superpowers/systematic-debugging/SKILL.md` — Full 4-phase debugging process (297 lines)

@@ -165,6 +165,17 @@ After writing `context.md`, output ONE line:
 
 Then the pipeline continues to `steroid-vibe-capture`.
 
+## Knowledge Store Update (v4.0)
+
+After completing the scan, persist findings to structured memory so future iterations can recall project patterns without re-scanning:
+
+```bash
+node steroid-run.cjs memory write patterns '{"conventions": ["<pattern1>", "<pattern2>"], "file-structure": "<description>"}'
+node steroid-run.cjs memory write gotchas '{"known-issues": ["<issue1>"]}'
+```
+
+The CLI's scan command auto-writes `tech-stack.json` — you only need to write patterns and gotchas.
+
 ## Anti-Summarization Directive
 
 Do NOT truncate file trees or dependency lists. Write what you find. The downstream phases need accurate data to make good decisions.

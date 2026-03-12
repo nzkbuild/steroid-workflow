@@ -2,7 +2,7 @@
 
 **Turn one sentence into working software.**
 
-An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v3.1 hardens every gate, locks archiving behind verification, and adds smoke tests.
+An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v4.0 adds structured memory (the AI remembers patterns across features), graduated error recovery (5-level smart recovery instead of 3-strike kill), and prioritized story execution (P1/P2/P3).
 
 ## Install
 
@@ -62,7 +62,7 @@ Each phase hands off to the next. No manual intervention needed.
 Most AI coding tools rely on **suggestions** — hoping the AI follows instructions. Steroid-Workflow uses **physical enforcement**:
 
 - 🔒 **Git hook** — Commits are blocked unless the AI went through the pipeline. No plan.md = no commit.
-- ⚡ **Circuit breaker** — 3 errors and the AI is forced to stop and ask for help instead of spiraling.
+- ⚡ **Circuit breaker** — 5-level graduated recovery. The AI gets smarter guidance at each error level before tripping.
 - ✅ **Verification** — The AI must prove its code works before archiving. No more "trust me, it's done."
 - 🔍 **Intent routing** — Different pipelines for build, fix, refactor, migrate, and document tasks.
 - 🚫 **Anti-summarization** — The AI can't write "...rest of code here..." and call it done.
@@ -95,8 +95,9 @@ This checks that all enforcement layers (git hook, 8 skills, 7 gates, circuit br
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - How the pipeline enforcer works
-- Full command reference for `steroid-run.cjs` (15+ commands)
-- Intent routing and gate map
+- Full command reference for `steroid-run.cjs` (18+ commands)
+- Intent routing, gate map, and memory system
+- Smart recovery levels and story prioritization
 - Fork credits and sources
 - Project structure
 
