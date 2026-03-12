@@ -131,6 +131,18 @@ src/
 **What goes wrong**: [description]
 **How to avoid**: [prevention strategy]
 
+## Security Considerations (v5.1.0 — mandatory)
+
+Every research output MUST include this section, even for simple projects:
+
+1. **Dependency audit** — Note if any recommended package has known CVEs. Run `node steroid-run.cjs 'npm audit --production'` after install.
+2. **User input** — If the app accepts user input, document XSS/CSRF prevention approach.
+3. **Authentication** — If the app needs auth, document token storage strategy (never localStorage for JWTs).
+4. **Secrets** — Document `.env` strategy for API keys. Never hardcode secrets in source.
+5. **HTTPS** — Note if deployment requires SSL configuration.
+
+For static sites with no user input: "No server-side security concerns. Ensure no API keys or secrets in client bundle."
+
 ## Open Questions
 
 - [Anything unresolved that the Architect should be aware of]

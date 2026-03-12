@@ -25,6 +25,28 @@ If the user's initial prompt is too vague to extract a coherent vision, ask a ma
 
 Do not ask more than 2 questions. If the prompt is clear enough, ask zero questions.
 
+### 2b. Prompt Quality Check (v5.1.0)
+
+After capturing the initial vibe, assess completeness. If ANY of these are unclear from the user's prompt, fill in sensible defaults and document them in vibe.md:
+
+| Question | Why It Matters | Default If Missing |
+|----------|---------------|--------------------|
+| Who is this for? | Determines UI complexity, accessibility needs | "General audience" |
+| What's the ONE thing it must do well? | Focuses the spec, prevents scope creep | First feature mentioned |
+| Any tech preferences? | Prevents wrong framework choice | "No preference — AI decides" |
+| Any existing services to integrate? | Surfaces auth, API, DB needs early | "None — standalone app" |
+| What's the scale? MVP or full product? | Sets scope boundaries | "MVP — launch fast" |
+
+Add a `## Assumptions` section to vibe.md listing any defaults used:
+```markdown
+## Assumptions (filled by AI — user did not specify)
+- Target audience: General public
+- Scale: MVP
+- Tech preference: None
+```
+
+This guides non-technical users without requiring them to understand development.
+
 ### 3. Anti-Summarization Directive
 
 NEVER summarize the user's intent with "..." or leave fields blank. NEVER use placeholder text like "[to be determined]". Extract a full, cohesive vision from even the vaguest prompt. If unsure, make a reasonable creative decision and document it.

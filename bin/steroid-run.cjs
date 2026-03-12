@@ -28,6 +28,17 @@ function mergeKnowledge(existing, incoming) {
     return result;
 }
 
+// --- Friendly Message Helper (v5.1.0) ---
+function friendlyHint(key) {
+    const hints = {
+        'gate-blocked': '\n  💡 This is normal — the AI needs to finish the previous step first.\n  Ask it to "continue with the steroid pipeline."',
+        'gate-incomplete': '\n  💡 The previous step\'s output looks too short. Ask the AI to "redo the previous phase with more detail."',
+        'circuit-tripped': '\n  💡 Too many errors. The AI is stuck. Try: "Use steroid recover to diagnose the issue."',
+        'git-failed': '\n  💡 A save operation failed. This usually fixes itself. Ask the AI to "try the commit again."'
+    };
+    return hints[key] || '';
+}
+
 // --- Argument Parsing ---
 const args = process.argv.slice(2);
 
@@ -204,6 +215,7 @@ if (args[0] === 'recover') {
         state.recovery_actions.push(`L4 recovery: escalation at ${new Date().toISOString()}`);
     } else {
         console.log('  🛑 Level 5: HARD STOP — Circuit breaker tripped.');
+        console.log(friendlyHint('circuit-tripped'));
         console.log('  Run: node steroid-run.cjs reset');
     }
 
@@ -709,12 +721,14 @@ if (args[0] === 'gate') {
             console.error(`  Alt path: .memory/changes/${feature}/${gate.alt.requires} (also missing)`);
         }
         console.error(`  The "${phase}" phase cannot start until ${gate.requires}${gate.alt ? ` or ${gate.alt.requires}` : ''} exists.`);
+        console.error(friendlyHint('gate-blocked'));
         process.exit(1);
     }
 
     const lines = fs.readFileSync(requiredFile, 'utf-8').split('\n').length;
     if (lines < gate.minLines) {
         console.error(`[steroid-run] 🚫 GATE BLOCKED: ${gate.requires} looks incomplete (${lines} lines, need ${gate.minLines}+).`);
+        console.error(friendlyHint('gate-incomplete'));
         process.exit(1);
     }
 

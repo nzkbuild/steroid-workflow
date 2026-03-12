@@ -93,7 +93,22 @@ If at any point you need to run a terminal command, you MUST use:
 `node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
-### 6. Automatic System Handoff
+### 6. Mandatory Quality Tasks (v5.1.0)
+
+Append these tasks to EVERY execution checklist, regardless of what the user asked for. These are industry-standard non-negotiables:
+
+```markdown
+## Quality Baseline (auto-added)
+- [ ] Semantic HTML: use proper heading hierarchy (h1→h2→h3), landmark elements (header, main, footer, nav)
+- [ ] Accessibility: add aria-labels to all interactive elements, alt text on all images
+- [ ] SEO: add meta title, meta description, and OG tags (og:title, og:description, og:image) to layout/head
+- [ ] Responsive: verify layout at 320px, 768px, 1024px, 1440px viewports
+- [ ] Performance: lazy-load images, minimize JS bundle in initial load
+```
+
+These tasks go at the END of the checklist, after all feature tasks but before final polish.
+
+### 7. Automatic System Handoff
 
 Once `.memory/changes/<feature>/plan.md` is written, do NOT ask the user for permission. Output exactly one sentence:
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.1.0] "Guide the Human" - 2026-03-13
+
+### The Vision
+Steroid-Workflow is built for non-technical vibe coders, but the pipeline assumed users understood development concepts. v5.1.0 makes the pipeline guide users: ask the right questions when prompts are vague, ensure every plan includes accessibility and SEO, check for security issues during research, give visibility into token usage, and speak plain English when things go wrong.
+
+### Added — Research Skill
+- **Security Considerations** (mandatory) — Every research output now includes dependency audit, XSS/CSRF, auth strategy, secrets management, and HTTPS notes. Even static sites get a one-liner.
+
+### Added — Vibe Capture Skill
+- **Prompt Quality Check** — When user prompts are vague, the AI fills sensible defaults (audience, scale, tech preference) and documents assumptions in vibe.md instead of guessing silently
+
+### Added — Architect Skill
+- **Mandatory Quality Tasks** — Every execution checklist now auto-includes: semantic HTML, accessibility (aria-labels, alt text), SEO (meta tags, OG), responsive verification, performance optimization
+
+### Added — Engine Skill
+- **Post-Scaffold Rescan** — After the first scaffold task, engine re-runs `scan` to update context.md with the actual tech stack
+- **Token-Aware Checkpoints** — Every 5th task outputs a progress checkpoint, giving users a natural breakpoint to split sessions
+
+### Added — CLI
+- **Friendly Error Messages** — Gate blocked, circuit breaker tripped, and git failures now include plain-English hints telling non-technical users what to do next
+
 ## [5.0.2] "Quality at Every Gate" - 2026-03-13
 
 ### The Vision

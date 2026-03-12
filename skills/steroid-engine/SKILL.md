@@ -130,6 +130,16 @@ After completing the FIRST task in plan.md (typically project init/scaffold):
    - Test framework (from devDependencies — jest/vitest/mocha/etc)
 2. This ensures remaining tasks have accurate context instead of "Unknown".
 
+### Post-Scaffold Rescan (v5.1.0)
+
+After the first scaffold task completes (e.g., `npx create-next-app`, `npm create vite`), physically re-run the scan:
+
+```bash
+node steroid-run.cjs scan <feature>
+```
+
+This updates context.md with the actual tech stack so remaining tasks have accurate detection data instead of the bootstrap skeleton.
+
 ### Version Verification (v5.0.2)
 
 After any `npm install` or scaffold command, verify installed versions match research.md:
@@ -151,6 +161,17 @@ Before starting each task, output one line to the user:
 "🔨 Working on: [Task Name]..."
 
 This gives the user visibility without breaking the silence directive.
+
+**Token-Aware Checkpoint (v5.1.0)**
+
+After completing every 5th task in plan.md, output a checkpoint:
+
+"🔨 [X/Y] tasks complete. [remaining] tasks left. Continue or split into a new session?"
+
+This gives the user a natural breakpoint to:
+- Split into a new conversation (context preserved via progress.md + plan.md)
+- Prioritize remaining tasks if time/tokens are limited
+- Stop early if the MVP is already sufficient
 
 **Phase 1: Implementation (TDD)**
 
