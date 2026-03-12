@@ -140,6 +140,21 @@ node steroid-run.cjs scan <feature>
 
 This updates context.md with the actual tech stack so remaining tasks have accurate detection data instead of the bootstrap skeleton.
 
+### Git Init Check (v5.2.0)
+
+After the first scaffold task, verify git is initialized:
+
+```bash
+node steroid-run.cjs 'git status'
+```
+
+If this fails (no `.git/` directory), initialize it:
+```bash
+node steroid-run.cjs 'git init && git add -A && git commit -m "Initial commit"'
+```
+
+This is required — the `commit` command will block if `.git/` doesn't exist.
+
 ### Version Verification (v5.0.2)
 
 After any `npm install` or scaffold command, verify installed versions match research.md:

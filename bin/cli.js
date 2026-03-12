@@ -136,7 +136,7 @@ const maestroContent = `SPECIAL INSTRUCTION: Think silently if needed. EFFORT LE
 > You MUST read and follow ALL steroid-workflow rules below BEFORE executing ANY task.
 > This is a PHYSICAL CONSTRAINT, not a suggestion. Violations will be caught by git hooks.
 
-# Steroid-Workflow v5.0 Maestro (Auto-Trigger Rules)
+# Steroid-Workflow v${pkg.version} Maestro (Auto-Trigger Rules)
 
 ## Pre-Task Checkpoint (MANDATORY)
 Before writing ANY code:

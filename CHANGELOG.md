@@ -1,5 +1,30 @@
 # Changelog
 
+## [5.2.0] "Ship Ready" - 2026-03-13
+
+### The Vision
+Every project built by steroid should be ship-ready — with documentation, version control, versioning, and no stale references. v5.2.0 also eliminates all 14 hardcoded version strings that drifted since v5.0.
+
+### Fixed — CLI (steroid-run.cjs)
+- **Dynamic Version** — All 14 hardcoded `v5.0` strings replaced with `SW_VERSION` read from package.json. Reports, reviews, audit, and dashboard now always show the correct version.
+- **Git Init Check** — Commit command now verifies `.git/` exists before attempting `git add`. Shows plain-English hint if missing.
+- **Git-Failed Hint** — Both `git add` and `git commit` failure handlers now include friendly hint: "💡 A save operation failed. Ask the AI to try the commit again."
+- **Stale Reference Detection** — Audit command scans skill files for old version strings and reports drift.
+
+### Fixed — CLI (cli.js)
+- **Maestro Dynamic Version** — Maestro title now reads from `pkg.version` instead of hardcoded `v5.0`. Prevents future version drift.
+
+### Added — Architect Skill
+- **Documentation Baseline** — Every plan now auto-includes: README.md, CHANGELOG.md, semver version in package.json
+- **Versioning Guidance** — Auto-added task to set package.json version to 0.1.0
+
+### Added — Verify Skill
+- **Infrastructure: Version Check** — Verify now checks package.json has valid semver
+- **Infrastructure: README Check** — Verify now checks README.md exists with install + run instructions
+
+### Added — Engine Skill
+- **Git Init Check** — After first scaffold task, engine verifies git is initialized and provides init command if missing
+
 ## [5.1.0] "Guide the Human" - 2026-03-13
 
 ### The Vision

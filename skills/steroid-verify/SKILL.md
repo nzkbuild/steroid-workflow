@@ -187,6 +187,8 @@ Before writing the final verdict, check these physical items:
 3. **Dependencies** — `node steroid-run.cjs 'npm ls --depth=0'` — no unmet peer deps
 4. **Config integrity** — `.gitignore` still contains steroid entries
 5. **Progress updated** — `.memory/progress.md` Codebase Patterns is not "Unknown"
+6. **Version** — `package.json` has a valid semver `version` field (v5.2.0)
+7. **README exists** — Project has a `README.md` with install + run instructions (v5.2.0)
 
 Report each check in verify.md under `## Infrastructure`.
 

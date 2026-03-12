@@ -106,7 +106,16 @@ Append these tasks to EVERY execution checklist, regardless of what the user ask
 - [ ] Performance: lazy-load images, minimize JS bundle in initial load
 ```
 
-These tasks go at the END of the checklist, after all feature tasks but before final polish.
+### 6b. Documentation Baseline (v5.2.0 — auto-added)
+
+```markdown
+## Documentation (auto-added)
+- [ ] Create README.md: project name, one-line description, how to install, how to run, tech stack
+- [ ] Create CHANGELOG.md with initial v0.1.0 entry
+- [ ] Set package.json version to 0.1.0 (semver)
+```
+
+These are non-negotiable. Every project ships with a README and a version.
 
 ### 7. Automatic System Handoff
 
