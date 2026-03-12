@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.1.0] "Polish & Harden" - 2026-03-12
+
+### The Vision
+v3.0 shipped the 8-skill pipeline, but had enforcement gaps: the diagnose skill had no gate, the audit missed a skill, archives weren't verified, and scan results didn't feed back into progress.md. v3.1 hardens every enforcement layer.
+
+### Added — Gate Enforcement
+- **`diagnose` gate** — requires `context.md` before diagnosis (ensures scan ran first)
+- **Engine/verify alt-path** — gates accept `diagnosis.md` as alternative to `plan.md` for fix pipeline
+- **Archive verification gate** — blocks archiving without `verify.md` containing PASS or CONDITIONAL verdict
+- **`--force` flag for archive** — bypasses verification gate for abandoned features or edge cases
+
+### Added — Audit Hardening
+- **`steroid-diagnose` skill check** — audit now checks all 8 skills (was missing diagnose)
+- **Version display** — audit header shows installed steroid-workflow version
+- **Content validation** — verifies `steroid-run.cjs` isn't a stub (min 100 lines)
+- **Gate chain integrity** — displays all 7 gates in the audit summary
+- **Enhanced summary** — shows skill count and gate count alongside pass/fail
+
+### Added — Intelligence
+- **TypeScript detection** — scan checks for `tsconfig.json` and reports "TypeScript" instead of generic "JavaScript/TypeScript"
+- **Progress.md enrichment** — scan auto-populates `## Codebase Patterns` in progress.md on first run, or updates placeholder text in existing progress.md
+
+### Added — Testing
+- **Smoke test suite** — `npm test` runs `test/smoke.test.cjs` (16 tests, zero dependencies)
+- Tests cover: help, status, all 5 intents, gate validation, feature name validation, and error handling
+
+### Changed
+- Gate map expanded from 6 → 7 gates (added `diagnose`)
+- Gate help text updated to list all 7 phases
+- `steroid-diagnose/SKILL.md` now includes gate pre-check instruction
+- `package.json` test script updated from placeholder to smoke test
+
 ## [3.0.0] "Complete the Loop" - 2026-03-12
 
 ### The Vision

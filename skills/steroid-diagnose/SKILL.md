@@ -40,6 +40,14 @@ It runs AFTER `steroid-scan` (context.md must exist) and BEFORE `steroid-engine`
 
 ## The Four Phases
 
+### Pre-Check
+
+Before starting diagnosis, run the gate to ensure scan has completed:
+```bash
+node steroid-run.cjs gate diagnose <feature>
+```
+This verifies `context.md` exists from the scan phase.
+
 ### Phase 1: Root Cause Investigation
 
 **BEFORE attempting ANY fix:**

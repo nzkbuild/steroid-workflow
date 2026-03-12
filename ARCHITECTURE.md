@@ -55,7 +55,7 @@ All AI terminal commands are routed through this CLI wrapper.
 | `log <feature> <message>` | Append to progress log | Ralph |
 | `check-plan <feature>` | Count remaining tasks | New |
 | `verify-feature <feature>` | Pre-check before verification skill | GSD |
-| `archive <feature>` | Date-stamped feature archival | Ralph |
+| `archive <feature>` | Date-stamped feature archival (requires verify.md PASS) | Ralph |
 
 ### Intelligence (v3.0)
 | Command | Purpose | Origin |
@@ -68,7 +68,7 @@ All AI terminal commands are routed through this CLI wrapper.
 |---------|---------|
 | `progress` | Show execution learnings log |
 | `progress --patterns` | Show only codebase patterns |
-| `audit` | Verify all enforcement layers are installed (7 skills) |
+| `audit` | Verify all enforcement layers are installed (8 skills, 7 gates) |
 
 ## The 8-Skill Pipeline (v3.0)
 
@@ -93,15 +93,17 @@ All AI terminal commands are routed through this CLI wrapper.
 | **migrate** | scan → research → architect → engine → verify |
 | **document** | scan → specify → engine → verify |
 
-### Gate Map
-| Phase | Requires | Min Lines |
-|-------|----------|-----------|
-| `vibe` | `context.md` | 5 |
-| `specify` | `vibe.md` | 5 |
-| `research` | `spec.md` | 10 |
-| `architect` | `research.md` | 10 |
-| `engine` | `plan.md` | 10 |
-| `verify` | `plan.md` | 10 |
+### Gate Map (v3.1)
+| Phase | Requires | Alt Path | Min Lines |
+|-------|----------|----------|-----------|
+| `vibe` | `context.md` | — | 5 |
+| `specify` | `vibe.md` | — | 5 |
+| `research` | `spec.md` | — | 10 |
+| `architect` | `research.md` | — | 10 |
+| `diagnose` | `context.md` | — | 5 |
+| `engine` | `plan.md` | `diagnosis.md` | 10 |
+| `verify` | `plan.md` | `diagnosis.md` | 10 |
+| `archive` | `verify.md` (PASS/CONDITIONAL) | `--force` flag | — |
 
 ## Project Structure
 

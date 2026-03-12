@@ -2,7 +2,7 @@
 
 **Turn one sentence into working software.**
 
-An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v3.0 adds intent routing: say "fix" and it debugs, say "build" and it creates.
+An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v3.1 hardens every gate, locks archiving behind verification, and adds smoke tests.
 
 ## Install
 
@@ -89,7 +89,7 @@ All configs are auto-generated during install.
 node steroid-run.cjs audit
 ```
 
-This checks that all enforcement layers (git hook, 8 skills, circuit breaker, IDE configs) are properly installed.
+This checks that all enforcement layers (git hook, 8 skills, 7 gates, circuit breaker, IDE configs) are properly installed.
 
 ## Technical Details
 
