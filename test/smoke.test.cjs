@@ -85,5 +85,21 @@ test('recover exits 0 when no errors', () => run('recover'));
 // --- v4.0: Stories Commands ---
 test('stories with no feature exits 1', () => run('stories', 1));
 
+// --- v5.0: Review Commands ---
+test('review --help exits 0', () => run('review --help'));
+test('review spec with no feature exits 1', () => run('review spec', 1));
+test('review quality with no feature exits 1', () => run('review quality', 1));
+test('review status nonexistent exits 0', () => run('review status nonexistent'));
+test('review reset nonexistent exits 0', () => run('review reset nonexistent'));
+
+// --- v5.0: Report Commands ---
+test('report --help exits 0', () => run('report --help'));
+test('report list exits 0', () => run('report list'));
+test('report show with no feature exits 1', () => run('report show', 1));
+test('report generate with no feature exits 1', () => run('report generate', 1));
+
+// --- v5.0: Dashboard ---
+test('dashboard exits 0', () => run('dashboard'));
+
 console.log(`\n[smoke] ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -1,7 +1,7 @@
 {
   "name": "steroid-workflow",
-  "version": "4.0.0",
-  "description": "AI agency-in-a-box for non-technical vibe coders. 8-skill pipeline with structured memory, smart recovery, prioritized stories, codebase scanning, spec-driven development, tech research, TDD, circuit breakers, verification, intent routing, and anti-summarization guards.",
+  "version": "5.0.0",
+  "description": "AI agency-in-a-box for non-technical vibe coders. 8-skill pipeline with two-stage review, handoff reports, analytics dashboard, structured memory, smart recovery, prioritized stories, codebase scanning, spec-driven development, tech research, TDD, circuit breakers, verification, intent routing, and anti-summarization guards.",
   "bin": {
     "steroid-workflow": "bin/cli.js"
   },

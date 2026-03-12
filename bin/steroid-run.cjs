@@ -10,6 +10,7 @@ const changesDir = path.join(memoryDir, 'changes');
 const progressFile = path.join(memoryDir, 'progress.md');
 const knowledgeDir = path.join(memoryDir, 'knowledge');
 const metricsDir = path.join(memoryDir, 'metrics');
+const reportsDir = path.join(memoryDir, 'reports');
 
 // --- Knowledge Merge Helper (v4.0) ---
 function mergeKnowledge(existing, incoming) {
@@ -54,6 +55,20 @@ Usage:
   Stories:
     node steroid-run.cjs stories <feature>                 List prioritized stories (P1/P2/P3)
     node steroid-run.cjs stories <feature> next            Show next story to work on
+
+  Review:
+    node steroid-run.cjs review spec <feature>             Stage 1: Spec compliance review
+    node steroid-run.cjs review quality <feature>          Stage 2: Code quality review
+    node steroid-run.cjs review status <feature>           Show review stage status
+    node steroid-run.cjs review reset <feature>            Reset review for re-review
+
+  Reports:
+    node steroid-run.cjs report generate <feature>         Generate handoff report
+    node steroid-run.cjs report show <feature>             Show a handoff report
+    node steroid-run.cjs report list                       List all handoff reports
+
+  Analytics:
+    node steroid-run.cjs dashboard                         Show project health dashboard
 
   Recovery:
     node steroid-run.cjs recover                           Smart recovery guidance (levels 1-5)
@@ -567,7 +582,22 @@ if (args[0] === 'audit') {
     }
 
     console.log('');
-    console.log(`  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s) configured, ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores`);
+
+    // v5.0: Reports health
+    console.log('  Handoff reports:');
+    if (fs.existsSync(reportsDir)) {
+        const reports = fs.readdirSync(reportsDir).filter(f => f.endsWith('.md'));
+        console.log(`    ${reports.length} report(s) generated`);
+    } else {
+        console.log('    \u25cb  No reports generated yet');
+    }
+
+    // v5.0: Review system check
+    console.log('');
+    console.log('  Review system: \u2705 Two-stage review available (v5.0)');
+
+    console.log('');
+    console.log(`  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s), ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores, review system v5.0`);
 
     if (failed > 0) {
         console.log('');
@@ -709,9 +739,11 @@ if (args[0] === 'commit') {
     if (add.status !== 0) {
         state.error_count += 1;
         state.last_error = 'git add -A failed';
-        state.status = state.error_count >= 3 ? 'tripped' : 'active';
+        if (!state.error_history) state.error_history = [];
+        state.error_history.push(`[${new Date().toISOString()}] git add failed`);
+        state.status = state.error_count >= 5 ? 'tripped' : 'active';
         fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
-        console.error(`[steroid-run] ❌ git add failed. ERROR ${state.error_count}/3.`);
+        console.error(`[steroid-run] ❌ git add failed. ERROR ${state.error_count}/5.`);
         process.exit(1);
     }
 
@@ -719,9 +751,11 @@ if (args[0] === 'commit') {
     if (commit.status !== 0) {
         state.error_count += 1;
         state.last_error = `git commit failed: "${commitMsg}"`;
-        state.status = state.error_count >= 3 ? 'tripped' : 'active';
+        if (!state.error_history) state.error_history = [];
+        state.error_history.push(`[${new Date().toISOString()}] git commit failed: "${commitMsg}"`);
+        state.status = state.error_count >= 5 ? 'tripped' : 'active';
         fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
-        console.error(`[steroid-run] ❌ git commit failed. ERROR ${state.error_count}/3.`);
+        console.error(`[steroid-run] ❌ git commit failed. ERROR ${state.error_count}/5.`);
         process.exit(1);
     }
 
@@ -952,7 +986,7 @@ if (args[0] === 'archive') {
 
     // Ported from ralph.sh: archive with date stamp
     const date = new Date().toISOString().split('T')[0];
-    const filesToArchive = ['context.md', 'vibe.md', 'spec.md', 'research.md', 'plan.md', 'verify.md', 'diagnosis.md'];
+    const filesToArchive = ['context.md', 'vibe.md', 'spec.md', 'research.md', 'plan.md', 'verify.md', 'diagnosis.md', 'review.md'];
     let archived = 0;
 
     for (const file of filesToArchive) {
@@ -984,6 +1018,60 @@ if (args[0] === 'archive') {
     featuresData._lastUpdated = new Date().toISOString();
     fs.writeFileSync(featuresFile, JSON.stringify(featuresData, null, 2));
     console.log(`[steroid-run]    Metrics: feature "${feature}" recorded in features.json`);
+
+    // v5.0: Auto-generate handoff report on archive
+    if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+    const findArchiveFile = (name) => {
+        const archivedPath = path.join(archiveDir, `${date}-${name}`);
+        const activePath = path.join(featureDir, name);
+        if (fs.existsSync(archivedPath)) return fs.readFileSync(archivedPath, 'utf-8');
+        if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
+        return null;
+    };
+    const specContent = findArchiveFile('spec.md');
+    const verifyContent = findArchiveFile('verify.md');
+    const planContent = findArchiveFile('plan.md');
+    const reviewContent = findArchiveFile('review.md');
+
+    let report = `# Handoff Report: ${feature}\n\n`;
+    report += `**Completed:** ${new Date().toISOString()}\n`;
+    report += `**Status:** Archived\n`;
+    report += `**Generated by:** steroid-workflow v5.0\n\n`;
+
+    report += `## What Was Built\n\n`;
+    if (specContent) {
+        const criteria = specContent.match(/(?:Given|When|Then|Scenario).+/gi) || [];
+        report += criteria.length > 0 ? `${criteria.length} acceptance scenarios implemented.\n` : '_See spec.md._\n';
+    } else {
+        report += '_No spec.md found._\n';
+    }
+
+    report += `\n## What Was Tested\n\n`;
+    if (verifyContent) {
+        const statusMatch2 = verifyContent.match(/\*\*Status:\*\* (PASS|FAIL|CONDITIONAL)/);
+        report += `**Verification:** ${statusMatch2 ? statusMatch2[1] : 'Unknown'}\n`;
+    } else {
+        report += '_Not formally verified._\n';
+    }
+
+    report += `\n## Review Status\n\n`;
+    if (reviewContent) {
+        const s1 = reviewContent.match(/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/);
+        const s2 = reviewContent.match(/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/);
+        report += `- Spec Review: ${s1 ? s1[1] : 'Not Run'}\n`;
+        report += `- Quality Review: ${s2 ? s2[1] : 'Not Run'}\n`;
+    } else {
+        report += '_No review performed._\n';
+    }
+
+    report += `\n## Build Health\n\n`;
+    report += `- Errors during build: ${state.error_count}\n`;
+
+    report += `\n---\n_Generated by steroid-workflow v5.0_\n`;
+
+    const reportFilePath = path.join(reportsDir, `${feature}.md`);
+    fs.writeFileSync(reportFilePath, report);
+    console.log(`[steroid-run]    Report: .memory/reports/${feature}.md`);
 
     process.exit(0);
 }
@@ -1328,6 +1416,409 @@ if (args[0] === 'verify-feature') {
     console.log(`[steroid-run] ✅ Plan complete (${done}/${total}). Ready for verification.`);
     console.log(`[steroid-run] 📋 The steroid-verify skill will now run spec compliance and code quality reviews.`);
     console.log(`[steroid-run]    Results will be written to .memory/changes/${feature}/verify.md`);
+    process.exit(0);
+}
+
+// --- Review Command (Two-stage review system — v5.0) ---
+// Source: src/forks/superpowers/subagent.md + spec-reviewer-prompt.md + code-quality-reviewer-prompt.md
+if (args[0] === 'review') {
+    const sub = args[1];
+    const feature = args[2];
+
+    if (!sub || sub === '--help') {
+        console.log(`
+[steroid-run] review — Two-stage review system for feature validation.
+
+Usage:
+  node steroid-run.cjs review spec <feature>       Stage 1: Spec compliance review
+  node steroid-run.cjs review quality <feature>    Stage 2: Code quality review (requires Stage 1 PASS)
+  node steroid-run.cjs review status <feature>     Show review status for a feature
+  node steroid-run.cjs review reset <feature>      Reset review state (re-review)
+
+Stages:
+  Stage 1 (Spec Review)   — "Did the AI build what was requested?"
+  Stage 2 (Quality Review) — "Is it well-built?"
+                             Only runs after Stage 1 passes.
+
+Output: .memory/changes/<feature>/review.md
+
+Source: src/forks/superpowers/subagent.md (two-stage review flow)
+`);
+        process.exit(0);
+    }
+
+    if (!feature) {
+        console.error('[steroid-run] Usage: node steroid-run.cjs review <spec|quality|status|reset> <feature>');
+        process.exit(1);
+    }
+
+    const featureDir = path.join(changesDir, feature);
+    const reviewFile = path.join(featureDir, 'review.md');
+
+    if (sub === 'status') {
+        if (!fs.existsSync(reviewFile)) {
+            console.log(`[steroid-run] 📋 No review started for "${feature}".`);
+            console.log('  Run: node steroid-run.cjs review spec ' + feature);
+            process.exit(0);
+        }
+        const content = fs.readFileSync(reviewFile, 'utf-8');
+        const specMatch = content.match(/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/);
+        const qualityMatch = content.match(/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/);
+        const specStatus = specMatch ? specMatch[1] : 'NOT RUN';
+        const qualityStatus = qualityMatch ? qualityMatch[1] : 'NOT RUN';
+
+        const icons = { PASS: '✅', FAIL: '❌', PENDING: '⏳', 'NOT RUN': '○' };
+        console.log(`[steroid-run] 📋 Review Status for "${feature}":`);
+        console.log(`  ${icons[specStatus]} Stage 1 (Spec Compliance): ${specStatus}`);
+        console.log(`  ${icons[qualityStatus]} Stage 2 (Code Quality): ${qualityStatus}`);
+
+        if (specStatus === 'PASS' && qualityStatus === 'PASS') {
+            console.log('\n  ✅ Both stages passed. Ready for verification.');
+        } else if (specStatus === 'FAIL') {
+            console.log('\n  ❌ Spec review failed. Fix issues and re-run: node steroid-run.cjs review spec ' + feature);
+        } else if (specStatus === 'PASS' && qualityStatus !== 'PASS') {
+            console.log('\n  ⏳ Spec passed. Run quality review: node steroid-run.cjs review quality ' + feature);
+        }
+        process.exit(0);
+    }
+
+    if (sub === 'reset') {
+        if (fs.existsSync(reviewFile)) {
+            fs.unlinkSync(reviewFile);
+            console.log(`[steroid-run] 🔄 Review reset for "${feature}". Run: node steroid-run.cjs review spec ${feature}`);
+        } else {
+            console.log(`[steroid-run] No review to reset for "${feature}".`);
+        }
+        process.exit(0);
+    }
+
+    if (sub === 'spec') {
+        const specFile = path.join(featureDir, 'spec.md');
+        const planFile = path.join(featureDir, 'plan.md');
+
+        if (!fs.existsSync(specFile)) {
+            console.error(`[steroid-run] ❌ No spec.md found for "${feature}". Cannot run spec review without acceptance criteria.`);
+            process.exit(1);
+        }
+        if (!fs.existsSync(planFile)) {
+            console.error(`[steroid-run] ❌ No plan.md found for "${feature}". Cannot run spec review without task list.`);
+            process.exit(1);
+        }
+
+        console.log(`[steroid-run] 🔍 Stage 1: Spec Compliance Review for "${feature}"...`);
+        console.log('');
+        console.log('  The AI should now:');
+        console.log('  1. Read .memory/changes/' + feature + '/spec.md — extract ALL acceptance criteria');
+        console.log('  2. Read .memory/changes/' + feature + '/plan.md — extract ALL completed tasks');
+        console.log('  3. For EACH criterion, grep/read the actual implementation code');
+        console.log('  4. Determine status: ✅ IMPLEMENTED | ⚠️ PARTIAL | ❌ MISSING | 🔄 EXTRA');
+        console.log('  5. Write findings to .memory/changes/' + feature + '/review.md');
+        console.log('');
+        console.log('  Source: src/forks/superpowers/spec-reviewer-prompt.md');
+        console.log('  CRITICAL: Do NOT trust the implementer\'s report. Read the actual code.');
+        console.log('');
+
+        const reviewContent = `# Review Report: ${feature}\n\n**Started:** ${new Date().toISOString()}\n\n## Review Status\n\n- Stage 1 (Spec): PENDING\n- Stage 2 (Quality): PENDING\n\n## Stage 1: Spec Compliance Review\n\n_AI: Fill this section after reviewing code against spec.md criteria._\n\n| # | Criterion | Status | Evidence |\n|---|-----------|--------|----------|\n| 1 | _from spec.md_ | _status_ | _file:line_ |\n\n**Spec Score:** _/_ criteria verified\n**Stage 1 Result:** PENDING\n\n---\n\n## Stage 2: Code Quality Review\n\n_Blocked until Stage 1 passes._\n\n---\n\n_Reviewer: steroid-review v5.0_\n`;
+        if (!fs.existsSync(featureDir)) fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(reviewFile, reviewContent);
+        console.log(`[steroid-run] 📝 Review template written to .memory/changes/${feature}/review.md`);
+        console.log('  AI: Complete the spec review, then update Stage 1 Result to PASS or FAIL.');
+        process.exit(0);
+    }
+
+    if (sub === 'quality') {
+        if (!fs.existsSync(reviewFile)) {
+            console.error(`[steroid-run] ❌ No review started. Run Stage 1 first: node steroid-run.cjs review spec ${feature}`);
+            process.exit(1);
+        }
+
+        const content = fs.readFileSync(reviewFile, 'utf-8');
+        if (!content.includes('Stage 1 (Spec): PASS') && !content.includes('Stage 1 Result: PASS')) {
+            console.error('[steroid-run] 🚫 REVIEW GATE: Stage 1 (Spec) has not passed.');
+            console.error('  Stage 2 (Quality) cannot run until Stage 1 passes.');
+            console.error('  Fix spec issues and update review.md, or re-run: node steroid-run.cjs review spec ' + feature);
+            process.exit(1);
+        }
+
+        console.log(`[steroid-run] 🔍 Stage 2: Code Quality Review for "${feature}"...`);
+        console.log('');
+        console.log('  The AI should now:');
+        console.log('  1. Review all files created/modified during this feature');
+        console.log('  2. Check: Single responsibility, naming, error handling, no stubs');
+        console.log('  3. Run anti-pattern scan: TODO/FIXME, empty returns, console.log-only handlers');
+        console.log('  4. Categorize: 🛑 Critical | ⚠️ Important | ℹ️ Minor');
+        console.log('  5. Update Stage 2 section in review.md');
+        console.log('');
+        console.log('  Source: src/forks/superpowers/code-quality-reviewer-prompt.md');
+        process.exit(0);
+    }
+
+    console.error(`[steroid-run] ❌ Unknown review subcommand: "${sub}". Run: node steroid-run.cjs review --help`);
+    process.exit(1);
+}
+
+// --- Report Command (AI-to-Human handoff — v5.0) ---
+// Source: src/forks/gsd research-synthesizer + src/forks/ralph progress.txt + src/forks/spec-kit success-criteria
+if (args[0] === 'report') {
+    const sub = args[1];
+    const feature = args[2];
+
+    if (!sub || sub === '--help') {
+        console.log(`
+[steroid-run] report — AI-to-Human handoff reports.
+
+Usage:
+  node steroid-run.cjs report generate <feature>   Generate handoff report after archive
+  node steroid-run.cjs report show <feature>       Show a feature's handoff report
+  node steroid-run.cjs report list                 List all handoff reports
+
+Reports are written to .memory/reports/<feature>.md
+
+Source: src/forks/gsd research-synthesizer (executive summary pattern)
+`);
+        process.exit(0);
+    }
+
+    if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    if (sub === 'list') {
+        const files = fs.existsSync(reportsDir) ? fs.readdirSync(reportsDir).filter(f => f.endsWith('.md')) : [];
+        if (files.length === 0) {
+            console.log('[steroid-run] 📭 No handoff reports yet. Archive a feature to generate one.');
+            process.exit(0);
+        }
+        console.log('\n[steroid-run] 📋 Handoff Reports\n');
+        for (const f of files) {
+            const content = fs.readFileSync(path.join(reportsDir, f), 'utf-8');
+            const statusMatch = content.match(/\*\*Status:\*\* (.+)/);
+            const dateMatch = content.match(/\*\*Completed:\*\* (.+)/);
+            const status = statusMatch ? statusMatch[1] : 'unknown';
+            const date = dateMatch ? dateMatch[1] : 'unknown';
+            console.log(`  📄 ${f.replace('.md', '')} — ${status} (${date})`);
+        }
+        process.exit(0);
+    }
+
+    if (sub === 'show') {
+        if (!feature) {
+            console.error('[steroid-run] Usage: node steroid-run.cjs report show <feature>');
+            process.exit(1);
+        }
+        const reportFile = path.join(reportsDir, `${feature}.md`);
+        if (!fs.existsSync(reportFile)) {
+            console.error(`[steroid-run] ❌ No report found for "${feature}".`);
+            process.exit(1);
+        }
+        console.log(fs.readFileSync(reportFile, 'utf-8'));
+        process.exit(0);
+    }
+
+    if (sub === 'generate') {
+        if (!feature) {
+            console.error('[steroid-run] Usage: node steroid-run.cjs report generate <feature>');
+            process.exit(1);
+        }
+
+        const featureDir = path.join(changesDir, feature);
+        const archiveDir = path.join(featureDir, 'archive');
+
+        const findFile = (name) => {
+            if (fs.existsSync(archiveDir)) {
+                const archiveFiles = fs.readdirSync(archiveDir).filter(f => f.endsWith(name));
+                if (archiveFiles.length > 0) return fs.readFileSync(path.join(archiveDir, archiveFiles[archiveFiles.length - 1]), 'utf-8');
+            }
+            const activePath = path.join(featureDir, name);
+            if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
+            return null;
+        };
+
+        const specContent = findFile('spec.md');
+        const verifyContent = findFile('verify.md');
+        const planContent = findFile('plan.md');
+        const reviewContent = findFile('review.md');
+
+        let report = `# Handoff Report: ${feature}\n\n`;
+        report += `**Completed:** ${new Date().toISOString()}\n`;
+        report += `**Generated by:** steroid-workflow v5.0\n\n`;
+
+        report += `## What Was Built\n\n`;
+        if (specContent) {
+            const criteria = specContent.match(/(?:Given|When|Then|Scenario).+/gi) || [];
+            if (criteria.length > 0) {
+                report += `${criteria.length} acceptance scenarios implemented:\n\n`;
+                for (const c of criteria.slice(0, 10)) report += `- ${c.trim()}\n`;
+                if (criteria.length > 10) report += `- _(and ${criteria.length - 10} more)_\n`;
+            } else {
+                report += '_See spec.md for full acceptance criteria._\n';
+            }
+        } else {
+            report += '_No spec.md found._\n';
+        }
+
+        report += `\n## What Was Tested\n\n`;
+        if (verifyContent) {
+            const statusMatch = verifyContent.match(/\*\*Status:\*\* (PASS|FAIL|CONDITIONAL)/);
+            const scoreMatch = verifyContent.match(/\*\*Spec Score:\*\* (.+)/);
+            report += `**Status:** ${statusMatch ? statusMatch[1] : 'Unknown'}\n`;
+            if (scoreMatch) report += `**Score:** ${scoreMatch[1]}\n`;
+            const testMatch = verifyContent.match(/\*\*Result:\*\* (.+)/);
+            if (testMatch) report += `**Tests:** ${testMatch[1]}\n`;
+        } else {
+            report += '_No verify.md found._\n';
+        }
+
+        report += `\n## Review Status\n\n`;
+        if (reviewContent) {
+            const s1 = reviewContent.match(/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/);
+            const s2 = reviewContent.match(/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/);
+            report += `- Spec Review: ${s1 ? s1[1] : 'Not Run'}\n`;
+            report += `- Quality Review: ${s2 ? s2[1] : 'Not Run'}\n`;
+        } else {
+            report += '_No two-stage review performed._\n';
+        }
+
+        report += `\n## Tasks Completed\n\n`;
+        if (planContent) {
+            const total = (planContent.match(/- \[[ x/]\]/g) || []).length;
+            const done = (planContent.match(/- \[x\]/g) || []).length;
+            report += `${done}/${total} tasks completed (${total > 0 ? Math.round((done / total) * 100) : 0}%)\n`;
+        } else {
+            report += '_No plan.md found._\n';
+        }
+
+        report += `\n## Known Limitations\n\n`;
+        if (planContent) {
+            const deferred = planContent.match(/- \[ \].+/g) || [];
+            if (deferred.length > 0) {
+                report += `${deferred.length} items were not completed:\n\n`;
+                for (const d of deferred.slice(0, 5)) report += `${d}\n`;
+                if (deferred.length > 5) report += `- _(and ${deferred.length - 5} more)_\n`;
+            } else {
+                report += 'All planned tasks were completed.\n';
+            }
+        } else {
+            report += '_Unknown — no plan.md available._\n';
+        }
+
+        report += `\n## Build Health\n\n`;
+        report += `- Circuit breaker errors during build: ${state.error_count}\n`;
+        if (state.error_history && state.error_history.length > 0) {
+            report += '- Errors encountered:\n';
+            for (const err of state.error_history.slice(-5)) report += `  - ${err}\n`;
+        }
+
+        report += `\n---\n\n_Generated by steroid-workflow v5.0 handoff system_\n`;
+
+        const reportFile = path.join(reportsDir, `${feature}.md`);
+        fs.writeFileSync(reportFile, report);
+        console.log(`[steroid-run] 📄 Handoff report generated: .memory/reports/${feature}.md`);
+        console.log(`  Run: node steroid-run.cjs report show ${feature}`);
+        process.exit(0);
+    }
+
+    console.error(`[steroid-run] ❌ Unknown report subcommand: "${sub}". Run: node steroid-run.cjs report --help`);
+    process.exit(1);
+}
+
+// --- Dashboard Command (Analytics dashboard — v5.0) ---
+// Source: src/forks/ralph progress.txt metrics + src/forks/gsd confidence-breakdown
+if (args[0] === 'dashboard') {
+    console.log('\n[steroid-run] 📊 Steroid-Workflow Dashboard\n');
+
+    // 1. Features summary
+    const featuresFile = path.join(metricsDir, 'features.json');
+    let featuresData = {};
+    if (fs.existsSync(featuresFile)) {
+        try { featuresData = JSON.parse(fs.readFileSync(featuresFile, 'utf-8')); } catch (e) { /* ignore */ }
+    }
+    const featureNames = Object.keys(featuresData).filter(k => k !== '_lastUpdated');
+
+    console.log('  ── Features ──────────────────────────────');
+    if (featureNames.length === 0) {
+        console.log('  No features archived yet.');
+    } else {
+        let totalErrors = 0;
+        for (const name of featureNames) {
+            const f = featuresData[name];
+            const icon = f.status === 'complete' ? '✅' : '⏳';
+            const errors = f.errorCount || 0;
+            totalErrors += errors;
+            const fDate = f.archived ? f.archived.split('T')[0] : 'unknown';
+            console.log(`  ${icon} ${name} — ${errors} error(s) — ${fDate}`);
+        }
+        const avgErrors = featureNames.length > 0 ? (totalErrors / featureNames.length).toFixed(1) : 0;
+        console.log(`\n  Total: ${featureNames.length} features | Avg errors: ${avgErrors}/feature`);
+    }
+
+    // 2. Error patterns
+    console.log('\n  ── Error Patterns ────────────────────────');
+    const errorPatternsFile = path.join(metricsDir, 'error-patterns.json');
+    if (fs.existsSync(errorPatternsFile)) {
+        try {
+            const ep = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8'));
+            const patterns = ep.patterns || [];
+            console.log(`  ${patterns.length} errors recorded`);
+            if (patterns.length > 0) {
+                const keywords = {};
+                for (const p of patterns) {
+                    const kw = p.keyword || 'unknown';
+                    keywords[kw] = (keywords[kw] || 0) + 1;
+                }
+                const sorted = Object.entries(keywords).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                if (sorted.length > 0) {
+                    console.log('  Top error sources:');
+                    for (const [kw, count] of sorted) console.log(`    ${count}x — ${kw}`);
+                }
+            }
+        } catch (e) {
+            console.log('  ⚠️ Error patterns file corrupt');
+        }
+    } else {
+        console.log('  No error patterns recorded yet.');
+    }
+
+    // 3. Circuit breaker state
+    console.log('\n  ── Circuit Breaker ───────────────────────');
+    const levels = ['🟢 CLEAR', '🟡 LOGGED', '🟠 RE-READ', '🔶 DIAGNOSING', '🔴 ESCALATED', '🛑 TRIPPED'];
+    const level = Math.min(state.error_count, 5);
+    console.log(`  Current: ${levels[level]} (${state.error_count}/5 errors)`);
+    const tripCount = (state.recovery_actions || []).filter(a => a.includes('L4') || a.includes('L5')).length;
+    console.log(`  Escalations this session: ${tripCount}`);
+
+    // 4. Knowledge store health
+    console.log('\n  ── Knowledge Stores ──────────────────────');
+    const kStores = ['tech-stack', 'patterns', 'decisions', 'gotchas'];
+    let populated = 0;
+    for (const store of kStores) {
+        const storeFile = path.join(knowledgeDir, `${store}.json`);
+        if (fs.existsSync(storeFile)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+                const entries = Object.keys(data).filter(k => k !== '_lastUpdated').length;
+                console.log(`  ✅ ${store}: ${entries} entries`);
+                populated++;
+            } catch (e) {
+                console.log(`  ⚠️ ${store}: corrupt`);
+            }
+        } else {
+            console.log(`  ○  ${store}: empty`);
+        }
+    }
+    console.log(`  Coverage: ${populated}/4 stores populated`);
+
+    // 5. Reports
+    console.log('\n  ── Handoff Reports ───────────────────────');
+    if (fs.existsSync(reportsDir)) {
+        const reports = fs.readdirSync(reportsDir).filter(f => f.endsWith('.md'));
+        console.log(`  ${reports.length} report(s) generated`);
+    } else {
+        console.log('  No reports generated yet.');
+    }
+
+    console.log('\n  ─────────────────────────────────────────');
+    console.log('');
     process.exit(0);
 }
 

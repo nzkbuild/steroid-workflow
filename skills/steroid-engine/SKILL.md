@@ -79,6 +79,23 @@ node steroid-run.cjs stories <feature> next
 
 Complete P1 stories before moving to P2/P3. Use `node steroid-run.cjs recover` if an error occurs instead of immediately retrying.
 
+### Post-Implementation Review (v5.0)
+
+After completing all stories in plan.md, trigger the two-stage review before verify:
+
+```bash
+# Stage 1: Did you build what was requested?
+node steroid-run.cjs review spec <feature>
+
+# Complete Stage 1 findings in review.md, then:
+node steroid-run.cjs review quality <feature>
+
+# Complete Stage 2 findings in review.md
+```
+
+Fix any issues found before proceeding to verification.
+Source: `src/forks/superpowers/subagent.md` — two-stage review loop
+
 ### Reading Progress First
 
 Before starting any task, read `.memory/progress.md` — especially the **Codebase Patterns** section at the top (if it exists). Previous task iterations may have documented patterns and gotchas that help you avoid repeating mistakes.

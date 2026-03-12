@@ -1,5 +1,42 @@
 # Changelog
 
+## [5.0.0] "Beyond Code" - 2026-03-13
+
+### The Vision
+v4.0 gave the AI structured memory and graduated recovery. But it still operated as a single-brain AI — reviewing its own work, with no handoff report and no project health visibility. v5.0 adds the crown jewels from the superpowers fork: two-stage review (spec compliance then code quality), AI-to-human handoff reports, and an analytics dashboard.
+
+### Added — Two-Stage Review System
+- **`review` command** — Two-stage gated review for feature validation
+- **`review spec <feature>`** — Stage 1: Spec compliance review (AI reads code vs spec.md criteria)
+- **`review quality <feature>`** — Stage 2: Code quality review (checks naming, error handling, anti-patterns)
+- **`review status <feature>`** — Shows pass/fail/pending for each stage
+- **`review reset <feature>`** — Clears review for re-review
+- **Stage gating** — Quality review blocked until spec review passes
+- **`review.md` artifact** — Structured output per feature with stage results table
+
+### Added — AI-to-Human Handoff Reports
+- **`report` command** — Generate and view handoff reports
+- **`report generate <feature>`** — Generates report from spec.md, plan.md, verify.md, review.md
+- **`report show <feature>`** — Displays a handoff report
+- **`report list`** — Lists all generated reports
+- **`.memory/reports/`** — New directory for handoff reports
+- **Auto-generation on archive** — Handoff report generated automatically when a feature is archived
+
+### Added — Analytics Dashboard
+- **`dashboard` command** — One-command project health overview
+- Shows: features completed, avg errors/feature, error pattern analysis, circuit breaker state, knowledge store coverage, reports count
+
+### Fixed
+- **Commit command error threshold** — Corrected from 3 to 5 (v4.0 leftover from pre-graduated recovery)
+- **Commit command error tracking** — Now records to `error_history[]` like all other error paths
+
+### Changed
+- `review.md` added to archive file list
+- `audit` command now shows reports health and review system status in summary
+- `steroid-verify/SKILL.md` updated with Two-Stage Review Gate prerequisite check
+- `steroid-engine/SKILL.md` updated with post-implementation review reminder
+- Smoke tests expanded from 24 → 35 (11 new tests for review, report, dashboard)
+
 ## [4.0.0] "Make It Learn" - 2026-03-12
 
 ### The Vision

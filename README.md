@@ -2,7 +2,7 @@
 
 **Turn one sentence into working software.**
 
-An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v4.0 adds structured memory (the AI remembers patterns across features), graduated error recovery (5-level smart recovery instead of 3-strike kill), and prioritized story execution (P1/P2/P3).
+An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions. v5.0 adds two-stage review (spec compliance + code quality gating), AI-to-human handoff reports, and an analytics dashboard.
 
 ## Install
 
@@ -95,8 +95,9 @@ This checks that all enforcement layers (git hook, 8 skills, 7 gates, circuit br
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - How the pipeline enforcer works
-- Full command reference for `steroid-run.cjs` (18+ commands)
+- Full command reference for `steroid-run.cjs` (22+ commands)
 - Intent routing, gate map, and memory system
+- Two-stage review system, handoff reports, and analytics dashboard
 - Smart recovery levels and story prioritization
 - Fork credits and sources
 - Project structure

@@ -45,6 +45,23 @@ node steroid-run.cjs verify-feature <feature>
 ```
 This confirms all tasks in `plan.md` are marked `[x]`.
 
+## Two-Stage Review Gate (v5.0)
+
+Before running the verification process, ensure the two-stage review is complete:
+
+```bash
+node steroid-run.cjs review status <feature>
+```
+
+If both stages show PASS, proceed to verification. If not:
+
+1. Run `node steroid-run.cjs review spec <feature>` — then complete Stage 1
+2. Run `node steroid-run.cjs review quality <feature>` — then complete Stage 2
+
+**The review MUST pass both stages before verify.md can be written.**
+
+Source: `src/forks/superpowers/subagent.md` — "Spec compliance first, then code quality. Never skip reviews."
+
 ## The Verification Process
 
 ### Step 1: Load Context
