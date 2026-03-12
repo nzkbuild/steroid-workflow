@@ -23,6 +23,10 @@ NEVER summarize code. NEVER write comments like `// rest of the code here` or `/
 
 Before marking any task as `[x]`, run the verification guard:
 
+## .gitignore Protection (v5.0.1)
+
+NEVER overwrite the project's `.gitignore`. The installer appends steroid entries (`.memory/`, `steroid-run.cjs`, `.agents/`, `src/forks/`). If you need to create or modify `.gitignore`, ALWAYS APPEND to the existing file — never replace it. The commit command will auto-restore missing entries, but prevention is better than cure.
+
 ```
 node steroid-run.cjs verify <path/to/file> --min-lines=<expected>
 ```

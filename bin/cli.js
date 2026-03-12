@@ -136,7 +136,7 @@ const maestroContent = `SPECIAL INSTRUCTION: Think silently if needed. EFFORT LE
 > You MUST read and follow ALL steroid-workflow rules below BEFORE executing ANY task.
 > This is a PHYSICAL CONSTRAINT, not a suggestion. Violations will be caught by git hooks.
 
-# Steroid-Workflow v3.0 Maestro (Auto-Trigger Rules)
+# Steroid-Workflow v5.0 Maestro (Auto-Trigger Rules)
 
 ## Pre-Task Checkpoint (MANDATORY)
 Before writing ANY code:
@@ -183,7 +183,7 @@ ALL terminal commands during development MUST be wrapped in:
 \\\`node steroid-run.cjs '<command>'\\\`
 Direct terminal execution (\\\`npm install\\\`, \\\`npx jest\\\`, \\\`node script.js\\\`, etc.) is STRICTLY FORBIDDEN.
 If you need to run \\\`npm install\\\`, you must run: \\\`node steroid-run.cjs 'npm install'\\\`
-This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 3.
+This is a non-negotiable physical constraint. The wrapper tracks errors and will hard-stop at 5.
 
 ## Pipeline Enforcement Commands (MUST USE)
 The AI MUST use these physical commands — they cannot be skipped:
@@ -197,6 +197,22 @@ The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature
 - \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
 - \\\`node steroid-run.cjs detect-tests\\\` — Detect test framework in project
+
+## v4.0+ Commands
+- \\\`node steroid-run.cjs memory show-all\\\` — View all knowledge stores before coding
+- \\\`node steroid-run.cjs memory write <store> '<json>'\\\` — Record patterns, decisions, gotchas
+- \\\`node steroid-run.cjs recover\\\` — Smart recovery guidance (5 graduated levels)
+- \\\`node steroid-run.cjs stories <feature> next\\\` — Get next prioritized story (P1/P2/P3)
+- \\\`node steroid-run.cjs review spec <feature>\\\` — Stage 1: Spec compliance review
+- \\\`node steroid-run.cjs review quality <feature>\\\` — Stage 2: Code quality review (after Stage 1 passes)
+- \\\`node steroid-run.cjs review status <feature>\\\` — Check review stage status
+- \\\`node steroid-run.cjs report generate <feature>\\\` — Generate handoff report
+- \\\`node steroid-run.cjs report list\\\` — List all handoff reports
+- \\\`node steroid-run.cjs dashboard\\\` — Project health analytics
+
+## .gitignore Protection (v5.0.1)
+NEVER overwrite the project's .gitignore. If you need to add entries, ALWAYS APPEND.
+The commit command auto-restores steroid entries if missing, but do not rely on this.
 
 ## Context Wipe Mandate
 After completing each task in the plan.md, terminate the current sub-agent context and start a fresh one.
@@ -451,7 +467,7 @@ console.log('╔═════════════════════�
 console.log(`║  ✅ Steroid-Workflow v${pkg.version} ${verb}!${' '.repeat(Math.max(0, 25 - verb.length))}║`);
 console.log('║                                                              ║');
 console.log('║  🔒 Git hook active — AI cannot commit without pipeline      ║');
-console.log('║  🧠 6 IDE configs injected — universal coverage              ║');
+console.log('║  🧠 5 IDE configs injected — universal coverage              ║');
 console.log('║  📋 Pipeline: scan → vibe → spec → research → arch → engine ║');
 console.log('║  ✅ Verification: steroid-verify enforces proof of work       ║');
 console.log('║  🔍 Intent routing: build/fix/refactor/migrate/document      ║');

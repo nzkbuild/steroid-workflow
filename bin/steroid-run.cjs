@@ -735,6 +735,18 @@ if (args[0] === 'commit') {
     const commitMsg = `feat(steroid): ${message}`;
     console.log(`[steroid-run] Committing: ${commitMsg}`);
 
+    // v5.0.1: Protect .gitignore — auto-restore steroid entries before commit
+    const gitignorePath = path.join(targetDir, '.gitignore');
+    const requiredGitignoreEntries = ['.memory/', 'steroid-run.cjs', '.agents/', 'src/forks/'];
+    if (fs.existsSync(gitignorePath)) {
+        const giContent = fs.readFileSync(gitignorePath, 'utf-8');
+        const missing = requiredGitignoreEntries.filter(e => !giContent.includes(e));
+        if (missing.length > 0) {
+            fs.appendFileSync(gitignorePath, '\n# Steroid-Workflow (auto-restored by commit guard)\n' + missing.join('\n') + '\n');
+            console.log(`[steroid-run] ⚠️  .gitignore was missing steroid entries. Auto-restored: ${missing.join(', ')}`);
+        }
+    }
+
     const add = spawnSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'inherit' });
     if (add.status !== 0) {
         state.error_count += 1;

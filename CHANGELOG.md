@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.0.1] "Harden the Pipeline" - 2026-03-13
+
+### The Vision
+Dogfooding v5.0 on a real portfolio build revealed that the AI overwrites `.gitignore` during the engine phase, and the Maestro rules injected into every IDE were frozen at v3.0 — missing all v4.0/v5.0 commands.
+
+### Fixed — .gitignore Protection
+- **Commit guardrail** — `commit` command now checks `.gitignore` for required steroid entries (`.memory/`, `steroid-run.cjs`, `.agents/`, `src/forks/`) before every commit. Auto-restores missing entries with a warning.
+- **Engine skill instruction** — `steroid-engine/SKILL.md` now explicitly forbids overwriting `.gitignore`
+
+### Fixed — Maestro Rules (Affects All Installed Projects)
+- **Title updated** — `v3.0 Maestro` → `v5.0 Maestro`
+- **Error threshold** — `hard-stop at 3` → `hard-stop at 5` (stale since v4.0)
+- **12 new commands added** — memory, recover, stories, review (spec/quality/status), report (generate/list), dashboard
+- **`.gitignore` protection rule** added to Maestro injected content
+
+### Fixed — Installer
+- **Banner** — `6 IDE configs` → `5 IDE configs` (correct count)
+
+### Changed
+- Users who run `npx steroid-workflow@latest update` will get corrected Maestro rules in all IDE configs
+
 ## [5.0.0] "Beyond Code" - 2026-03-13
 
 ### The Vision
