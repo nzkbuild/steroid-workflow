@@ -1,5 +1,20 @@
 # Changelog
 
+## [5.0.2] "Quality at Every Gate" - 2026-03-13
+
+### The Vision
+Dogfooding v5.0.1 on a real portfolio build revealed that while the pipeline runs, its verification is shallow — PASS verdict despite zero tests, unchecked success criteria, stale progress.md, and version mismatches between researched and installed packages. v5.0.2 makes every gate actually verify quality.
+
+### Fixed — Engine Skill (steroid-engine)
+- **Post-Scaffold Update** — Engine must update `progress.md` Codebase Patterns after the first scaffold task (was staying "Unknown" after installing Next.js)
+- **Version Verification** — Engine must cross-check installed package versions vs research.md recommendations (prevents Tailwind 3.4+ researched but v4 installed, causing `@theme` lint errors)
+- **Protected Files** — Explicit no-overwrite list: `.gitignore`, `package.json`, `tsconfig.json`, `.env`, framework configs, `.memory/`
+
+### Fixed — Verify Skill (steroid-verify)
+- **Success Criteria Verification** — Verify must now check spec.md's Success Criteria (SC-001, SC-002, etc.) or explicitly mark as "Requires manual testing" instead of ignoring them
+- **Test Enforcement** — If spec.md has acceptance criteria AND test count is 0, verdict must be CONDITIONAL, not PASS
+- **Infrastructure Checklist** — New mandatory pre-verdict checks: build succeeds, lint clean, deps resolve, `.gitignore` intact, progress.md updated
+
 ## [5.0.1] "Harden the Pipeline" - 2026-03-13
 
 ### The Vision

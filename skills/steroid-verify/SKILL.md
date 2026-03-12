@@ -76,6 +76,27 @@ Extract:
 - All acceptance scenarios (Given/When/Then) from spec.md
 - All completed tasks from plan.md
 - Test framework and run command from context.md
+- All success criteria (SC-001, SC-002, etc.) from spec.md
+
+### Step 1b: Success Criteria Verification (v5.0.2)
+
+Read spec.md for any `## Success Criteria` section. For EACH criterion:
+
+1. **Verify it** — run the check if possible (e.g., `npm run build` for performance)
+2. **Or mark explicitly** as "⚠️ Requires manual testing" with reason
+
+Report in verify.md:
+
+```markdown
+## Success Criteria
+
+| SC | Criterion | Status | Method |
+|----|-----------|--------|--------|
+| SC-001 | Lighthouse 95+ | ⚠️ Manual | Requires browser testing |
+| SC-002 | Theme toggle <100ms | ✅ Verified | Measured via code review |
+```
+
+Do NOT mark verify.md as PASS if mandatory success criteria exist but none were checked.
 
 ### Step 2: Spec Compliance Review
 
@@ -139,6 +160,12 @@ Record:
 
 If NO test framework detected, note this as a gap but don't fail verification.
 
+**Test Enforcement (v5.0.2):** If spec.md has acceptance criteria AND the test count is 0:
+- Verdict MUST be **CONDITIONAL**, not PASS
+- Add warning: "⚠️ No tests found. TDD mandate not followed."
+- List which acceptance criteria lack test coverage
+- Exception: If spec explicitly notes "No tests required" or project is static/docs-only
+
 ### Step 5: Lint & Type Check (If Available)
 
 ```bash
@@ -150,6 +177,18 @@ node steroid-run.cjs 'npx eslint src/ --max-warnings=0 2>&1 | tail -20'
 ```
 
 Only run if the tools are detected in `context.md` / `package.json`.
+
+### Step 5b: Infrastructure Verification (v5.0.2)
+
+Before writing the final verdict, check these physical items:
+
+1. **Build** — `node steroid-run.cjs 'npm run build'` exits 0 (if build script exists)
+2. **Lint warnings** — Run the project's linter. Report warnings AND errors, not just errors.
+3. **Dependencies** — `node steroid-run.cjs 'npm ls --depth=0'` — no unmet peer deps
+4. **Config integrity** — `.gitignore` still contains steroid entries
+5. **Progress updated** — `.memory/progress.md` Codebase Patterns is not "Unknown"
+
+Report each check in verify.md under `## Infrastructure`.
 
 ### Step 6: Determine Overall Status
 

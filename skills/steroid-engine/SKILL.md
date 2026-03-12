@@ -27,6 +27,21 @@ Before marking any task as `[x]`, run the verification guard:
 
 NEVER overwrite the project's `.gitignore`. The installer appends steroid entries (`.memory/`, `steroid-run.cjs`, `.agents/`, `src/forks/`). If you need to create or modify `.gitignore`, ALWAYS APPEND to the existing file — never replace it. The commit command will auto-restore missing entries, but prevention is better than cure.
 
+## Protected Files (v5.0.2)
+
+These files MUST NOT be replaced entirely. Always read first, then modify:
+
+| File | Rule |
+|------|------|
+| `.gitignore` | APPEND only. Never replace. |
+| `package.json` | Add/update fields. Never rewrite from scratch. |
+| `tsconfig.json` | Modify options. Never replace. |
+| `.env` / `.env.local` | NEVER touch. Contains secrets. |
+| `next.config.*` / `vite.config.*` | Read before modifying. |
+| Any file in `.memory/` | Read-only during engine phase. |
+
+If you must create one of these files for a fresh project, ensure existing content (if any) is preserved.
+
 ```
 node steroid-run.cjs verify <path/to/file> --min-lines=<expected>
 ```
@@ -103,6 +118,30 @@ Source: `src/forks/superpowers/subagent.md` — two-stage review loop
 ### Reading Progress First
 
 Before starting any task, read `.memory/progress.md` — especially the **Codebase Patterns** section at the top (if it exists). Previous task iterations may have documented patterns and gotchas that help you avoid repeating mistakes.
+
+### Post-Scaffold Update (v5.0.2)
+
+After completing the FIRST task in plan.md (typically project init/scaffold):
+
+1. Update the **Codebase Patterns** section in `.memory/progress.md` with actual values:
+   - Language (from file extensions and package.json)
+   - Framework (from package.json dependencies)
+   - Package Manager (npm/yarn/pnpm — from lockfile)
+   - Test framework (from devDependencies — jest/vitest/mocha/etc)
+2. This ensures remaining tasks have accurate context instead of "Unknown".
+
+### Version Verification (v5.0.2)
+
+After any `npm install` or scaffold command, verify installed versions match research.md:
+
+```bash
+node steroid-run.cjs 'npm ls <package> --depth=0'
+```
+
+If major version differs from research.md (e.g., research says Tailwind 3.4+ but v4 installed):
+1. Note the mismatch in progress.md Codebase Patterns
+2. Adapt your approach to the INSTALLED version, not the researched one
+3. Check for breaking API changes (e.g., Tailwind v4 uses `@theme` instead of `@tailwind`)
 
 ### Loop: For each `[ ]` task in `.memory/changes/<feature>/plan.md`:
 
