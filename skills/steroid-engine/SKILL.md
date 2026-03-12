@@ -15,7 +15,7 @@ All terminal commands executed by this skill or any sub-agent it dispatches MUST
 node steroid-run.cjs '<command>'
 ```
 
-Direct terminal commands (`npm install`, `npx jest`, `node script.js`, etc.) are strictly forbidden. The `steroid-run` wrapper physically tracks errors in `.memory/execution_state.json`. If the error count reaches 3, the wrapper hard-faults and prevents further execution. The AI has no ability to override this.
+Direct terminal commands (`npm install`, `npx jest`, `node script.js`, etc.) are strictly forbidden. The `steroid-run` wrapper physically tracks errors in `.memory/execution_state.json`. If the error count reaches 5, the wrapper hard-faults and prevents further execution. The AI has no ability to override this.
 
 ## Anti-Summarization Directive
 
