@@ -41,8 +41,21 @@ function friendlyHint(key) {
     return hints[key] || '';
 }
 
-// --- Dynamic Version (v5.2.0) ---
-const SW_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version;
+// --- Dynamic Version (v5.2.0, fixed v5.4.1) ---
+let SW_VERSION = '5.4.1';
+try {
+    // When running from npm package: __dirname = bin/, package.json is ../package.json
+    const pkgPath = path.join(__dirname, '..', 'package.json');
+    if (fs.existsSync(pkgPath)) {
+        SW_VERSION = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+    } else {
+        // When copied to project root: check .memory/.steroid-version
+        const versionFile = path.join(__dirname, '.memory', '.steroid-version');
+        if (fs.existsSync(versionFile)) {
+            SW_VERSION = fs.readFileSync(versionFile, 'utf-8').trim();
+        }
+    }
+} catch { /* use hardcoded fallback */ }
 
 // --- Argument Parsing ---
 const args = process.argv.slice(2);

@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.4.1] HOTFIX - 2026-03-13
+
+### Critical Fix
+- **SW_VERSION crash on fresh install** — `steroid-run.cjs` crashed immediately on any project because `path.join(__dirname, '..', 'package.json')` doesn't exist when the file is copied to the user's project root (which is the normal install case). Fixed with `fs.existsSync` guard, `.memory/.steroid-version` fallback, and hardcoded default.
+
 ## [5.4.0] "Universal Engine" - 2026-03-13
 
 ### The Vision
