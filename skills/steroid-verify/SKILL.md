@@ -189,6 +189,7 @@ Before writing the final verdict, check these physical items:
 5. **Progress updated** — `.memory/progress.md` Codebase Patterns is not "Unknown"
 6. **Version** — `package.json` has a valid semver `version` field (v5.2.0)
 7. **README exists** — Project has a `README.md` with install + run instructions (v5.2.0)
+8. **License audit** (v5.3.0) — Run `node steroid-run.cjs 'npx license-checker --summary 2>/dev/null || echo No license-checker'`. Flag GPL/AGPL (viral — may require open-sourcing), unlicensed, or deprecated packages. For non-technical users: "All dependencies use permissive licenses ✅" or "⚠️ Found GPL dependency"
 
 Report each check in verify.md under `## Infrastructure`.
 

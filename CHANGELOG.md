@@ -1,5 +1,30 @@
 # Changelog
 
+## [5.3.0] "Enterprise Grade" - 2026-03-13
+
+### The Vision
+Steroid now produces output that meets enterprise standards — with license checks, error handling, deployment docs, CI/CD, environment config, code comments, and GitHub setup guidance. No more weekend-hackathon-quality output.
+
+### Added — Verify Skill
+- **License Audit** — Verify checks dependencies for GPL/AGPL (viral licenses), unlicensed, or deprecated packages. Reports in verify.md.
+
+### Added — Architect Skill
+- **Error Handling Baseline** — Every plan auto-includes: error boundaries, loading states, 404 pages, input validation
+- **Environment & Deployment** — Auto-added tasks: .env.example, .gitignore secrets, deployment docs in README, CI/CD workflow (GitHub only)
+
+### Added — Research Skill
+- **Deployment Strategy** — Every research output now includes: platform recommendation, build command, output dir, env vars
+
+### Added — Engine Skill
+- **Commenting Standards** — Module headers, JSDoc on public functions, explain WHY not WHAT, no obvious comments
+- **Remote Check** — After git init, checks for remote. If none: notes "local only", skips CI/CD generation
+
+### Added — Vibe Capture Skill
+- **Remote Repo Check** — Documents whether user has GitHub/remote. Determines if CI/CD and deploy steps are generated downstream.
+
+### Added — CLI (steroid-run.cjs)
+- **`no-remote` Friendly Hint** — Plain-English 4-step GitHub setup guide when no remote is detected
+
 ## [5.2.0] "Ship Ready" - 2026-03-13
 
 ### The Vision

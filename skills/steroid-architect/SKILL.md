@@ -117,6 +117,26 @@ Append these tasks to EVERY execution checklist, regardless of what the user ask
 
 These are non-negotiable. Every project ships with a README and a version.
 
+### 6c. Error Handling Baseline (v5.3.0 — auto-added)
+
+```markdown
+## Error Handling (auto-added)
+- [ ] Add global error boundary (React) or top-level try/catch (Node.js) for unhandled errors
+- [ ] Add loading states/skeletons for async data fetching
+- [ ] Handle unknown routes with a 404 page or redirect
+- [ ] Validate all user input before processing (forms, API params)
+```
+
+### 6d. Environment & Deployment (v5.3.0 — auto-added)
+
+```markdown
+## Ship Readiness (auto-added)
+- [ ] Create .env.example documenting all required environment variables (API keys, URLs, flags) — never commit real secrets
+- [ ] Add .env and .env.local to .gitignore
+- [ ] Add deployment section to README.md: build command, output directory, recommended platform (Vercel/Netlify/Railway)
+- [ ] Create .github/workflows/ci.yml: install → lint → build → test on push/PR (only if GitHub remote exists)
+```
+
 ### 7. Automatic System Handoff
 
 Once `.memory/changes/<feature>/plan.md` is written, do NOT ask the user for permission. Output exactly one sentence:

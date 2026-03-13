@@ -155,6 +155,19 @@ node steroid-run.cjs 'git init && git add -A && git commit -m "Initial commit"'
 
 This is required — the `commit` command will block if `.git/` doesn't exist.
 
+### Remote Check (v5.3.0)
+
+After git init, check if a remote exists:
+
+```bash
+node steroid-run.cjs 'git remote -v'
+```
+
+If no remote is configured:
+1. Note in progress.md: "Remote: None — local only"
+2. Skip `.github/workflows/ci.yml` creation (it's useless without a remote)
+3. The commit command will show a plain-English guide for setting up GitHub
+
 ### Version Verification (v5.0.2)
 
 After any `npm install` or scaffold command, verify installed versions match research.md:
@@ -189,6 +202,12 @@ This gives the user a natural breakpoint to:
 - Stop early if the MVP is already sufficient
 
 **Phase 1: Implementation (TDD)**
+
+**Commenting Standards (v5.3.0):** When implementing code, follow these rules:
+- Each file gets a one-line module header comment explaining its purpose
+- Public functions used by other files get JSDoc with `@param` and `@returns`
+- Complex logic gets a comment explaining WHY, not WHAT
+- No obvious comments (don't write `// increment counter` above `counter++`)
 
 Dispatch a fresh Implementer sub-agent. Provide it with:
 - The full text of the current task from `plan.md`

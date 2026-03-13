@@ -47,6 +47,21 @@ Add a `## Assumptions` section to vibe.md listing any defaults used:
 
 This guides non-technical users without requiring them to understand development.
 
+### 2c. Remote Repo Check (v5.3.0)
+
+If the user's prompt doesn't mention GitHub, version control, or saving to the cloud, add to the Assumptions section:
+
+```markdown
+- Remote repository: None specified — code saved locally only
+```
+
+If the user mentions GitHub or provides a repo URL, note it:
+```markdown
+- Remote repository: https://github.com/user/repo
+```
+
+This determines whether CI/CD and deployment steps are generated later in the pipeline.
+
 ### 3. Anti-Summarization Directive
 
 NEVER summarize the user's intent with "..." or leave fields blank. NEVER use placeholder text like "[to be determined]". Extract a full, cohesive vision from even the vaguest prompt. If unsure, make a reasonable creative decision and document it.

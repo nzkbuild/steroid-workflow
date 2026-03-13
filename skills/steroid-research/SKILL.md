@@ -143,6 +143,17 @@ Every research output MUST include this section, even for simple projects:
 
 For static sites with no user input: "No server-side security concerns. Ensure no API keys or secrets in client bundle."
 
+## Deployment Strategy (v5.3.0 — mandatory)
+
+Every research output MUST include deployment guidance:
+
+- **Platform**: [Vercel/Netlify/Railway/Docker — recommend based on project type]
+- **Build command**: [exact command, e.g., `npm run build`]
+- **Output directory**: [dist/out/.next/build]
+- **Environment variables**: [list from .env.example, or "None"]
+
+For simple static sites: "Deploy `dist/` to Vercel or Netlify. Zero config needed."
+
 ## Open Questions
 
 - [Anything unresolved that the Architect should be aware of]
