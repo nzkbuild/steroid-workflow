@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.9.1] "Universal Agent" - 2026-03-14
+
+### Added
+- **OpenAI Codex support** — `AGENTS.md` auto-generated on init with steroid pipeline instructions
+- **Cline support** — `.clinerules` auto-generated on init with steroid pipeline instructions
+- **Audit agent coverage** — `audit` command now reports all 7 agent config files (Gemini, Cursor, Claude, Codex, Windsurf, Cline, Copilot)
+- **README updated** — 8 supported agents listed (7 auto-configured + Aider via shared maestro)
+
 ## [5.9.0] "Trust Layer" - 2026-03-14
 
 ### Added

@@ -363,6 +363,8 @@ const ideConfigs = [
   { name: 'CLAUDE.md', path: 'CLAUDE.md', label: 'Claude Code' },
   { name: '.windsurfrules', path: '.windsurfrules', label: 'Windsurf' },
   { name: 'copilot-instructions.md', path: '.github/copilot-instructions.md', label: 'GitHub Copilot' },
+  { name: 'AGENTS.md', path: 'AGENTS.md', label: 'OpenAI Codex' },
+  { name: '.clinerules', path: '.clinerules', label: 'Cline' },
 ];
 
 for (const config of ideConfigs) {

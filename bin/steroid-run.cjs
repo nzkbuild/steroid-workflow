@@ -132,7 +132,7 @@ function friendlyHint(key) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '5.9.0';
+let SW_VERSION = '5.9.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -823,6 +823,8 @@ if (args[0] === 'audit') {
         { name: 'CLAUDE.md', path: path.join(targetDir, 'CLAUDE.md') },
         { name: '.windsurfrules', path: path.join(targetDir, '.windsurfrules') },
         { name: '.github/copilot-instructions.md', path: path.join(targetDir, '.github', 'copilot-instructions.md') },
+        { name: 'AGENTS.md', path: path.join(targetDir, 'AGENTS.md') },
+        { name: '.clinerules', path: path.join(targetDir, '.clinerules') },
     ];
 
     // Run core checks

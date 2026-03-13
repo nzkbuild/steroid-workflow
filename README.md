@@ -136,8 +136,10 @@ Works with any AI-powered IDE or CLI:
 | Gemini CLI / Antigravity | `GEMINI.md` |
 | Cursor | `.cursorrules` |
 | Claude Code | `CLAUDE.md` |
+| OpenAI Codex | `AGENTS.md` |
 | GitHub Copilot | `.github/copilot-instructions.md` |
 | Windsurf | `.windsurfrules` |
+| Cline | `.clinerules` |
 | Aider | `.agents/steroid-maestro.md` |
 
 All configs are auto-generated during install.
