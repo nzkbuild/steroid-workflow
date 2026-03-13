@@ -1910,8 +1910,8 @@ DO NOT RUN DESTRUCTIVE COMMANDS. DO NOT ATTEMPT TO SILENTLY FIX THIS.
 Present the user with the exact error log and file context, and ask for
 human validation to pivot the architecture or manually intervene.
 
-Run: npx steroid-run recover     (to review error history)
-Run: npx steroid-run reset       (to resume after fixing)
+Run: node steroid-run.cjs recover     (to review error history)
+Run: node steroid-run.cjs reset       (to resume after fixing)
 ========================================================================
 `);
     process.exit(1);
@@ -1923,7 +1923,7 @@ if (args[0] === 'verify') {
     const minLinesArg = args.find(a => a.startsWith('--min-lines='));
 
     if (!targetFile || !minLinesArg) {
-        console.error("Usage: npx steroid-run verify <file> --min-lines=<number>");
+        console.error("Usage: node steroid-run.cjs verify <file> --min-lines=<number>");
         process.exit(1);
     }
 
@@ -1973,7 +1973,7 @@ if (child.status !== 0) {
         2: 'Re-read your plan. Run: node steroid-run.cjs recover',
         3: 'Self-diagnosing... Run: node steroid-run.cjs recover',
         4: '⚠️ STOP and present errors to user. Run: node steroid-run.cjs recover',
-        5: 'CIRCUIT BREAKER TRIPPED. Run "npx steroid-run reset" to resume.',
+        5: 'CIRCUIT BREAKER TRIPPED. Run "node steroid-run.cjs reset" to resume.',
     };
     const hint = recoveryHints[Math.min(state.error_count, 5)];
     console.error(`\n[steroid-run] ❌ ERROR ${state.error_count}/5. ${hint}`);
