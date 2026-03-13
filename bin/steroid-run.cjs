@@ -42,7 +42,7 @@ function friendlyHint(key) {
 }
 
 // --- Dynamic Version (v5.2.0, fixed v5.4.1) ---
-let SW_VERSION = '5.5.1';
+let SW_VERSION = '5.6.0';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -2019,6 +2019,40 @@ if (args[0] === 'verify') {
 
 // --- Execution Mode ---
 const commandStr = args.join(' ');
+
+// --- Scaffold Safety Guard (v5.6.0) ---
+// Blocks scaffold commands targeting root dir (. or ./) to prevent
+// tools like create-vite from deleting all existing files.
+// See: incident_report.md — portfolio3 directory wipe incident.
+const SCAFFOLD_PATTERNS = [
+    /npm\s+create\s+\S+\s+\.(?:\/|\s|$)/i,      // npm create vite .
+    /npx\s+create-\S+\s+\.(?:\/|\s|$)/i,        // npx create-react-app .
+    /npm\s+init\s+\S+\s+\.(?:\/|\s|$)/i,        // npm init vite .
+    /yarn\s+create\s+\S+\s+\.(?:\/|\s|$)/i,     // yarn create vite .
+    /pnpm\s+create\s+\S+\s+\.(?:\/|\s|$)/i,     // pnpm create vite .
+    /pnpm\s+dlx\s+create-\S+\s+\.(?:\/|\s|$)/i, // pnpm dlx create-vite .
+    /bunx?\s+create-\S+\s+\.(?:\/|\s|$)/i,      // bun create-vite . | bunx create-vite .
+];
+
+for (const pattern of SCAFFOLD_PATTERNS) {
+    if (pattern.test(commandStr)) {
+        const safeName = '.steroid-scaffold-tmp';
+        const safeCmd = commandStr
+            .replace(/\s+\.\/?\s*/, ` ${safeName} `)
+            .replace(/\s+\.\/?\s*$/, ` ${safeName}`);
+        console.error(`\n[STEROID-SCAFFOLD-GUARD] 🛑 BLOCKED: In-place scaffold detected!`);
+        console.error(`  Command: "${commandStr}"`);
+        console.error(`  Risk: Scaffold tools may DELETE ALL existing files in the current directory.`);
+        console.error(`  This would destroy .git/, .memory/, steroid-run.cjs, and all infrastructure.\n`);
+        console.error(`  ✅ SAFE ALTERNATIVE:`);
+        console.error(`    1. node steroid-run.cjs '${safeCmd}'`);
+        console.error(`    2. Copy files from ${safeName}/ to root (merge, don't overwrite)`);
+        console.error(`    3. Remove ${safeName}/`);
+        console.error(`    4. npm install\n`);
+        process.exit(1);
+    }
+}
+
 console.log(`[steroid-run] Executing: ${commandStr}`);
 
 const child = spawnSync(commandStr, {

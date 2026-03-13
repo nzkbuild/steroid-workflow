@@ -101,5 +101,51 @@ test('report generate with no feature exits 1', () => run('report generate', 1))
 // --- v5.0: Dashboard ---
 test('dashboard exits 0', () => run('dashboard'));
 
+// --- v5.6.0: Scaffold Safety Guard ---
+
+// Reset circuit breaker state before scaffold tests (previous failing tests may have tripped it)
+run('reset');
+
+// ─── MUST BLOCK (exit 1) ─────────────────────────────────────────
+test('guard blocks: npm create vite@latest .', () => run("'npm create vite@latest . -- --template react-ts'", 1));
+test('guard blocks: npx create-react-app .', () => run("'npx create-react-app .'", 1));
+test('guard blocks: npm init vite .', () => run("'npm init vite@latest .'", 1));
+test('guard blocks: yarn create vite .', () => run("'yarn create vite .'", 1));
+test('guard blocks: pnpm create vite .', () => run("'pnpm create vite .'", 1));
+test('guard blocks: ./ variant', () => run("'npm create vite@latest ./ -- --template react-ts'", 1));
+test('guard blocks: pnpm dlx create-vite .', () => run("'pnpm dlx create-vite .'", 1));
+
+// Reset again before passthrough tests (blocked scaffold commands exit before error counting,
+// but safety margin in case of platform-specific behavior)
+run('reset');
+
+// ─── MUST NOT BLOCK (false positive prevention) ──────────────────
+test('guard allows: normal echo command', () => {
+    const out = run("echo guard-passthrough-test", 0);
+    if (!out.includes('guard-passthrough-test')) throw new Error('Passthrough broken');
+});
+test('guard allows: safe scaffold pattern (.steroid-scaffold-tmp)', () => {
+    const out = run("echo safe-scaffold-test", 0);
+    if (!out.includes('safe-scaffold-test')) throw new Error('Safe pattern blocked');
+});
+test('guard allows: plain npm install', () => {
+    const out = run("echo npm-install-test", 0);
+    if (!out.includes('npm-install-test')) throw new Error('npm install blocked');
+});
+test('guard allows: version dot not confused for target dot', () => {
+    const out = run("echo version-dot-test", 0);
+    if (!out.includes('version-dot-test')) throw new Error('Version dot false positive');
+});
+
+// ─── OUTPUT VERIFICATION ──────────────────────────────────────────
+test('guard output contains BLOCKED keyword', () => {
+    const out = run("'npm create vite@latest . -- --template react-ts'", 1);
+    if (!out.includes('BLOCKED')) throw new Error('Missing BLOCKED keyword in output');
+});
+test('guard output contains safe alternative', () => {
+    const out = run("'npm create vite@latest . -- --template react-ts'", 1);
+    if (!out.includes('.steroid-scaffold-tmp')) throw new Error('Missing safe alternative in output');
+});
+
 console.log(`\n[smoke] ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -58,6 +58,22 @@ node steroid-run.cjs verify <path/to/file> --min-lines=<expected>
 
 If the file is shorter than expected, the verify command will exit with an error, blocking the task from completion.
 
+## Scaffold Safety (v5.6.0)
+
+NEVER run scaffold commands (`npm create`, `npx create-*`, `npm init`, `yarn create`, `pnpm create`) targeting the project ROOT directory (`.`).
+
+The circuit breaker will physically block these commands. If you attempt `node steroid-run.cjs 'npm create vite . ...'`, the circuit breaker will refuse execution and suggest the safe alternative.
+
+**Safe pattern:**
+1. Scaffold into a temp subdirectory:
+   `node steroid-run.cjs 'npm create vite@latest .steroid-scaffold-tmp -- --template react-ts'`
+2. Move scaffolded files into root (merge, don't overwrite existing):
+   `node steroid-run.cjs 'cp -r .steroid-scaffold-tmp/* . && cp .steroid-scaffold-tmp/.* . 2>/dev/null; rm -rf .steroid-scaffold-tmp'`
+   On Windows: `node steroid-run.cjs 'xcopy .steroid-scaffold-tmp\* . /E /Y && rmdir /S /Q .steroid-scaffold-tmp'`
+3. Run `node steroid-run.cjs 'npm install'`
+
+**Why:** Scaffold tools like `create-vite` prompt "Remove existing files and continue" when the target directory is non-empty. If the AI selects this option (intentionally or accidentally), it deletes `.git/`, `.memory/`, `steroid-run.cjs`, and all infrastructure — destroying the circuit breaker itself and making recovery impossible.
+
 ## Phase Gate (Physical Enforcement)
 
 Before doing anything, run the gate check:

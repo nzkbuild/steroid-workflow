@@ -56,7 +56,7 @@ Write the output to `.memory/changes/<feature>/plan.md` using this exact format:
 - Styling: [from research.md Standard Stack]
 
 ## Execution Checklist
-- [ ] Initialize [framework] project in current directory
+- [ ] Initialize [framework] project via temp-directory scaffold (see engine scaffold safety)
 - [ ] Install and configure [from research.md installation command]
 - [ ] Create [Component A] with layout and placeholder content
 - [ ] Write test for [Component A] core behavior (Story 1, AC 1)
@@ -184,7 +184,7 @@ Output (.memory/changes/habit-tracker/plan.md):
 - Styling: Tailwind CSS 3.4
 
 ## Execution Checklist
-- [ ] Initialize Vite + React project with TypeScript template
+- [ ] Scaffold Vite + React project into .steroid-scaffold-tmp and merge into root
 - [ ] Install tailwindcss chart.js react-chartjs-2 date-fns and configure Tailwind
 - [ ] Create HabitCard component with name, icon, and completion toggle (Story 1)
 - [ ] Write test: HabitCard toggles completion state on click (Story 1, AC 2)

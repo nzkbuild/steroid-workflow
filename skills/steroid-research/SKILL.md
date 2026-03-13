@@ -254,7 +254,8 @@ The biggest risk is date/time handling for streak calculations. Using date-fns p
 
 ### Installation
 ```bash
-npm create vite@latest . -- --template react-ts
+npm create vite@latest .steroid-scaffold-tmp -- --template react-ts
+# Then merge into project root (see steroid-engine scaffold safety rules)
 npm install tailwindcss chart.js react-chartjs-2 date-fns
 ```
 
