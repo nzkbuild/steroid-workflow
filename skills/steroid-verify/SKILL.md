@@ -145,30 +145,55 @@ Categorize issues by severity:
 - ⚠️ **Important** — Works but fragile (no error handling, hardcoded values)
 - ℹ️ **Minor** — Cosmetic or style issues (naming, unused imports)
 
-### Step 3b: AI Code Smell Scan (v5.5.0)
+### Step 3b: AI Code Smell Scan (v5.5.0, upgraded v5.5.1)
 
-AI models frequently produce code with invisible defects that non-technical users will never catch. Scan ALL created/modified files for these patterns:
+AI models frequently produce code with invisible defects that non-technical users will never catch. Run these scans on the project:
+
+**1. Dead Code & Phantom Dependencies** — via `knip` (MIT, 2M+ downloads)
 
 ```bash
-# Phantom imports — packages referenced but not in package.json
-node steroid-run.cjs 'grep -rn "require(" <file> | grep -v node_modules'
-node steroid-run.cjs 'grep -rn "from ." <file> | grep -v node_modules'
-# Cross-reference with: cat package.json | grep dependencies
-
-# Hardcoded secrets — API keys, tokens, passwords in source
-node steroid-run.cjs 'grep -rnE "(sk-|pk_live_|ghp_|Bearer |password\s*=\s*\")" <file>'
-
-# Placeholder URLs and content
-node steroid-run.cjs 'grep -rnE "(example\.com|lorem ipsum|placeholder|https?://api\.example)" <file>'
-
-# Deprecated React patterns (if React project)
-node steroid-run.cjs 'grep -rnE "(componentWillMount|componentWillReceiveProps|getInitialProps|findDOMNode)" <file>'
+node steroid-run.cjs 'npx knip --no-exit-code --reporter compact 2>&1 | head -50'
 ```
 
-If ANY of these are found:
-- Categorize as 🛑 **Critical** (phantom imports, secrets) or ⚠️ **Important** (placeholders, deprecated APIs)
-- The final verdict MUST be **CONDITIONAL**, not PASS
-- Document each finding with file path, line number, and explanation
+`knip` detects: unused files, unused exports, unused dependencies, AND missing dependencies (packages imported but not in `package.json`). It handles dynamic imports, TypeScript path aliases, and framework-specific patterns that grep cannot.
+
+If `knip` reports missing dependencies → 🛑 **Critical** (app will crash on launch).
+If `knip` reports unused dependencies → ⚠️ **Important** (bloated bundle).
+
+**2. Circular Dependencies** — via `madge` (MIT)
+
+```bash
+node steroid-run.cjs 'npx madge --circular src/ 2>&1 | head -30'
+```
+
+Circular imports (A → B → C → A) cause `undefined` values at runtime. AI-generated code creates these constantly because the AI doesn't see the global dependency graph. If `madge` finds any → 🛑 **Critical**.
+
+**3. Hardcoded Secrets** — via `gitleaks` (MIT, 100+ patterns)
+
+```bash
+node steroid-run.cjs 'npx @ziul285/gitleaks detect --no-git --source . 2>&1 | head -30'
+```
+
+Covers AWS, Stripe, Twilio, Firebase, Supabase, SendGrid, GitHub tokens, and 90+ other services. If any secrets found → 🛑 **Critical** (security breach risk).
+
+If `gitleaks` is unavailable (Go binary not supported on platform), fall back to:
+```bash
+node steroid-run.cjs 'grep -rnE "(sk-|pk_live_|ghp_|AKIA|rk_live_|Bearer |password\s*=\s*\")" src/ --include="*.{js,ts,jsx,tsx,py}" | head -20'
+```
+
+**4. Placeholder Content & Deprecated APIs** (grep — no good MIT tool exists)
+
+```bash
+# Placeholder URLs and content
+node steroid-run.cjs 'grep -rnE "(example\.com|lorem ipsum|placeholder|https?://api\.example)" src/ --include="*.{js,ts,jsx,tsx}" | head -20'
+
+# Deprecated React patterns (if React project)
+node steroid-run.cjs 'grep -rnE "(componentWillMount|componentWillReceiveProps|findDOMNode)" src/ --include="*.{js,ts,jsx,tsx}" | head -20'
+```
+
+If placeholders found → ⚠️ **Important**. If deprecated APIs found → ⚠️ **Important**.
+
+**Verdict Rule**: If ANY 🛑 Critical finding exists, the final verdict MUST be **CONDITIONAL**, not PASS. Document each finding with file path, line number, and explanation.
 
 ### Step 4: Test Execution
 

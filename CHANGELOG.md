@@ -1,5 +1,33 @@
 # Changelog
 
+## [5.5.1] - 2026-03-13
+
+### Added
+- **Version automation**: `prepublishOnly` hook auto-patches `SW_VERSION` fallback
+- **`knip` integration**: Dead code and phantom dependency detection (replaces grep)
+- **`madge` integration**: Circular dependency detection in verify phase
+- **`gitleaks` integration**: 100+ secret pattern scanning (with grep fallback)
+- **Pattern Persistence**: Engine writes patterns to `.memory/knowledge/` for cross-feature learning
+- **Session Learnings**: Engine captures technical insights in `progress.md`
+
+### Fixed
+- `SW_VERSION` hardcoded fallback was stale (`5.4.1` instead of `5.5.0`)
+
+## [5.5.0] "Quality of Life" - 2026-03-13
+
+### Added
+- **Adaptive Discussion**: AI detects user technical level and adapts questions
+- **Hard Constraints**: `Hard Constraints & Directives` field prevents prompt loss
+- **Brownfield/Greenfield Detection**: Prevents accidental overwrites on existing projects
+- **Anti-Deletion Guard**: AI cannot delete existing code unless spec says to
+- **True TDD Guard**: Trivial tests forbidden
+- **Anti-Loop Directive**: At Error 3/5, AI must stop guessing and re-read files
+- **AI Code Smell Scan**: Phantom imports, secrets, placeholders, deprecated APIs
+- **Bug Report Generator**: `node steroid-run.cjs report`
+- **Industry Standards & Compliance**: GDPR, HIPAA, PCI DSS, WCAG, OWASP checks
+- **Compliance Baseline**: Auto-added checklist items in architect phase
+- **Constraint Pass-Through**: User directives survive vibe → spec → research unchanged
+
 ## [5.4.1] HOTFIX - 2026-03-13
 
 ### Critical Fix

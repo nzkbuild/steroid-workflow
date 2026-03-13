@@ -72,6 +72,19 @@ Most AI coding tools rely on **suggestions** — hoping the AI follows instructi
 - 🚫 **Anti-summarization** — The AI can't write "...rest of code here..." and call it done
 - 🔀 **Gate checks** — Each phase requires the previous phase's output to exist
 
+## AI Guardrails (v5.5.0+)
+
+Steroid actively protects non-technical users from common AI coding mistakes:
+
+- 🧠 **Adaptive Discussion** — AI detects your technical level and asks appropriate questions
+- 📌 **Prompt Preservation** — Your exact requirements ("must use Framer Motion", "do NOT use a database") survive the entire pipeline unchanged
+- 🏗️ **Brownfield Detection** — Won't scaffold over your existing project
+- 🛡️ **Anti-Deletion Guard** — AI can't silently remove your working code
+- 🧪 **True TDD Guard** — Fake tests like `expect(true).toBe(true)` are blocked
+- 🔄 **Anti-Loop Directive** — Stops AI from guessing the same broken fix repeatedly
+- 🔍 **Code Smell Scan** — Uses `knip`, `madge`, and `gitleaks` to catch phantom imports, circular deps, and leaked secrets
+- 📋 **Bug Reports** — Run `node steroid-run.cjs report` to generate a diagnostic snapshot
+
 ## Enterprise-Grade Output (v5.3.0+)
 
 Every project built by steroid automatically includes:

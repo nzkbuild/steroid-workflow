@@ -42,7 +42,7 @@ function friendlyHint(key) {
 }
 
 // --- Dynamic Version (v5.2.0, fixed v5.4.1) ---
-let SW_VERSION = '5.4.1';
+let SW_VERSION = '5.5.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');

@@ -300,6 +300,24 @@ Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-qual
 
 Only add patterns that are **general and reusable**, not task-specific details.
 
+**Pattern Persistence (v5.5.1):** Additionally, save the same patterns to the knowledge store so they survive across features:
+```
+node steroid-run.cjs memory write patterns '{"pattern": "<what you learned>", "context": "<why it matters>"}'
+```
+
+This ensures the scan skill picks up your learnings at the start of the NEXT feature — even in a fresh conversation.
+
+6. **(v5.5.1) Session Learnings** — After each completed task, append a learnings block to `progress.md`:
+
+```markdown
+## Learnings (Session <date>)
+- <specific technical insight, e.g., "Tailwind v4 removed @apply — use CSS variables instead">
+- <gotcha encountered, e.g., "Next.js 15 requires 'use client' for any component using useState">
+- <tool/version quirk, e.g., "This project uses pnpm — npm install will create a conflicting lockfile">
+```
+
+This is NOT optional. Even if the task went smoothly, document at least one learning. "No issues encountered — standard implementation" is acceptable only if genuinely nothing was learned.
+
 **Step 5: Check Completion & Loop**
 
 After completing a task, physically check if all tasks are done:
