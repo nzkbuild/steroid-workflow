@@ -178,6 +178,24 @@ node steroid-run.cjs 'npx eslint src/ --max-warnings=0 2>&1 | tail -20'
 
 Only run if the tools are detected in `context.md` / `package.json`.
 
+### Step 5a+: Language-Aware Verification (v5.4.0)
+
+Read the tech stack from context.md and use the appropriate commands:
+
+| Language | Build | Lint | Type Check | Test |
+|----------|-------|------|------------|------|
+| JS/TS | `npm run build` | `npx eslint src/` | `npx tsc --noEmit` | `npm test` |
+| Python | `python -m py_compile *.py` | `flake8` or `ruff check .` | `mypy .` | `pytest` |
+| Rust | `cargo build` | `cargo clippy` | (built-in) | `cargo test` |
+| Go | `go build ./...` | `golangci-lint run` | (built-in) | `go test ./...` |
+| Java | `mvn compile` or `gradle build` | `checkstyle` | (compiler) | `mvn test` or `gradle test` |
+| Ruby | (none) | `rubocop` | (none) | `rspec` or `rake test` |
+| PHP | (none) | `phpcs` or `phpstan` | (none) | `phpunit` |
+
+Wrap ALL commands in: `node steroid-run.cjs '<command>'`
+
+Only run the checks that match the detected language. Skip unavailable tools gracefully.
+
 ### Step 5b: Infrastructure Verification (v5.0.2)
 
 Before writing the final verdict, check these physical items:

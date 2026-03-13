@@ -119,6 +119,23 @@ src/
 ### Key Patterns
 - **[Pattern Name]**: [description and when to use it]
 
+### Complex Architecture (v5.4.0 — investigate if applicable)
+
+If context.md or the user's request involves any of these, research them specifically:
+
+| Pattern | When to Investigate | What to Research |
+|---------|-------------------|-----------------|
+| Monorepo | Multiple packages/apps in one repo | Workspace tool (turborepo/nx/pnpm workspaces), shared deps |
+| Docker | Deployment isolation or services | Dockerfile patterns, docker-compose for dev, multi-stage builds |
+| Microservices | Multiple backends communicating | API gateway, service communication (REST/gRPC/message queue) |
+| Multi-language | Python + JS, Go + React, etc. | Project structure, build orchestration, shared types |
+| Database | Persistent data needed | ORM choice, migration strategy, seed data, connection pooling |
+| Auth | User accounts or protected routes | Provider (Clerk/Auth.js/Supabase Auth/JWT), token storage |
+| Real-time | Live updates or collaboration | WebSocket vs SSE vs polling, state sync |
+| CI/CD | Auto-deploy needed | GitHub Actions, Vercel, Railway, Docker registry |
+
+If none of these patterns apply, skip this section.
+
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |

@@ -168,6 +168,20 @@ If no remote is configured:
 2. Skip `.github/workflows/ci.yml` creation (it's useless without a remote)
 3. The commit command will show a plain-English guide for setting up GitHub
 
+### Multi-Directory Projects (v5.4.0)
+
+If plan.md contains tasks targeting different sub-directories (monorepo, separate frontend/backend):
+
+1. Note the target directory for each task in progress.md
+2. Run `node steroid-run.cjs` commands from the project ROOT, not sub-directories
+3. When installing packages in sub-projects, specify the path:
+   ```bash
+   node steroid-run.cjs 'cd apps/web && npm install <package>'
+   node steroid-run.cjs 'cd apps/api && pip install <package>'
+   ```
+4. Run verify commands against each sub-project separately
+5. Commit from root — steroid tracks the entire repo, not sub-directories
+
 ### Version Verification (v5.0.2)
 
 After any `npm install` or scaffold command, verify installed versions match research.md:

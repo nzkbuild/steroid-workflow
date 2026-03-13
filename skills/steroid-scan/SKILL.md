@@ -43,13 +43,30 @@ node steroid-run.cjs 'cat go.mod 2>/dev/null | head -30'
 
 # Rust projects
 node steroid-run.cjs 'cat Cargo.toml 2>/dev/null | head -30'
+
+# Java/Kotlin projects (v5.4.0)
+node steroid-run.cjs 'cat pom.xml 2>/dev/null | head -40 || cat build.gradle 2>/dev/null | head -40'
+
+# Ruby projects (v5.4.0)
+node steroid-run.cjs 'cat Gemfile 2>/dev/null | head -30'
+
+# PHP projects (v5.4.0)
+node steroid-run.cjs 'cat composer.json 2>/dev/null | head -40'
+
+# .NET/C# projects (v5.4.0)
+node steroid-run.cjs 'ls *.csproj *.fsproj 2>/dev/null | head -5'
+
+# Flutter/Dart projects (v5.4.0)
+node steroid-run.cjs 'cat pubspec.yaml 2>/dev/null | head -30'
 ```
 
+Check ALL of the above — a project may use multiple languages (e.g., Node.js frontend + Python backend).
+
 Extract:
-- Primary language and version
-- Framework (React, Next.js, Express, Django, etc.)
+- Primary language and version (may be multiple for monorepos)
+- Framework (React, Next.js, Express, Django, Spring, Rails, Laravel, etc.)
 - Key dependencies (database clients, auth libraries, UI frameworks)
-- Build tool (Vite, Webpack, esbuild, etc.)
+- Build tool (Vite, Webpack, esbuild, Maven, Gradle, Cargo, etc.)
 
 ### Step 2: Map Project Structure
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.4.0] "Universal Engine" - 2026-03-13
+
+### The Vision
+Steroid is no longer a Node.js-only tool. v5.4.0 transforms it into a universal pipeline that detects, builds, and verifies projects in 10 languages, handles monorepos and complex architectures, and ships with a README that reflects everything it can do.
+
+### Added — Scan Skill
+- **10-Language Detection** — Now detects: JavaScript/TypeScript, Python, Rust, Go, Java/Kotlin, Ruby, PHP, C#/.NET, Dart/Flutter. Checks ALL manifest files to support multi-language projects.
+
+### Added — Research Skill
+- **Complex Architecture Table** — If a project involves monorepos, Docker, microservices, multi-language, databases, auth, real-time, or CI/CD, the research skill now investigates them specifically with a guided research matrix.
+
+### Added — Engine Skill
+- **Multi-Directory Projects** — Engine now handles monorepo workspaces (apps/web, apps/api) with guidance for per-subdirectory commands, root-level commits, and separate verification.
+
+### Added — Verify Skill
+- **Language-Aware Verification** — Build, lint, type check, and test commands now adapt to the detected language (Python: pytest/flake8, Rust: cargo test/clippy, Go: go test, Java: mvn test, etc.)
+
+### Changed — README.md
+- **Full Overhaul** — README now reflects v5.x features: multi-language support table, enterprise-grade output section, two-stage review, dashboard analytics, and supported IDE matrix.
+
 ## [5.3.0] "Enterprise Grade" - 2026-03-13
 
 ### The Vision
