@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.7.0] "Organized" - 2026-03-14
+
+### Added
+- **GitHub Actions CI** — Automated test runs on push/PR for Node 18, 20, and 22
+- **Extracted utility modules** — `src/utils/merge-knowledge.cjs` and `src/utils/friendly-hints.cjs` for independent unit testing (canonical copies remain inline in `steroid-run.cjs`)
+- **JSDoc annotations** — All 22+ command handlers, utility functions, and constants documented with JSDoc types and descriptions
+- **Section map** — File-level header in `steroid-run.cjs` with navigable section index (line numbers for every command)
+
+### Changed
+- **Code organization** — `steroid-run.cjs` reorganized with 11 major section dividers (`═══`) grouping related commands: Circuit Breaker, Reports, Knowledge, Pipeline Enforcement, Intelligence, Review System, Analytics, and Execution Guards
+
 ## [5.6.1] "Hardened" - 2026-03-14
 
 ### Security

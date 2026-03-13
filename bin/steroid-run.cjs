@@ -1,18 +1,98 @@
 #!/usr/bin/env node
+/**
+ * steroid-run.cjs — The physical pipeline enforcer for AI-driven development.
+ *
+ * This file is the single-file CLI that gets copied to user projects during
+ * `npx steroid-workflow init`. It must remain self-contained (no require()
+ * to external modules). Utility functions also exist in src/utils/ for
+ * unit testing, but this file is the canonical source of truth for distribution.
+ *
+ * @module steroid-run
+ * @version 5.7.0
+ *
+ * SECTION MAP (for navigation):
+ * ─────────────────────────────────────────────────────────────────
+ *  L1-13      Imports & Constants
+ *  L15-42     Utility Functions (mergeKnowledge, friendlyHint)
+ *  L44-58     Dynamic Version Resolution
+ *  L60-127    Argument Parsing & Help Text
+ *  L129-142   State Initialization
+ * ─── COMMANDS: Circuit Breaker ───────────────────────────────────
+ *  L144       CMD: reset
+ *  L224       CMD: recover
+ *  L312       CMD: status
+ * ─── COMMANDS: Reports & Bug Reports ─────────────────────────────
+ *  L156       CMD: report (bug)
+ *  L1709      CMD: report (generate/show/list)
+ * ─── COMMANDS: Knowledge & Progress ──────────────────────────────
+ *  L329       CMD: progress
+ *  L351       CMD: memory (show/write/stats)
+ * ─── COMMANDS: Pipeline Enforcement ──────────────────────────────
+ *  L503       CMD: audit
+ *  L742       CMD: init-feature
+ *  L785       CMD: gate
+ *  L853       CMD: commit
+ *  L920       CMD: log
+ *  L946       CMD: check-plan
+ *  L987       CMD: stories
+ *  L1096      CMD: archive
+ *  L1232      CMD: scan
+ *  L1539      CMD: verify-feature
+ * ─── COMMANDS: Intelligence ──────────────────────────────────────
+ *  L1436      CMD: detect-intent
+ *  L1487      CMD: detect-tests
+ * ─── COMMANDS: Review System ─────────────────────────────────────
+ *  L1571      CMD: review (spec/quality/status/reset)
+ * ─── COMMANDS: Analytics ─────────────────────────────────────────
+ *  L1874      CMD: dashboard
+ * ─── EXECUTION & GUARDS ──────────────────────────────────────────
+ *  L1974      Circuit Breaker Check
+ *  L1993      Verify (Anti-Summarization)
+ *  L2023      Scaffold Safety Guard
+ *  L2055      Command Allowlist Guard
+ *  L2087      Shell Execution
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+// ═══════════════════════════════════════════════════════════════════
+// § IMPORTS & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+/** @type {string} Current working directory (user's project root) */
 const targetDir = process.cwd();
+/** @type {string} Path to circuit breaker state file */
 const stateFile = path.join(targetDir, '.memory', 'execution_state.json');
+/** @type {string} Root of steroid memory directory */
 const memoryDir = path.join(targetDir, '.memory');
+/** @type {string} Directory containing per-feature change folders */
 const changesDir = path.join(memoryDir, 'changes');
+/** @type {string} Path to progress log */
 const progressFile = path.join(memoryDir, 'progress.md');
+/** @type {string} Directory for knowledge stores (tech-stack, patterns, decisions, gotchas) */
 const knowledgeDir = path.join(memoryDir, 'knowledge');
+/** @type {string} Directory for metrics (error-patterns, features) */
 const metricsDir = path.join(memoryDir, 'metrics');
+/** @type {string} Directory for handoff reports */
 const reportsDir = path.join(memoryDir, 'reports');
 
-// --- Knowledge Merge Helper (v4.0) ---
+// ═══════════════════════════════════════════════════════════════════
+// § UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Deep-merges two knowledge store objects.
+ * - Arrays: deduplicates via Set union
+ * - Objects: recursively merges
+ * - Primitives: incoming overwrites existing
+ *
+ * @param {Record<string, any>} existing - Current store contents
+ * @param {Record<string, any>} incoming - New data to merge
+ * @returns {Record<string, any>} Merged result (inputs not mutated)
+ * @see src/utils/merge-knowledge.cjs (identical copy for unit testing)
+ */
 function mergeKnowledge(existing, incoming) {
     const result = { ...existing };
     for (const [key, value] of Object.entries(incoming)) {
@@ -28,7 +108,14 @@ function mergeKnowledge(existing, incoming) {
     return result;
 }
 
-// --- Friendly Message Helper (v5.1.0) ---
+/**
+ * Returns a friendly plain-English hint for common error scenarios.
+ * Designed to help non-technical users understand what to do next.
+ *
+ * @param {'gate-blocked'|'gate-incomplete'|'circuit-tripped'|'git-failed'|'no-git'|'no-remote'} key
+ * @returns {string} The hint message, or empty string if key is unknown
+ * @see src/utils/friendly-hints.cjs (identical copy for unit testing)
+ */
 function friendlyHint(key) {
     const hints = {
         'gate-blocked': '\n  💡 This is normal — the AI needs to finish the previous step first.\n  Ask it to "continue with the steroid pipeline."',
@@ -41,8 +128,10 @@ function friendlyHint(key) {
     return hints[key] || '';
 }
 
-// --- Dynamic Version (v5.2.0, fixed v5.4.1) ---
-let SW_VERSION = '5.6.1';
+// ═══════════════════════════════════════════════════════════════════
+// § DYNAMIC VERSION
+// ═══════════════════════════════════════════════════════════════════
+let SW_VERSION = '5.7.0';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -57,7 +146,9 @@ try {
     }
 } catch { /* use hardcoded fallback */ }
 
-// --- Argument Parsing ---
+// ═══════════════════════════════════════════════════════════════════
+// § ARGUMENT PARSING & HELP
+// ═══════════════════════════════════════════════════════════════════
 const args = process.argv.slice(2);
 
 if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
@@ -126,7 +217,9 @@ Run 'recover' after any error for smart fix suggestions.
     process.exit(0);
 }
 
-// --- Ensure state file exists ---
+// ═══════════════════════════════════════════════════════════════════
+// § STATE INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════
 if (!fs.existsSync(stateFile)) {
     if (!fs.existsSync(path.dirname(stateFile))) {
         fs.mkdirSync(path.dirname(stateFile), { recursive: true });
@@ -141,7 +234,11 @@ try {
     state = { error_count: 0, last_error: null, status: 'active', recovery_actions: [], error_history: [] };
 }
 
-// --- Reset Command (P0 Fix B2) ---
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: CIRCUIT BREAKER (reset, recover, status)
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: reset — Reset the circuit breaker error counter to 0 */
 if (args[0] === 'reset') {
     state.error_count = 0;
     state.last_error = null;
@@ -153,7 +250,11 @@ if (args[0] === 'reset') {
     process.exit(0);
 }
 
-// --- Report Command (Bug Report Generator — v5.5.0) ---
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: REPORTS & BUG REPORTS
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: report bug — Generate a bug report with system state */
 if (args[0] === 'report' && (!args[1] || args[1] === '--help' || args[1] === 'bug')) {
     const reportFile = path.join(memoryDir, 'bug-report.md');
     const timestamp = new Date().toISOString();
@@ -221,6 +322,7 @@ if (args[0] === 'report' && (!args[1] || args[1] === '--help' || args[1] === 'bu
     process.exit(0);
 }
 
+/** CMD: recover — Smart recovery guidance based on error count (5 graduated levels) */
 // --- Recover Command (Smart recovery — v4.0) ---
 // Source: src/forks/superpowers implementer-prompt.md status types
 if (args[0] === 'recover') {
@@ -309,7 +411,7 @@ if (args[0] === 'recover') {
     process.exit(level >= 5 ? 1 : 0);
 }
 
-// --- Status Command ---
+/** CMD: status — Show current circuit breaker state and recovery level */
 if (args[0] === 'status') {
     const levels = ['🟢 CLEAR', '🟡 LOGGED', '🟠 RE-READ', '🔶 DIAGNOSING', '🔴 ESCALATED', '🛑 TRIPPED'];
     const level = Math.min(state.error_count, 5);
@@ -326,7 +428,11 @@ if (args[0] === 'status') {
     process.exit(0);
 }
 
-// --- Progress Command (Ralph pattern) ---
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: KNOWLEDGE & PROGRESS
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: progress — Show execution learnings log */
 if (args[0] === 'progress') {
     const progressFile = path.join(targetDir, '.memory', 'progress.md');
     if (!fs.existsSync(progressFile)) {
@@ -348,6 +454,7 @@ if (args[0] === 'progress') {
     process.exit(0);
 }
 
+/** CMD: memory — Structured knowledge store (show/show-all/write/stats) */
 // --- Memory Command (Structured knowledge store — v4.0) ---
 // Source: src/forks/memorycore/master-memory.md + src/forks/ralph/AGENTS.md
 if (args[0] === 'memory') {
@@ -500,7 +607,11 @@ Stores:
     process.exit(1);
 }
 
-// --- Audit Command (Verify all enforcement layers) ---
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: DIAGNOSTICS
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: audit — Verify all enforcement layers are properly installed */
 if (args[0] === 'audit') {
     // Version display
     let version = 'unknown';
@@ -739,6 +850,7 @@ if (args[0] === 'audit') {
 // PIPELINE ENFORCEMENT COMMANDS (Ported from ecosystem forks)
 // ============================================================
 
+/** CMD: init-feature — Create feature folder with progress.md template */
 // --- Init Feature Command (Ported from OpenSpec change-utils.ts) ---
 // Source: src/forks/openspec/src/utils/change-utils.ts validateChangeName() + createChange()
 if (args[0] === 'init-feature') {
@@ -782,7 +894,7 @@ if (args[0] === 'init-feature') {
     process.exit(0);
 }
 
-// --- Gate Command (Phase prerequisites — new, no fork has this) ---
+/** CMD: gate — Check phase prerequisites before proceeding */
 if (args[0] === 'gate') {
     const phase = args[1];
     const feature = args[2];
@@ -850,6 +962,7 @@ if (args[0] === 'gate') {
     process.exit(0);
 }
 
+/** CMD: commit — Atomic git commit with steroid format prefix */
 // --- Commit Command (Atomic commit — adapted from Ralph/GSD patterns) ---
 // Source: src/forks/ralph/prompt.md atomic commit format
 if (args[0] === 'commit') {
@@ -917,6 +1030,7 @@ if (args[0] === 'commit') {
     process.exit(0);
 }
 
+/** CMD: log — Append a message to the feature progress log */
 // --- Log Command (Ported from Ralph ralph.sh progress pattern) ---
 // Source: src/forks/ralph/ralph.sh lines 76-79 (progress init) + prompt.md learnings format
 if (args[0] === 'log') {
@@ -943,7 +1057,7 @@ if (args[0] === 'log') {
     process.exit(0);
 }
 
-// --- Check Plan Command (Physical task counter — new) ---
+/** CMD: check-plan — Count remaining tasks in plan.md */
 if (args[0] === 'check-plan') {
     const feature = args[1];
     if (!feature) {
@@ -984,6 +1098,7 @@ if (args[0] === 'check-plan') {
     }
 }
 
+/** CMD: stories — List prioritized stories or get next story to work on */
 // --- Stories Command (Prioritized story execution — v4.0) ---
 // Source: src/forks/spec-kit tasks-template.md + src/forks/ralph prd.json
 if (args[0] === 'stories') {
@@ -1093,6 +1208,7 @@ if (args[0] === 'stories') {
     process.exit(1);
 }
 
+/** CMD: archive — Archive completed feature to .memory/archive/ */
 // --- Archive Command (Ported from Ralph ralph.sh archive pattern) ---
 // Source: src/forks/ralph/ralph.sh lines 50-63 (archive previous run)
 if (args[0] === 'archive') {
@@ -1229,6 +1345,7 @@ if (args[0] === 'archive') {
 // v3.0 COMMANDS (Codebase Awareness & Intent Routing)
 // ============================================================
 
+/** CMD: scan — Bootstrap codebase context (writes context.md) */
 // --- Scan Command (Bootstraps context.md — adapted from GSD codebase-mapper) ---
 // Source: src/forks/gsd/agents/gsd-codebase-mapper.md
 if (args[0] === 'scan') {
@@ -1433,7 +1550,11 @@ if (args[0] === 'scan') {
     process.exit(0);
 }
 
-// --- Detect Intent Command (Keyword-based intent classification) ---
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: INTELLIGENCE (detect-intent, detect-tests)
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: detect-intent — Classify user intent into build/fix/refactor/migrate/document */
 if (args[0] === 'detect-intent') {
     const message = args.slice(1).join(' ').toLowerCase();
     if (!message) {
@@ -1484,6 +1605,7 @@ if (args[0] === 'detect-intent') {
     process.exit(0);
 }
 
+/** CMD: detect-tests — Detect test framework configurations in the project */
 // --- Detect Tests Command (Test framework auto-detection) ---
 // Source: src/forks/gsd/agents/gsd-phase-researcher.md validation architecture
 if (args[0] === 'detect-tests') {
@@ -1536,7 +1658,7 @@ if (args[0] === 'detect-tests') {
     process.exit(0);
 }
 
-// --- Verify Feature Command (Placeholder — full implementation in steroid-verify skill) ---
+/** CMD: verify-feature — Pre-check that all plan.md tasks are complete */
 if (args[0] === 'verify-feature') {
     const feature = args[1];
     if (!feature) {
@@ -1568,6 +1690,11 @@ if (args[0] === 'verify-feature') {
     process.exit(0);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: REVIEW SYSTEM (spec, quality, status, reset)
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: review — Two-stage review system for feature validation. */
 // --- Review Command (Two-stage review system — v5.0) ---
 // Source: src/forks/superpowers/subagent.md + spec-reviewer-prompt.md + code-quality-reviewer-prompt.md
 if (args[0] === 'review') {
@@ -1706,6 +1833,7 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
     process.exit(1);
 }
 
+/** CMD: report (generate/show/list) — AI-to-Human handoff reports */
 // --- Report Command (AI-to-Human handoff — v5.0) ---
 // Source: src/forks/gsd research-synthesizer + src/forks/ralph progress.txt + src/forks/spec-kit success-criteria
 if (args[0] === 'report') {
@@ -1871,6 +1999,11 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
     process.exit(1);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// § COMMANDS: ANALYTICS
+// ═══════════════════════════════════════════════════════════════════
+
+/** CMD: dashboard — Project health analytics overview */
 // --- Dashboard Command (Analytics dashboard — v5.0) ---
 // Source: src/forks/ralph progress.txt metrics + src/forks/gsd confidence-breakdown
 if (args[0] === 'dashboard') {
@@ -1971,7 +2104,11 @@ if (args[0] === 'dashboard') {
     process.exit(0);
 }
 
-// --- Circuit Breaker Check ---
+// ═══════════════════════════════════════════════════════════════════
+// § EXECUTION & SAFETY GUARDS
+// ═══════════════════════════════════════════════════════════════════
+
+/** Circuit Breaker Check — Block execution if error_count >= 5 */
 if (state.error_count >= 5) {
     console.error(`
 ========================================================================
