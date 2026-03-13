@@ -20,6 +20,9 @@ Usage:
   npx steroid-workflow init --force    Overwrite existing .memory/ state
   npx steroid-workflow --help          Show this help
   npx steroid-workflow --version       Show version
+
+Inside your project (after init):
+  node steroid-run.cjs report          Generate a bug report (.memory/bug-report.md)
 `);
   process.exit(0);
 }

@@ -145,6 +145,31 @@ Categorize issues by severity:
 - ⚠️ **Important** — Works but fragile (no error handling, hardcoded values)
 - ℹ️ **Minor** — Cosmetic or style issues (naming, unused imports)
 
+### Step 3b: AI Code Smell Scan (v5.5.0)
+
+AI models frequently produce code with invisible defects that non-technical users will never catch. Scan ALL created/modified files for these patterns:
+
+```bash
+# Phantom imports — packages referenced but not in package.json
+node steroid-run.cjs 'grep -rn "require(" <file> | grep -v node_modules'
+node steroid-run.cjs 'grep -rn "from ." <file> | grep -v node_modules'
+# Cross-reference with: cat package.json | grep dependencies
+
+# Hardcoded secrets — API keys, tokens, passwords in source
+node steroid-run.cjs 'grep -rnE "(sk-|pk_live_|ghp_|Bearer |password\s*=\s*\")" <file>'
+
+# Placeholder URLs and content
+node steroid-run.cjs 'grep -rnE "(example\.com|lorem ipsum|placeholder|https?://api\.example)" <file>'
+
+# Deprecated React patterns (if React project)
+node steroid-run.cjs 'grep -rnE "(componentWillMount|componentWillReceiveProps|getInitialProps|findDOMNode)" <file>'
+```
+
+If ANY of these are found:
+- Categorize as 🛑 **Critical** (phantom imports, secrets) or ⚠️ **Important** (placeholders, deprecated APIs)
+- The final verdict MUST be **CONDITIONAL**, not PASS
+- Document each finding with file path, line number, and explanation
+
 ### Step 4: Test Execution
 
 Read the test framework from `context.md`. If tests exist:

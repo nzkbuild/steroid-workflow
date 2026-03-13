@@ -99,6 +99,10 @@ Write the output to `.memory/changes/<feature>/spec.md` using this exact format:
 - **SC-001**: [Measurable outcome, e.g., "User can complete primary flow in under 30 seconds"]
 - **SC-002**: [Measurable outcome]
 - **SC-003**: [Measurable outcome]
+
+## Hard Constraints (from vibe.md)
+- [Copy ALL hard constraints from vibe.md verbatim]
+- [These are non-negotiable requirements that override all other decisions]
 ```
 
 Each user story MUST be independently testable — if you implement just ONE of them, the user should have a working piece of value.
@@ -114,6 +118,16 @@ From the vibe's "Key Features" list:
 From the vibe's "Core User Flow":
 - Each step in the flow becomes at least one acceptance criterion
 - The full flow becomes an integration-level success criterion
+
+### 6b. Constraint Pass-Through (v5.5.0)
+
+Read the `Hard Constraints & Directives` field from vibe.md. Copy every single constraint into the spec's `## Hard Constraints` section **verbatim**. Do NOT:
+- Summarize them
+- Reinterpret them
+- Silently drop any of them
+- Override them with your own preferences
+
+These constraints are the user's exact words and must survive to the Research and Architect phases unchanged.
 
 ### 7. Automatic System Handoff
 

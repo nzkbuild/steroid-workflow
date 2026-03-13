@@ -42,6 +42,16 @@ These files MUST NOT be replaced entirely. Always read first, then modify:
 
 If you must create one of these files for a fresh project, ensure existing content (if any) is preserved.
 
+### Anti-Deletion Guard (v5.5.0)
+
+When modifying an existing file, you MUST preserve all existing:
+- Exported functions and components
+- UI elements and layouts
+- Route definitions
+- Configuration values
+
+You may only delete existing code if the spec or plan **explicitly** says to remove it. "Refactoring" is not a valid reason to delete working features. If in doubt, ADD alongside existing code rather than REPLACING it.
+
 ```
 node steroid-run.cjs verify <path/to/file> --min-lines=<expected>
 ```
@@ -236,6 +246,22 @@ The Implementer sub-agent follows the Red-Green-Refactor cycle from the forked T
 3. **REFACTOR** - Clean up duplication. Confirm tests stay green.
 
 Reference the full TDD rules in `src/forks/superpowers/tdd.md`. The Implementer MUST follow The Iron Law: no production code without a failing test first.
+
+**True TDD Guard (v5.5.0):** The following are strictly forbidden:
+- Writing production code before the test exists
+- Writing trivial tests like `expect(true).toBe(true)` or `expect(1).toBe(1)`
+- Writing tests that can never fail (e.g., testing a hardcoded return value)
+- Claiming "tests pass" without showing the test runner output
+
+The failing test output MUST be documented in progress.md before any production code is written.
+
+**Anti-Loop Directive (v5.5.0):** If you encounter the same error 3 times in a row (`Error 3/5` from the circuit breaker):
+1. STOP attempting code changes immediately
+2. Re-read the error message, the failing file, and research.md
+3. Write a brief summary in progress.md explaining why your previous approach was wrong
+4. ONLY THEN attempt a fundamentally different fix
+
+Guessing the same fix repeatedly is forbidden. Fresh perspective is mandatory.
 
 **Phase 2: Spec Compliance Review**
 

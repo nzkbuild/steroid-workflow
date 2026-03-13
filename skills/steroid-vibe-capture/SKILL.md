@@ -13,17 +13,37 @@ Activate when the user says words like "build", "create", "design", or "make" in
 
 ## Instructions
 
-### 1. No Technical Jargon
+### 1. Adaptive Communication (v5.5.0)
 
-Never ask about databases, frameworks, deployment, APIs, or any engineering concepts. The user is a "vibe coder" who thinks in terms of aesthetics, flows, and features — not architecture.
+Read the user's initial prompt and detect their technical level:
 
-### 2. Clarification (Maximum 2 Questions)
+- **Non-technical signals**: words like "vibe", "feel", "clean", "like Apple", colors, aesthetics
+- **Technical signals**: words like "Next.js", "API", "database", "deploy", "TypeScript", framework names
 
-If the user's initial prompt is too vague to extract a coherent vision, ask a maximum of 2 high-level questions about:
+Adapt your language accordingly:
+- **Non-technical user**: Never mention databases, frameworks, deployment, or APIs. Speak in terms of aesthetics, flows, and features.
+- **Technical user**: You may discuss architecture, stack preferences, and deployment — they expect it.
+
+### 2. Pre-Vibe Discussion (v5.5.0)
+
+Do NOT immediately lock the vibe. Have a brief conversation first:
+
+**For non-technical users**, ask up to 2 questions about:
 - Visual style or aesthetic inspiration (e.g., "Should it feel like Apple Health or more like Notion?")
 - Core user flow (e.g., "What's the main thing someone does when they open it?")
 
-Do not ask more than 2 questions. If the prompt is clear enough, ask zero questions.
+**For technical users**, ask up to 3 questions about:
+- Architecture constraints (e.g., "Any specific framework or stack requirements?")
+- Scale and deployment (e.g., "MVP or production-grade? Where will this be hosted?")
+- Integration points (e.g., "Any existing APIs, databases, or services to connect to?")
+
+**For ALL users**, determine:
+- **Greenfield or Brownfield?** — Is this a new project from scratch, or are we adding to an existing codebase? If the working directory already has a `package.json`, `requirements.txt`, or similar, assume Brownfield unless told otherwise.
+- **GitHub?** — If the user hasn't mentioned where to save the code, ask one friendly question: *"Do you have a GitHub repository for this, or should I just save it locally for now?"*
+
+ONLY after the user confirms (or if the prompt was detailed enough to skip questions), proceed to lock the vibe.
+
+If the prompt is rich and detailed enough to answer everything, ask zero questions.
 
 ### 2b. Prompt Quality Check (v5.1.0)
 
@@ -68,6 +88,8 @@ NEVER summarize the user's intent with "..." or leave fields blank. NEVER use pl
 
 NEVER summarize existing code. If instructed to reproduce or fork a file, reproduce it line-by-line. Writing "...rest of the code here..." is a critical failure.
 
+**Constraint Preservation (v5.5.0):** If the user's prompt contains specific directives (e.g., "do NOT use a database", "must use Framer Motion", "the hero text must say exactly..."), these MUST be captured in the `Hard Constraints & Directives` field. Dropping user constraints to make the vibe profile shorter is a critical failure.
+
 ### 4. Feature Slug Extraction
 
 Extract a short, URL-safe slug from the user's prompt for the feature folder name.
@@ -94,6 +116,7 @@ Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
 ```markdown
 # User Vibe Profile
 - Feature: <slug>
+- Project Type: [Greenfield | Brownfield]
 - Target Aesthetic: [specific visual references, e.g., Apple Health, Dark Mode, Minimalist]
 - Core User Flow: [step-by-step description of the primary user journey]
 - Key Features:
@@ -102,6 +125,9 @@ Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
   3. [non-negotiable feature]
   4. [additional feature]
   5. [additional feature]
+- Hard Constraints & Directives:
+  - [Any explicit tech demands, copy text, layout rules, or "do not do X" rules from the user]
+  - [If none, write: "None — AI decides all implementation details"]
 ```
 
 ### 6. Circuit Breaker Mandate
@@ -110,9 +136,9 @@ If at any point you need to run a terminal command, you MUST use:
 `node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
-### 7. Automatic System Handoff
+### 7. System Handoff (v5.5.0)
 
-Once `.memory/changes/<slug>/vibe.md` is written, do NOT ask the user for permission to continue. Output exactly one sentence:
+Once the Pre-Vibe Discussion is complete and `.memory/changes/<slug>/vibe.md` is written, output exactly one sentence:
 
 "I've locked in the vibe. Turning this into a formal spec now..."
 

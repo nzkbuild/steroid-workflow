@@ -69,6 +69,13 @@ Write the output to `.memory/changes/<feature>/plan.md` using this exact format:
 - [ ] Apply final styling polish and micro-animations
 ```
 
+**Brownfield Override (v5.5.0):** If vibe.md has `Project Type: Brownfield`, do NOT include:
+- `Initialize [framework] project` tasks — the project already exists
+- `npm init` or framework scaffolding commands
+- Tasks that would overwrite existing config files (`tsconfig.json`, `next.config.*`, etc.)
+
+Instead, generate an *integration* checklist that adds to the existing structure without destroying it.
+
 Each checklist item must:
 - Be specific enough that an AI sub-agent with fresh context can execute it without ambiguity
 - Reference which user story / acceptance criterion it satisfies (from spec.md)
@@ -136,6 +143,19 @@ These are non-negotiable. Every project ships with a README and a version.
 - [ ] Add deployment section to README.md: build command, output directory, recommended platform (Vercel/Netlify/Railway)
 - [ ] Create .github/workflows/ci.yml: install → lint → build → test on push/PR (only if GitHub remote exists)
 ```
+
+### 6e. Compliance Baseline (v5.5.0 — auto-added if applicable)
+
+If `research.md` contains a `## Compliance Requirements` section, add the corresponding checklist items:
+
+```markdown
+## Compliance (auto-added from research.md)
+- [ ] [Specific compliance task, e.g., "Add cookie consent banner for GDPR"]
+- [ ] [Specific compliance task, e.g., "Implement rate limiting on auth endpoints (OWASP)"]
+- [ ] [Specific compliance task, e.g., "Add aria-labels to all interactive elements (WCAG 2.1 AA)"]
+```
+
+If research.md says "No regulatory requirements detected", skip this section entirely.
 
 ### 7. Automatic System Handoff
 

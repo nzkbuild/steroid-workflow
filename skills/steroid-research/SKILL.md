@@ -42,6 +42,22 @@ If at any point you need to run a terminal command, you MUST use:
 `node steroid-run.cjs '<command>'`
 Direct terminal execution is strictly forbidden.
 
+### 3b. Constraint Obedience (v5.5.0)
+
+Read the `## Hard Constraints` section from spec.md. If the user explicitly requested a specific technology, version, or approach (e.g., "must use Framer Motion", "do NOT use a database"), the research MUST:
+- Center around that constraint, not recommend alternatives
+- Explain how to best use the constrained technology, not argue against it
+- Only flag constraints that are technically impossible (e.g., "use React for an iOS native app")
+
+### 3c. Brownfield Context Check (v5.5.0)
+
+Read vibe.md for the `Project Type` field. If it says **Brownfield**:
+
+1. Run `node steroid-run.cjs scan` to detect the existing tech stack
+2. Your research MUST respect the existing stack — do NOT recommend replacing it
+3. Focus on libraries that integrate with what's already there
+4. Note version compatibility with existing dependencies
+
 ### 4. What To Investigate
 
 For each user story in the spec, identify:
@@ -159,6 +175,20 @@ Every research output MUST include this section, even for simple projects:
 5. **HTTPS** — Note if deployment requires SSL configuration.
 
 For static sites with no user input: "No server-side security concerns. Ensure no API keys or secrets in client bundle."
+
+## Industry Standards & Compliance (v5.5.0 — mandatory)
+
+Assess whether the feature being built triggers any regulatory or industry standards:
+
+| Domain | Standard | When It Applies |
+|--------|----------|----------------|
+| User data / EU users | GDPR | Any app collecting personal data |
+| Health data | HIPAA | Health tracking, medical records |
+| Payments | PCI DSS | Processing credit cards |
+| Accessibility | WCAG 2.1 AA | All web apps (non-negotiable baseline) |
+| Security | OWASP Top 10 | Any app with user input or authentication |
+
+If applicable, add a `## Compliance Requirements` section to research.md documenting which standards apply and what the Architect must include in the plan. If none apply, write: "No regulatory requirements detected for this feature."
 
 ## Deployment Strategy (v5.3.0 — mandatory)
 

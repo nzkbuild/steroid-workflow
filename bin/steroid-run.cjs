@@ -153,6 +153,74 @@ if (args[0] === 'reset') {
     process.exit(0);
 }
 
+// --- Report Command (Bug Report Generator — v5.5.0) ---
+if (args[0] === 'report' && (!args[1] || args[1] === '--help' || args[1] === 'bug')) {
+    const reportFile = path.join(memoryDir, 'bug-report.md');
+    const timestamp = new Date().toISOString();
+    let report = `# Steroid Workflow Bug Report\n\n`;
+    report += `**Generated**: ${timestamp}\n`;
+    report += `**SW_VERSION**: ${SW_VERSION}\n`;
+    report += `**Node**: ${process.version}\n`;
+    report += `**OS**: ${process.platform} ${process.arch}\n`;
+    report += `**CWD**: ${targetDir}\n\n`;
+
+    // Error state
+    report += `## Circuit Breaker State\n\n`;
+    report += `- Error Count: ${state.error_count}/5\n`;
+    report += `- Status: ${state.status}\n`;
+    report += `- Last Error: ${state.last_error || 'None'}\n\n`;
+    if (state.error_history && state.error_history.length > 0) {
+        report += `### Error History\n\n`;
+        state.error_history.slice(-5).forEach((err, i) => {
+            report += `${i + 1}. \`${err.command || 'unknown'}\` — ${err.error || 'no details'}\n`;
+        });
+        report += `\n`;
+    }
+
+    // Memory files
+    const memoryFiles = ['vibe.md', 'spec.md', 'research.md', 'progress.md'];
+    report += `## Memory Snapshot\n\n`;
+
+    // Check for feature folders
+    const changesPath = path.join(memoryDir, 'changes');
+    let featureDirs = [];
+    try { featureDirs = fs.readdirSync(changesPath).filter(f => fs.statSync(path.join(changesPath, f)).isDirectory()); } catch (e) { /* no changes dir */ }
+
+    if (featureDirs.length > 0) {
+        featureDirs.forEach(feature => {
+            report += `### Feature: \`${feature}\`\n\n`;
+            memoryFiles.forEach(mf => {
+                const fp = path.join(changesPath, feature, mf);
+                try {
+                    const content = fs.readFileSync(fp, 'utf-8').trim();
+                    const preview = content.length > 500 ? content.substring(0, 500) + '\n...(truncated)' : content;
+                    report += `#### ${mf}\n\`\`\`\n${preview}\n\`\`\`\n\n`;
+                } catch (e) {
+                    report += `#### ${mf}\n*Not found*\n\n`;
+                }
+            });
+        });
+    } else {
+        report += `*No feature folders found in .memory/changes/*\n\n`;
+    }
+
+    // Execution state JSON
+    report += `## Raw Execution State\n\n`;
+    report += `\`\`\`json\n${JSON.stringify(state, null, 2)}\n\`\`\`\n\n`;
+
+    // User section
+    report += `## What I Expected vs What Happened\n\n`;
+    report += `**Expected**: (describe what you expected to happen)\n\n`;
+    report += `**Actual**: (describe what actually happened)\n\n`;
+    report += `**Steps to Reproduce**:\n1. \n2. \n3. \n\n`;
+    report += `---\n*Paste this file to your AI assistant or open a GitHub issue.*\n`;
+
+    fs.writeFileSync(reportFile, report);
+    console.log(`[steroid-run] 📋 Bug report saved to .memory/bug-report.md`);
+    console.log(`[steroid-run] 💡 Edit the "Expected vs Actual" section, then share the file.`);
+    process.exit(0);
+}
+
 // --- Recover Command (Smart recovery — v4.0) ---
 // Source: src/forks/superpowers implementer-prompt.md status types
 if (args[0] === 'recover') {
