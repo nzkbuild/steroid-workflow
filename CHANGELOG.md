@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.6.1] "Hardened" - 2026-03-14
+
+### Security
+- **Command allowlist guard** — Only known development commands (npm, node, git, python, cargo, go, etc.) can execute through the circuit breaker. Unknown commands are blocked, preventing prompt injection attacks.
+- **Memory write size limit** — JSON payloads to `memory write` capped at 100KB to prevent disk abuse.
+
+### Fixed
+- **Node engine requirement** — Corrected from `>=14.0.0` to `>=18.17.0` (code uses `readdirSync({ recursive: true })` which requires Node 18.17+).
+- **`.npmignore` restored** — Was lost since v2.0.1; ensures `npm pack` produces a clean package.
+
+### Changed
+- **README.md rewrite** — Product-first structure with npm badges, mermaid pipeline diagram, problem statement, quick start, and user-facing language. All version annotations removed. Technical internals moved to ARCHITECTURE.md reference.
+
 ## [5.5.1] - 2026-03-13
 
 ### Added

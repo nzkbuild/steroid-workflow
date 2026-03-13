@@ -1,0 +1,8 @@
+test/
+scripts/
+.memory/
+.git/
+.gitignore
+.github/
+incident_report.md
+CHANGELOG.md

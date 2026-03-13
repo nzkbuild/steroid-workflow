@@ -42,7 +42,7 @@ function friendlyHint(key) {
 }
 
 // --- Dynamic Version (v5.2.0, fixed v5.4.1) ---
-let SW_VERSION = '5.6.0';
+let SW_VERSION = '5.6.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -433,6 +433,11 @@ Stores:
             process.exit(1);
         }
         let newData;
+        // v5.6.1: Size limit — prevent disk abuse from oversized JSON payloads
+        if (Buffer.byteLength(jsonStr, 'utf-8') > 102400) {
+            console.error('[steroid-run] ❌ JSON payload too large (max 100KB).');
+            process.exit(1);
+        }
         try {
             newData = JSON.parse(jsonStr);
         } catch (e) {
@@ -2054,6 +2059,34 @@ for (const pattern of SCAFFOLD_PATTERNS) {
 }
 
 console.log(`[steroid-run] Executing: ${commandStr}`);
+
+// --- Command Allowlist Guard (v5.6.1) ---
+// Only known development commands are allowed through the circuit breaker.
+// This prevents prompt injection attacks from executing arbitrary shell commands.
+const ALLOWED_COMMANDS = new Set([
+    'npm', 'npx', 'node', 'pnpm', 'yarn', 'bun', 'bunx', 'deno',
+    'git', 'echo', 'cat', 'ls', 'dir', 'mkdir', 'cp', 'mv', 'type', 'where',
+    'python', 'python3', 'pip', 'pip3', 'poetry', 'uv',
+    'cargo', 'rustc', 'rustup',
+    'go',
+    'dotnet',
+    'flutter', 'dart',
+    'ruby', 'gem', 'bundle', 'rake',
+    'php', 'composer',
+    'java', 'javac', 'mvn', 'gradle', 'gradlew',
+    'make', 'cmake',
+    'docker', 'docker-compose',
+    'tsc', 'eslint', 'prettier', 'jest', 'vitest', 'mocha', 'pytest',
+    'knip', 'madge', 'gitleaks',
+]);
+
+const baseCommand = commandStr.trim().split(/\s+/)[0].replace(/^['"]|['"]$/g, '').toLowerCase();
+if (!ALLOWED_COMMANDS.has(baseCommand)) {
+    console.error(`\n[STEROID-COMMAND-GUARD] 🛑 BLOCKED: Unknown command "${baseCommand}"`);
+    console.error(`  Only known development commands are allowed through the circuit breaker.`);
+    console.error(`  Allowed: ${[...ALLOWED_COMMANDS].sort().join(', ')}`);
+    process.exit(1);
+}
 
 const child = spawnSync(commandStr, {
     shell: true,

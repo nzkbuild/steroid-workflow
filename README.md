@@ -1,103 +1,118 @@
 # 🧬 Steroid-Workflow
 
-**Turn one sentence into working software.**
+[![npm version](https://img.shields.io/npm/v/steroid-workflow)](https://www.npmjs.com/package/steroid-workflow)
+[![license](https://img.shields.io/npm/l/steroid-workflow)](LICENSE)
+[![node](https://img.shields.io/node/v/steroid-workflow)](https://nodejs.org)
 
-An AI pipeline that takes your idea through 8 enforced phases — codebase scanning, vibe capture, specification, research, architecture, TDD implementation, and verification — so the AI can't cut corners, skip steps, or hallucinate solutions.
+**AI coding guardrails that enforce a structured pipeline — so the AI can't cut corners, skip steps, or hallucinate solutions.**
 
-Supports **10 languages** (JavaScript, TypeScript, Python, Rust, Go, Java, Ruby, PHP, C#, Dart), **complex architectures** (monorepos, Docker, microservices), and produces **enterprise-grade output** with documentation, CI/CD, error handling, deployment guidance, and license auditing.
+Steroid-Workflow wraps your AI coding assistant in an 8-phase pipeline with physical enforcement. Every idea flows through codebase scanning, specification, research, architecture, TDD implementation, and verification — producing enterprise-grade output with documentation, CI/CD, error handling, and deployment guidance.
 
-## Install
+## The Problem
+
+AI coding tools are powerful but unreliable. Without guardrails, they:
+- Skip planning and jump straight to code
+- Forget requirements halfway through
+- Write fake tests that always pass
+- Silently delete working code during refactors
+- Produce weekend-hackathon quality output for production projects
+
+Steroid-Workflow makes these failures **physically impossible** through git hooks, gate checks, and circuit breakers.
+
+## Quick Start
 
 ```bash
+# 1. Inside any project with git init
 npx steroid-workflow init
+
+# 2. Tell your AI what to build
+> "Build me a habit tracker like Apple Health"
+
+# 3. The AI automatically follows the pipeline
+#    If it doesn't, say: "Use the steroid pipeline."
 ```
 
-Run this inside any project with `git init`. That's it — no config, no dependencies, no terminal knowledge required.
+No config. No dependencies. Works with any AI-powered IDE.
 
-### Update
+## How It Works
 
-```bash
-npx steroid-workflow@latest update
+```mermaid
+graph LR
+    A["📡 Scan"] --> B["🎯 Vibe Capture"]
+    B --> C["📋 Specify"]
+    C --> D["🔬 Research"]
+    D --> E["🏗️ Architect"]
+    E --> F["⚡ Engine"]
+    F --> G["✅ Verify"]
+    H["🔍 Diagnose"] -.-> F
+
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#2d5a3d,color:#fff
+    style C fill:#4a3d6b,color:#fff
+    style D fill:#5a3d3d,color:#fff
+    style E fill:#3d4a5a,color:#fff
+    style F fill:#6b5a2d,color:#fff
+    style G fill:#2d6b5a,color:#fff
+    style H fill:#5a4a3d,color:#fff
 ```
 
-Your project state (`.memory/`) is preserved. Only skills, configs, and enforcement layers are refreshed.
-
-## How To Use
-
-Just tell your AI what you want:
-
-> "Build me a minimal habit tracker like Apple Health"
-
-> "Fix the login bug that crashes on empty password"
-
-> "Refactor the API layer to use proper error handling"
-
-The AI automatically detects your intent and routes to the right pipeline:
-
-| You say | AI does |
-|---------|---------|
-| "Build a dashboard" | Full pipeline: scan → vibe → spec → research → architect → engine → verify |
-| "Fix the login bug" | Debug pipeline: scan → diagnose → targeted fix → verify |
-| "Refactor the API" | Refactor pipeline: scan → specify target state → architect → engine → verify |
-| "Upgrade to React 19" | Migration pipeline: scan → research → architect → engine → verify |
-| "Document the API" | Docs pipeline: scan → specify → engine → verify |
-
-If the AI doesn't activate automatically, say: **"Use the steroid pipeline."**
-
-## The 8 Phases
-
-| Phase | What happens | Output |
+| Phase | What Happens | Output |
 |-------|-------------|--------|
-| 📡 **Scan** | Detects tech stack (10 languages), project structure, test infra | `context.md` |
-| 🎯 **Vibe Capture** | Translates your idea into a structured brief, asks clarifying questions | `vibe.md` |
-| 📋 **Specify** | Converts the brief into user stories with acceptance criteria | `spec.md` |
-| 🔬 **Research** | Investigates tech stack, security, deployment, complex architecture | `research.md` |
-| 🏗️ **Architect** | Creates atomic execution plan with quality, docs, error handling, deploy tasks | `plan.md` |
-| ⚡ **Engine** | Builds it using TDD, commits atomically, captures learnings | Working code |
-| ✅ **Verify** | Proves spec compliance, code quality, tests, license audit, infra checks | `verify.md` |
-| 🔍 **Diagnose** | Root cause analysis for bugs (fix intent only) | `diagnosis.md` |
+| **Scan** | Detects tech stack, project structure, test infra | `context.md` |
+| **Vibe Capture** | Translates your idea into a structured brief | `vibe.md` |
+| **Specify** | Converts the brief into user stories with acceptance criteria | `spec.md` |
+| **Research** | Investigates tech choices, security, deployment, architecture | `research.md` |
+| **Architect** | Creates atomic execution plan with quality, docs, and deploy tasks | `plan.md` |
+| **Engine** | Builds using TDD, commits atomically, captures learnings | Working code |
+| **Verify** | Proves spec compliance, code quality, tests, license audit | `verify.md` |
+| **Diagnose** | Root cause analysis for bugs (fix intent only) | `diagnosis.md` |
 
 Each phase hands off to the next. No manual intervention needed.
 
-## What Makes It Different
+### Smart Intent Routing
 
-Most AI coding tools rely on **suggestions** — hoping the AI follows instructions. Steroid-Workflow uses **physical enforcement**:
+You don't need to tell the AI which pipeline to use — it detects your intent automatically:
 
-- 🔒 **Git hook** — Commits are blocked unless the AI went through the pipeline
-- ⚡ **Circuit breaker** — 5-level graduated recovery with friendly error messages
-- ✅ **Two-stage review** — Spec compliance check + code quality gating
-- 📄 **Handoff reports** — AI-to-human reports with build health, test results, review status
-- 📊 **Analytics dashboard** — Track feature progress, error rates, time to completion
-- 🔍 **Intent routing** — Different pipelines for build, fix, refactor, migrate, and document
-- 🚫 **Anti-summarization** — The AI can't write "...rest of code here..." and call it done
-- 🔀 **Gate checks** — Each phase requires the previous phase's output to exist
+| You Say | Pipeline |
+|---------|----------|
+| "Build a dashboard" | scan → vibe → spec → research → architect → engine → verify |
+| "Fix the login bug" | scan → diagnose → targeted fix → verify |
+| "Refactor the API" | scan → specify target state → architect → engine → verify |
+| "Upgrade to React 19" | scan → research → architect → engine → verify |
+| "Document the API" | scan → specify → engine → verify |
 
-## AI Guardrails (v5.5.0+)
+## What You Get
 
-Steroid actively protects non-technical users from common AI coding mistakes:
+### Your AI Can't Skip Steps
+A **git pre-commit hook** blocks any code commit unless the AI went through the pipeline. IDE config injection ensures every AI model sees the rules first.
 
-- 🧠 **Adaptive Discussion** — AI detects your technical level and asks appropriate questions
-- 📌 **Prompt Preservation** — Your exact requirements ("must use Framer Motion", "do NOT use a database") survive the entire pipeline unchanged
-- 🏗️ **Brownfield Detection** — Won't scaffold over your existing project
-- 🛡️ **Anti-Deletion Guard** — AI can't silently remove your working code
-- 🧪 **True TDD Guard** — Fake tests like `expect(true).toBe(true)` are blocked
-- 🔄 **Anti-Loop Directive** — Stops AI from guessing the same broken fix repeatedly
-- 🔍 **Code Smell Scan** — Uses `knip`, `madge`, and `gitleaks` to catch phantom imports, circular deps, and leaked secrets
-- 📋 **Bug Reports** — Run `node steroid-run.cjs report` to generate a diagnostic snapshot
+### Errors Stop Before They Snowball
+A **5-level circuit breaker** tracks command failures. At level 1, the AI retries. By level 4, it stops and presents the error history for human review. At level 5, execution is halted entirely.
 
-## Enterprise-Grade Output (v5.3.0+)
+### Proof Your Code Matches the Spec
+A **two-stage review** system checks (1) whether the AI built what was requested and (2) whether it's well-built. Both stages must pass before archiving.
 
-Every project built by steroid automatically includes:
+### Enterprise-Grade Output
+Every project automatically includes:
+- README, CHANGELOG, and deployment documentation
+- Error boundaries, loading states, input validation
+- Security considerations and dependency auditing
+- CI/CD workflow (GitHub Actions)
+- License audit (flags GPL/AGPL viral licenses)
+- Code comments following explain-why-not-what standards
 
-- 📝 **README.md + CHANGELOG.md** — Generated with install, run, deploy instructions
-- 🔐 **Security considerations** — Dependency audit, input validation, secrets management
-- ⚠️ **Error handling** — Error boundaries, loading states, 404 pages, input validation
-- 🚀 **Deployment guidance** — Platform recommendation, build command, env vars
-- 🔄 **CI/CD starter** — GitHub Actions workflow (install → lint → build → test)
-- 📜 **License audit** — Flags GPL/AGPL viral licenses and deprecated packages
-- 💬 **Code comments** — Module headers, JSDoc, explain-why-not-what standard
+### AI Safety Guardrails
+Protections specifically designed for non-technical users:
+- **Adaptive Discussion** — AI detects your technical level
+- **Prompt Preservation** — your exact requirements survive the entire pipeline
+- **Brownfield Detection** — won't scaffold over your existing project
+- **Anti-Deletion Guard** — can't silently remove working code
+- **True TDD Guard** — fake tests like `expect(true).toBe(true)` are blocked
+- **Anti-Loop Directive** — stops the AI from guessing the same broken fix repeatedly
+- **Code Smell Scan** — uses `knip`, `madge`, and `gitleaks` to catch issues
+- **Command Allowlist** — only known dev commands can execute through the circuit breaker
 
-## Multi-Language Support (v5.4.0+)
+## Language Support
 
 | Language | Scan | Build | Lint | Test |
 |----------|------|-------|------|------|
@@ -126,22 +141,29 @@ Works with any AI-powered IDE or CLI:
 
 All configs are auto-generated during install.
 
+## Update
+
+```bash
+npx steroid-workflow@latest update
+```
+
+Your project state (`.memory/`) is preserved. Only skills, configs, and enforcement layers are refreshed.
+
 ## Verify Installation
 
 ```bash
 node steroid-run.cjs audit
 ```
 
-Checks all enforcement layers (git hook, 8 skills, 7 gates, circuit breaker, IDE configs) and detects stale version references.
+Checks all enforcement layers: git hook, 8 skills, 7 gates, circuit breaker, IDE configs, and knowledge stores.
 
-## Technical Details
+## For Power Users
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for:
-- How the pipeline enforcer works
-- Full command reference for `steroid-run.cjs` (22+ commands)
-- Intent routing, gate map, and memory system
-- Two-stage review system, handoff reports, and analytics dashboard
-- Smart recovery levels and story prioritization
+- Full command reference (22+ commands)
+- Gate map and enforcement layer details
+- Intent routing internals
+- Memory system, review system, and analytics dashboard
 - Fork credits and sources
 
 ## License
