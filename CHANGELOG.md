@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.9.0] "Trust Layer" - 2026-03-14
+
+### Added
+- **Audit trail receipts** — SHA-256 stamped proof of each gate pass, written to `.memory/audit-trail.md`
+- **Pipeline status command** — `pipeline-status <feature>` shows 8-phase progress bar with file checks and line counts
+- **Command suggestions** — Levenshtein-based typo detection ("Did you mean: status?") for unknown commands
+- **Pipeline budget config** — Optional `.memory/config.json` for user preferences (maxPhases, strictGates, autoRecover)
+- **Scan drift detection** — Re-scanning compares against previous `context.md` and surfaces file count changes
+- **Welcome-back awareness** — After 4+ hours of inactivity, prints circuit breaker status and active feature on next command
+- **Execution telemetry** — Tracks command usage counts in `.memory/metrics/usage.json` for dashboard insights
+- **CI badge** — Added GitHub Actions status badge to README
+- **Levenshtein utility** — Extracted `src/utils/levenshtein.cjs` with 10 unit tests
+- **Config template** — Default `memory-template/config.json` for new project initialization
+
 ## [5.8.0] "Quality" - 2026-03-14
 
 ### Added

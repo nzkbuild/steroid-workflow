@@ -11,3 +11,5 @@ incident_report.md
 
 # Fork source files — kept in npm package via "files" field, not tracked in git
 src/forks/
+
+proposed-plan.md

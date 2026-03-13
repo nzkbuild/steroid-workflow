@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/steroid-workflow)](https://www.npmjs.com/package/steroid-workflow)
 [![license](https://img.shields.io/npm/l/steroid-workflow)](LICENSE)
 [![node](https://img.shields.io/node/v/steroid-workflow)](https://nodejs.org)
+[![CI](https://github.com/nzkbuild/steroid-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/nzkbuild/steroid-workflow/actions/workflows/ci.yml)
 
 **AI coding guardrails that enforce a structured pipeline — so the AI can't cut corners, skip steps, or hallucinate solutions.**
 

@@ -1,0 +1,5 @@
+{
+    "maxPhases": 8,
+    "strictGates": true,
+    "autoRecover": false
+}

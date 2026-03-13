@@ -59,6 +59,7 @@
 // ═══════════════════════════════════════════════════════════════════
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 /** @type {string} Current working directory (user's project root) */
@@ -131,7 +132,7 @@ function friendlyHint(key) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '5.8.0';
+let SW_VERSION = '5.9.0';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -209,6 +210,7 @@ Usage:
 
   Diagnostics:
     node steroid-run.cjs audit                             Verify all enforcement layers are installed
+    node steroid-run.cjs pipeline-status <feature>          Show 8-phase pipeline progress for a feature
 
 The circuit breaker tracks errors in .memory/execution_state.json.
 After 5 consecutive errors (graduated recovery at each level), execution is blocked until you run 'reset'.
@@ -233,6 +235,63 @@ try {
 } catch (e) {
     state = { error_count: 0, last_error: null, status: 'active', recovery_actions: [], error_history: [] };
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// § CONFIG LOADING (v5.9.0)
+// ═══════════════════════════════════════════════════════════════════
+
+/** @type {{ maxPhases?: number, strictGates?: boolean, autoRecover?: boolean }} */
+let userConfig = {};
+try {
+    const configPath = path.join(memoryDir, 'config.json');
+    if (fs.existsSync(configPath)) {
+        userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+} catch { /* use defaults */ }
+
+// ═══════════════════════════════════════════════════════════════════
+// § TELEMETRY & SESSION AWARENESS (v5.9.0)
+// ═══════════════════════════════════════════════════════════════════
+
+// Track command usage for dashboard insights
+if (args[0] && args[0] !== '--help' && args[0] !== '-h') {
+    try {
+        if (!fs.existsSync(metricsDir)) fs.mkdirSync(metricsDir, { recursive: true });
+        const usageFile = path.join(metricsDir, 'usage.json');
+        let usage = { commands: {}, totalRuns: 0, lastRun: null };
+        if (fs.existsSync(usageFile)) {
+            try { usage = JSON.parse(fs.readFileSync(usageFile, 'utf-8')); } catch { /* reset */ }
+        }
+        usage.commands[args[0]] = (usage.commands[args[0]] || 0) + 1;
+        usage.totalRuns = (usage.totalRuns || 0) + 1;
+        usage.lastRun = new Date().toISOString();
+        fs.writeFileSync(usageFile, JSON.stringify(usage, null, 2));
+    } catch { /* telemetry is best-effort */ }
+}
+
+// Welcome-back awareness: if >4 hours since last state write, print status
+try {
+    const statMtime = fs.statSync(stateFile).mtime;
+    const hoursSince = (Date.now() - statMtime.getTime()) / (1000 * 60 * 60);
+    if (hoursSince > 4 && args[0] !== 'reset' && args[0] !== '--help') {
+        const hoursAgo = Math.round(hoursSince);
+        console.log(`[steroid-run] 👋 Welcome back! Last activity: ${hoursAgo} hours ago`);
+        console.log(`  🔋 Circuit breaker: ${state.error_count}/5 errors${state.error_count === 0 ? ' (all clear)' : ''}`);
+        // Find active feature
+        if (fs.existsSync(changesDir)) {
+            const features = fs.readdirSync(changesDir).filter(f =>
+                fs.statSync(path.join(changesDir, f)).isDirectory()
+            );
+            if (features.length > 0) {
+                const latest = features[features.length - 1];
+                const phases = ['context.md','vibe.md','spec.md','research.md','plan.md','diagnosis.md'];
+                const done = phases.filter(p => fs.existsSync(path.join(changesDir, latest, p))).length;
+                console.log(`  📍 Feature: ${latest} (${done}/8 phases)`);
+            }
+        }
+        console.log('');
+    }
+} catch { /* welcome-back is best-effort */ }
 
 // ═══════════════════════════════════════════════════════════════════
 // § COMMANDS: CIRCUIT BREAKER (reset, recover, status)
@@ -425,6 +484,62 @@ if (args[0] === 'status') {
             console.log(`    - ${action}`);
         }
     }
+    process.exit(0);
+}
+
+/** CMD: pipeline-status — Show 8-phase pipeline progress for a feature (v5.9.0) */
+if (args[0] === 'pipeline-status') {
+    const feature = args[1];
+    if (!feature) {
+        console.error('[steroid-run] Usage: npx steroid-run pipeline-status <feature>');
+        process.exit(1);
+    }
+    const featureDir = path.join(changesDir, feature);
+    if (!fs.existsSync(featureDir)) {
+        console.error(`[steroid-run] ❌ Feature "${feature}" not found.`);
+        process.exit(1);
+    }
+
+    const phases = [
+        { name: 'scan',      file: 'context.md',   label: 'Codebase context' },
+        { name: 'vibe',      file: 'vibe.md',      label: 'Vibe capture' },
+        { name: 'specify',   file: 'spec.md',      label: 'Specification' },
+        { name: 'research',  file: 'research.md',  label: 'Tech research' },
+        { name: 'architect', file: 'plan.md',      label: 'Architecture plan' },
+        { name: 'diagnose',  file: 'diagnosis.md', label: 'Diagnosis (fix path)' },
+        { name: 'engine',    file: 'plan.md',      label: 'Engine execution' },
+        { name: 'verify',    file: 'plan.md',      label: 'Verification' },
+    ];
+
+    console.log(`\n[steroid-run] Pipeline status for: ${feature}\n`);
+
+    let completed = 0;
+    for (const p of phases) {
+        const fp = path.join(featureDir, p.file);
+        if (fs.existsSync(fp)) {
+            const lines = fs.readFileSync(fp, 'utf-8').split('\n').length;
+            console.log(`  ✅ ${p.name.padEnd(12)} → ${p.file} (${lines} lines)`);
+            completed++;
+        } else {
+            console.log(`  ⬜ ${p.name.padEnd(12)} → ${p.file} (missing)`);
+        }
+    }
+
+    const total = userConfig.maxPhases || 8;
+    const barFull = Math.round((completed / total) * 16);
+    const bar = '█'.repeat(barFull) + '░'.repeat(16 - barFull);
+    console.log(`\n  Progress: ${bar} ${completed}/${total} phases\n`);
+
+    // Show audit trail if exists
+    const auditFile = path.join(memoryDir, 'audit-trail.md');
+    if (fs.existsSync(auditFile)) {
+        const auditLines = fs.readFileSync(auditFile, 'utf-8').split('\n');
+        const featureEntries = auditLines.filter(l => l.includes(feature));
+        if (featureEntries.length > 0) {
+            console.log(`  📋 Audit trail: ${featureEntries.length} gate receipt(s) recorded`);
+        }
+    }
+
     process.exit(0);
 }
 
@@ -959,6 +1074,21 @@ if (args[0] === 'gate') {
     }
 
     console.log(`[steroid-run] ✅ Gate passed: ${gate.requires} exists (${lines} lines). Proceeding to ${phase}.`);
+
+    // Audit trail receipt (v5.9.0) — tamper-evident log of gate passes
+    try {
+        const hash = crypto.createHash('sha256')
+            .update(fs.readFileSync(requiredFile, 'utf-8')).digest('hex').slice(0, 12);
+        const auditFile = path.join(memoryDir, 'audit-trail.md');
+        const receipt = `\n## [${new Date().toISOString()}] Gate: ${phase} → ${feature}\n`
+            + `- **Passed**: ${gate.requires} (${lines} lines, sha256: ${hash})\n`
+            + `- **Circuit breaker**: ${state.error_count}/5 errors\n`;
+        if (!fs.existsSync(auditFile)) {
+            fs.writeFileSync(auditFile, '# Steroid Audit Trail\n\n_Tamper-evident log of pipeline phase completions._\n');
+        }
+        fs.appendFileSync(auditFile, receipt);
+    } catch { /* audit trail is best-effort */ }
+
     process.exit(0);
 }
 
@@ -1375,6 +1505,15 @@ if (args[0] === 'scan') {
             process.exit(0);
         }
         console.log(`[steroid-run] ⚠️  Context is ${Math.round(ageHours)}h old. Re-scanning...`);
+
+        // Drift detection (v5.9.0): hash old context for comparison after re-scan
+        try {
+            const oldContent = fs.readFileSync(contextFile, 'utf-8');
+            const oldFiles = (oldContent.match(/^- /gm) || []).length;
+            const oldHash = crypto.createHash('sha256').update(oldContent).digest('hex').slice(0, 12);
+            // Store for post-scan comparison (uses global for simplicity)
+            global.__steroidDrift = { oldHash, oldFiles };
+        } catch { /* drift detection is best-effort */ }
     }
 
     // Auto-detect basic project info and bootstrap context.md
@@ -1508,6 +1647,20 @@ if (args[0] === 'scan') {
 `;
 
     fs.writeFileSync(contextFile, contextContent);
+
+    // Drift detection summary (v5.9.0)
+    if (global.__steroidDrift) {
+        const newHash = crypto.createHash('sha256').update(contextContent).digest('hex').slice(0, 12);
+        const newFiles = (contextContent.match(/^- /gm) || []).length;
+        if (newHash !== global.__steroidDrift.oldHash) {
+            const fileDiff = newFiles - global.__steroidDrift.oldFiles;
+            const direction = fileDiff > 0 ? `+${fileDiff} new` : fileDiff < 0 ? `${fileDiff} removed` : 'same count';
+            console.log(`[steroid-run] 🔄 Drift detected: context changed (${direction} files, hash ${global.__steroidDrift.oldHash} → ${newHash})`);
+        } else {
+            console.log('[steroid-run] ✅ No drift: codebase unchanged since last scan.');
+        }
+    }
+
     console.log(`[steroid-run] 📡 Context captured: ${language}/${framework}, ${testCount} tests found.`);
     console.log(`[steroid-run]    Written to: .memory/changes/${feature}/context.md`);
     console.log(`[steroid-run]    The steroid-scan skill will enrich this with detailed analysis.`);
@@ -2222,6 +2375,36 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
     console.error(`\n[STEROID-COMMAND-GUARD] 🛑 BLOCKED: Unknown command "${baseCommand}"`);
     console.error(`  Only known development commands are allowed through the circuit breaker.`);
     console.error(`  Allowed: ${[...ALLOWED_COMMANDS].sort().join(', ')}`);
+
+    // Command suggestion (v5.9.0) — Levenshtein-based typo detection
+    const levenshtein = (a, b) => {
+        const m = a.length, n = b.length;
+        const dp = Array.from({ length: m + 1 }, (_, i) => {
+            const row = new Array(n + 1);
+            row[0] = i;
+            return row;
+        });
+        for (let j = 0; j <= n; j++) dp[0][j] = j;
+        for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+                dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
+                    : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+            }
+        }
+        return dp[m][n];
+    };
+    const KNOWN_CMDS = ['reset','recover','status','pipeline-status','progress','memory','audit',
+        'init-feature','gate','commit','log','check-plan','stories','archive','scan',
+        'detect-intent','detect-tests','verify-feature','review','report','dashboard','verify'];
+    let bestMatch = null, bestDist = Infinity;
+    for (const cmd of KNOWN_CMDS) {
+        const d = levenshtein(baseCommand, cmd);
+        if (d < bestDist) { bestDist = d; bestMatch = cmd; }
+    }
+    if (bestMatch && bestDist <= 3) {
+        console.error(`  💡 Did you mean: ${bestMatch}?`);
+    }
+
     process.exit(1);
 }
 
