@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.8.0] "Quality" - 2026-03-14
+
+### Added
+- **Unit test suite** — 20 tests for `mergeKnowledge` and `friendlyHint` utilities (run via `npm run test:unit`)
+- **ESLint** — Bug-catching linter with minimal rules (`no-undef`, `no-duplicate-case`, `eqeqeq`, `prefer-const`)
+- **Prettier** — Code formatter matching existing style (single quotes, 4-space indent, 120 char width)
+- **CONTRIBUTING.md** — Contributor guide covering project structure, development workflow, code style, and commit conventions
+- **New npm scripts** — `test:unit`, `test:smoke`, `lint`, `format`, `format:check`
+
+### Changed
+- **`npm test`** now runs both smoke tests (54) and unit tests (20) — 74 total
+- **`package.json`** — Added ESLint and Prettier as devDependencies
+
 ## [5.7.0] "Organized" - 2026-03-14
 
 ### Added
