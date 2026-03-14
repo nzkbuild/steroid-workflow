@@ -10,7 +10,7 @@ const pkg = require(path.join(sourceDir, 'package.json'));
 const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
+    console.log(`
 steroid-workflow v${pkg.version}
 ${pkg.description}
 
@@ -24,60 +24,59 @@ Usage:
 Inside your project (after init):
   node steroid-run.cjs report          Generate a bug report (.memory/bug-report.md)
 `);
-  process.exit(0);
+    process.exit(0);
 }
 
 if (args.includes('--version') || args.includes('-v')) {
-  console.log(`steroid-workflow v${pkg.version}`);
-  process.exit(0);
+    console.log(`steroid-workflow v${pkg.version}`);
+    process.exit(0);
 }
 
 // Command detection
-const command = args.find(a => ['init', 'update'].includes(a)) || 'init';
+const command = args.find((a) => ['init', 'update'].includes(a)) || 'init';
 const isUpdate = command === 'update';
 const forceMode = args.includes('--force');
 
 // --- Detect currently installed version ---
 function getInstalledVersion() {
-  try {
-    // Check if steroid-run.cjs exists and try to find version marker
-    const installedPkg = path.join(targetDir, '.memory', 'execution_state.json');
-    const maestroFile = path.join(targetDir, 'GEMINI.md');
-    if (fs.existsSync(maestroFile)) {
-      const content = fs.readFileSync(maestroFile, 'utf-8');
-      const match = content.match(/STEROID-WORKFLOW-START/);
-      if (match) {
-        // Check for version stamp in .memory
-        const versionFile = path.join(targetDir, '.memory', '.steroid-version');
-        if (fs.existsSync(versionFile)) {
-          return fs.readFileSync(versionFile, 'utf-8').trim();
+    try {
+        // Check if steroid-run.cjs exists and try to find version marker
+        const maestroFile = path.join(targetDir, 'GEMINI.md');
+        if (fs.existsSync(maestroFile)) {
+            const content = fs.readFileSync(maestroFile, 'utf-8');
+            const match = content.match(/STEROID-WORKFLOW-START/);
+            if (match) {
+                // Check for version stamp in .memory
+                const versionFile = path.join(targetDir, '.memory', '.steroid-version');
+                if (fs.existsSync(versionFile)) {
+                    return fs.readFileSync(versionFile, 'utf-8').trim();
+                }
+                return 'unknown (pre-2.1.0)';
+            }
         }
-        return 'unknown (pre-2.1.0)';
-      }
+        return null; // Not installed
+    } catch {
+        return null;
     }
-    return null; // Not installed
-  } catch {
-    return null;
-  }
 }
 
 // --- Helper Functions ---
 
 function copyRecursiveSync(src, dest, skipGit = true) {
-  if (!fs.existsSync(dest)) {
-    fs.mkdirSync(dest, { recursive: true });
-  }
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const entry of entries) {
-    if (skipGit && entry.name === '.git') continue;
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyRecursiveSync(srcPath, destPath, skipGit);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
+    if (!fs.existsSync(dest)) {
+        fs.mkdirSync(dest, { recursive: true });
     }
-  }
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+        if (skipGit && entry.name === '.git') continue;
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            copyRecursiveSync(srcPath, destPath, skipGit);
+        } else {
+            fs.copyFileSync(srcPath, destPath);
+        }
+    }
 }
 
 /**
@@ -86,46 +85,28 @@ function copyRecursiveSync(src, dest, skipGit = true) {
  * Replaces in-place if markers already found (re-install).
  */
 function injectContent(filePath, content, markerStart, markerEnd) {
-  const block = `${markerStart}\n${content}\n${markerEnd}`;
+    const block = `${markerStart}\n${content}\n${markerEnd}`;
 
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, `${block}\n`);
-    return;
-  }
+    if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, `${block}\n`);
+        return;
+    }
 
-  const existing = fs.readFileSync(filePath, 'utf-8');
+    const existing = fs.readFileSync(filePath, 'utf-8');
 
-  if (existing.includes(markerStart)) {
-    // Replace existing block in-place
-    const regex = new RegExp(
-      escapeRegExp(markerStart) + '[\\s\\S]*?' + escapeRegExp(markerEnd),
-      'g'
-    );
-    const updated = existing.replace(regex, block);
-    fs.writeFileSync(filePath, updated);
-  } else {
-    // PREPEND for maximum LLM priority (not append!)
-    fs.writeFileSync(filePath, `${block}\n\n${existing}`);
-  }
+    if (existing.includes(markerStart)) {
+        // Replace existing block in-place
+        const regex = new RegExp(escapeRegExp(markerStart) + '[\\s\\S]*?' + escapeRegExp(markerEnd), 'g');
+        const updated = existing.replace(regex, block);
+        fs.writeFileSync(filePath, updated);
+    } else {
+        // PREPEND for maximum LLM priority (not append!)
+        fs.writeFileSync(filePath, `${block}\n\n${existing}`);
+    }
 }
 
 function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// --- Track which config files existed BEFORE install ---
-function fileExistedBefore(filePath) {
-  // We check git to see if the file is already tracked
-  try {
-    const { spawnSync } = require('child_process');
-    const result = spawnSync('git', ['ls-files', filePath], {
-      cwd: targetDir,
-      encoding: 'utf-8',
-    });
-    return result.stdout && result.stdout.trim().length > 0;
-  } catch {
-    return fs.existsSync(filePath);
-  }
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // --- Maestro Content (The Rules) ---
@@ -196,7 +177,7 @@ The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs commit "<message>"\\\` — Atomic git commit in steroid format
 - \\\`node steroid-run.cjs log <feature> "<message>"\\\` — Append to progress log
 - \\\`node steroid-run.cjs check-plan <feature>\\\` — Check if all tasks are done
-- \\\`node steroid-run.cjs verify-feature <feature>\\\` — Pre-check before verification skill
+- \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (optional \\\`--deep\\\` adds scanners)
 - \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature
 - \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
 - \\\`node steroid-run.cjs detect-tests\\\` — Detect test framework in project
@@ -229,7 +210,6 @@ Read the Codebase Patterns section at the top before starting any new task.
 ## Anti-Summarization Rule
 NEVER summarize code. NEVER write "...rest of code here..." or "// existing code".
 NEVER truncate file contents. Write complete replacements or precise edits.`;
-
 
 // --- Git Pre-Commit Hook ---
 
@@ -312,29 +292,29 @@ console.log('╚═════════════════════�
 
 const installedVersion = getInstalledVersion();
 if (isUpdate && !installedVersion) {
-  console.log('');
-  console.log('⚠️  No existing installation found. Running fresh install instead.');
+    console.log('');
+    console.log('⚠️  No existing installation found. Running fresh install instead.');
 } else if (isUpdate && installedVersion) {
-  console.log(`   Updating: ${installedVersion} → v${pkg.version}`);
+    console.log(`   Updating: ${installedVersion} → v${pkg.version}`);
 } else if (!isUpdate && installedVersion) {
-  console.log(`   Reinstalling over: ${installedVersion}`);
+    console.log(`   Reinstalling over: ${installedVersion}`);
 }
 console.log('');
 
 // Step 1: Install Memory Templates
 const memoryDir = path.join(targetDir, '.memory');
 if (fs.existsSync(memoryDir) && !forceMode) {
-  console.log('📦 [1/7] MemoryCore schema...');
-  console.log('   ⚠️  .memory/ already exists. Skipping to preserve your project state.');
-  console.log('   (Use --force to overwrite)');
+    console.log('📦 [1/7] MemoryCore schema...');
+    console.log('   ⚠️  .memory/ already exists. Skipping to preserve your project state.');
+    console.log('   (Use --force to overwrite)');
 } else {
-  console.log('📦 [1/7] Installing MemoryCore schema...');
-  copyRecursiveSync(path.join(sourceDir, 'memory-template'), memoryDir);
-  const changesDir = path.join(memoryDir, 'changes');
-  if (!fs.existsSync(changesDir)) {
-    fs.mkdirSync(changesDir, { recursive: true });
-  }
-  console.log('   ✅ .memory/ created with execution_state.json, progress.md, and changes/ folder');
+    console.log('📦 [1/7] Installing MemoryCore schema...');
+    copyRecursiveSync(path.join(sourceDir, 'memory-template'), memoryDir);
+    const changesDir = path.join(memoryDir, 'changes');
+    if (!fs.existsSync(changesDir)) {
+        fs.mkdirSync(changesDir, { recursive: true });
+    }
+    console.log('   ✅ .memory/ created with execution_state.json, progress.md, and changes/ folder');
 }
 
 // Step 2: Install Skills
@@ -358,63 +338,64 @@ console.log('🔌 [4/7] Injecting Maestro rules into IDE configs...');
 const preExistingConfigs = [];
 
 const ideConfigs = [
-  { name: 'GEMINI.md', path: 'GEMINI.md', label: 'Gemini CLI / Antigravity' },
-  { name: '.cursorrules', path: '.cursorrules', label: 'Cursor' },
-  { name: 'CLAUDE.md', path: 'CLAUDE.md', label: 'Claude Code' },
-  { name: '.windsurfrules', path: '.windsurfrules', label: 'Windsurf' },
-  { name: 'copilot-instructions.md', path: '.github/copilot-instructions.md', label: 'GitHub Copilot' },
-  { name: 'AGENTS.md', path: 'AGENTS.md', label: 'OpenAI Codex' },
-  { name: '.clinerules', path: '.clinerules', label: 'Cline' },
+    { name: 'GEMINI.md', path: 'GEMINI.md', label: 'Gemini CLI / Antigravity' },
+    { name: '.cursorrules', path: '.cursorrules', label: 'Cursor' },
+    { name: 'CLAUDE.md', path: 'CLAUDE.md', label: 'Claude Code' },
+    { name: '.windsurfrules', path: '.windsurfrules', label: 'Windsurf' },
+    { name: 'copilot-instructions.md', path: '.github/copilot-instructions.md', label: 'GitHub Copilot' },
+    { name: 'AGENTS.md', path: 'AGENTS.md', label: 'OpenAI Codex' },
+    { name: '.clinerules', path: '.clinerules', label: 'Cline' },
 ];
+const ideConfigCount = ideConfigs.length;
 
 for (const config of ideConfigs) {
-  const fullPath = path.join(targetDir, config.path);
+    const fullPath = path.join(targetDir, config.path);
 
-  // Track pre-existing files
-  if (fs.existsSync(fullPath)) {
-    preExistingConfigs.push(config.path);
-  }
+    // Track pre-existing files
+    if (fs.existsSync(fullPath)) {
+        preExistingConfigs.push(config.path);
+    }
 
-  // Ensure parent directory exists (for .github/copilot-instructions.md)
-  const parentDir = path.dirname(fullPath);
-  if (!fs.existsSync(parentDir)) {
-    fs.mkdirSync(parentDir, { recursive: true });
-  }
+    // Ensure parent directory exists (for .github/copilot-instructions.md)
+    const parentDir = path.dirname(fullPath);
+    if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+    }
 
-  injectContent(fullPath, maestroContent, MARKER_START, MARKER_END);
-  console.log(`   ✅ ${config.label} → ${config.path}`);
+    injectContent(fullPath, maestroContent, MARKER_START, MARKER_END);
+    console.log(`   ✅ ${config.label} → ${config.path}`);
 }
 
 // Step 5: Install Git Pre-Commit Hook
 console.log('🔒 [5/7] Installing git pre-commit hook (physical enforcement)...');
 const gitDir = path.join(targetDir, '.git');
 if (fs.existsSync(gitDir)) {
-  const hooksDir = path.join(gitDir, 'hooks');
-  if (!fs.existsSync(hooksDir)) {
-    fs.mkdirSync(hooksDir, { recursive: true });
-  }
-
-  const hookPath = path.join(hooksDir, 'pre-commit');
-  const hookExists = fs.existsSync(hookPath);
-
-  if (hookExists && !forceMode) {
-    // Check if it's our hook or user's own hook
-    const existingHook = fs.readFileSync(hookPath, 'utf-8');
-    if (existingHook.includes('STEROID-WORKFLOW')) {
-      fs.writeFileSync(hookPath, PRE_COMMIT_HOOK, { mode: 0o755 });
-      console.log('   ✅ Pre-commit hook updated');
-    } else {
-      console.log('   ⚠️  Pre-commit hook already exists (not ours). Skipping to avoid conflict.');
-      console.log('   (Use --force to overwrite)');
+    const hooksDir = path.join(gitDir, 'hooks');
+    if (!fs.existsSync(hooksDir)) {
+        fs.mkdirSync(hooksDir, { recursive: true });
     }
-  } else {
-    fs.writeFileSync(hookPath, PRE_COMMIT_HOOK, { mode: 0o755 });
-    console.log('   ✅ Pre-commit hook installed → .git/hooks/pre-commit');
-    console.log('      Commits with code changes are BLOCKED unless a plan.md exists.');
-  }
+
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const hookExists = fs.existsSync(hookPath);
+
+    if (hookExists && !forceMode) {
+        // Check if it's our hook or user's own hook
+        const existingHook = fs.readFileSync(hookPath, 'utf-8');
+        if (existingHook.includes('STEROID-WORKFLOW')) {
+            fs.writeFileSync(hookPath, PRE_COMMIT_HOOK, { mode: 0o755 });
+            console.log('   ✅ Pre-commit hook updated');
+        } else {
+            console.log('   ⚠️  Pre-commit hook already exists (not ours). Skipping to avoid conflict.');
+            console.log('   (Use --force to overwrite)');
+        }
+    } else {
+        fs.writeFileSync(hookPath, PRE_COMMIT_HOOK, { mode: 0o755 });
+        console.log('   ✅ Pre-commit hook installed → .git/hooks/pre-commit');
+        console.log('      Commits with code changes are BLOCKED unless a plan.md exists.');
+    }
 } else {
-  console.log('   ⚠️  No .git directory found. Initialize git first: git init');
-  console.log('   Then re-run: npx steroid-workflow init');
+    console.log('   ⚠️  No .git directory found. Initialize git first: git init');
+    console.log('   Then re-run: npx steroid-workflow init');
 }
 
 // Step 6: Setup .gitignore
@@ -426,37 +407,34 @@ const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.cjs', '.agents/
 
 // Only gitignore IDE config files that were CREATED by us (not pre-existing)
 for (const config of ideConfigs) {
-  if (!preExistingConfigs.includes(config.path)) {
-    gitignoreEntries.push(config.path);
-  }
+    if (!preExistingConfigs.includes(config.path)) {
+        gitignoreEntries.push(config.path);
+    }
 }
 
 if (fs.existsSync(userGitignore)) {
-  const existing = fs.readFileSync(userGitignore, 'utf-8');
-  const toAdd = gitignoreEntries.filter(e => !existing.includes(e));
-  if (toAdd.length > 0) {
-    fs.appendFileSync(userGitignore, '\n# Steroid-Workflow (auto-added)\n' + toAdd.join('\n') + '\n');
-    console.log(`   ✅ Added ${toAdd.length} entries to .gitignore`);
-  } else {
-    console.log('   ✅ .gitignore already has steroid entries');
-  }
+    const existing = fs.readFileSync(userGitignore, 'utf-8');
+    const toAdd = gitignoreEntries.filter((e) => !existing.includes(e));
+    if (toAdd.length > 0) {
+        fs.appendFileSync(userGitignore, '\n# Steroid-Workflow (auto-added)\n' + toAdd.join('\n') + '\n');
+        console.log(`   ✅ Added ${toAdd.length} entries to .gitignore`);
+    } else {
+        console.log('   ✅ .gitignore already has steroid entries');
+    }
 } else {
-  fs.writeFileSync(
-    userGitignore,
-    '# Steroid-Workflow\n' + gitignoreEntries.join('\n') + '\nnode_modules/\n'
-  );
-  console.log('   ✅ Created .gitignore');
+    fs.writeFileSync(userGitignore, '# Steroid-Workflow\n' + gitignoreEntries.join('\n') + '\nnode_modules/\n');
+    console.log('   ✅ Created .gitignore');
 }
 
 if (preExistingConfigs.length > 0) {
-  console.log(`   ℹ️  Kept ${preExistingConfigs.join(', ')} tracked (pre-existing)`);
+    console.log(`   ℹ️  Kept ${preExistingConfigs.join(', ')} tracked (pre-existing)`);
 }
 
 // Step 7: Shared Maestro reference for YAML-based IDEs (Aider)
 console.log('📄 [7/7] Creating shared Maestro reference...');
 const sharedMaestro = path.join(targetDir, '.agents', 'steroid-maestro.md');
 if (!fs.existsSync(path.dirname(sharedMaestro))) {
-  fs.mkdirSync(path.dirname(sharedMaestro), { recursive: true });
+    fs.mkdirSync(path.dirname(sharedMaestro), { recursive: true });
 }
 fs.writeFileSync(sharedMaestro, `${MARKER_START}\n${maestroContent}\n${MARKER_END}\n`);
 console.log('   ✅ .agents/steroid-maestro.md created (shared reference for all IDEs)');
@@ -472,28 +450,28 @@ console.log('╔═════════════════════�
 console.log(`║  ✅ Steroid-Workflow v${pkg.version} ${verb}!${' '.repeat(Math.max(0, 25 - verb.length))}║`);
 console.log('║                                                              ║');
 console.log('║  🔒 Git hook active — AI cannot commit without pipeline      ║');
-console.log('║  🧠 5 IDE configs injected — universal coverage              ║');
+console.log(`║  🧠 ${String(ideConfigCount).padEnd(2)} IDE configs injected — universal coverage             ║`);
 console.log('║  📋 Pipeline: scan → vibe → spec → research → arch → engine ║');
 console.log('║  ✅ Verification: steroid-verify enforces proof of work       ║');
 console.log('║  🔍 Intent routing: build/fix/refactor/migrate/document      ║');
 console.log('╚══════════════════════════════════════════════════════════════╝');
 console.log('');
 if (isUpdate) {
-  console.log('Update complete. All enforcement layers refreshed.');
-  console.log('');
-  console.log('Verify:');
-  console.log('  node steroid-run.cjs audit');
+    console.log('Update complete. All enforcement layers refreshed.');
+    console.log('');
+    console.log('Verify:');
+    console.log('  node steroid-run.cjs audit');
 } else {
-  console.log('Tell your AI what you want to build:');
-  console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
-  console.log('  👉 "Add user authentication to my app"');
-  console.log('  👉 "Fix the login bug and refactor the auth module"');
-  console.log('');
-  console.log('The AI will automatically activate the steroid pipeline.');
-  console.log('If it doesn\'t, say: "Use the steroid pipeline."');
-  console.log('');
-  console.log('Verify installation:');
-  console.log('  node steroid-run.cjs audit');
+    console.log('Tell your AI what you want to build:');
+    console.log('  👉 "Build me a minimal to-do app that looks like Notion"');
+    console.log('  👉 "Add user authentication to my app"');
+    console.log('  👉 "Fix the login bug and refactor the auth module"');
+    console.log('');
+    console.log('The AI will automatically activate the steroid pipeline.');
+    console.log('If it doesn\'t, say: "Use the steroid pipeline."');
+    console.log('');
+    console.log('Verify installation:');
+    console.log('  node steroid-run.cjs audit');
 }
 console.log('');
 console.log('Future updates:');

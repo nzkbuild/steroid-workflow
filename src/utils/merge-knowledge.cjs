@@ -15,8 +15,14 @@ function mergeKnowledge(existing, incoming) {
     for (const [key, value] of Object.entries(incoming)) {
         if (Array.isArray(value) && Array.isArray(result[key])) {
             result[key] = [...new Set([...result[key], ...value])];
-        } else if (value && typeof value === 'object' && !Array.isArray(value)
-            && result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+        } else if (
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            result[key] &&
+            typeof result[key] === 'object' &&
+            !Array.isArray(result[key])
+        ) {
             result[key] = mergeKnowledge(result[key], value);
         } else {
             result[key] = value;

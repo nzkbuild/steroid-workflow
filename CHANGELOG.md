@@ -1,5 +1,28 @@
 # Changelog
 
+## [6.1.0] "Trust Hardening" - 2026-03-15
+
+### The Vision
+v6.0.0 made verification physical, but the next gap was trust consistency: command execution still had bypass paths, archive and review gates still leaned on markdown, Windows test behavior was too shell-sensitive, and the docs were ahead of the receipts. v6.1.0 hardens the release around machine-checkable truth.
+
+### Added
+- **Machine-readable receipts** — `review spec` now writes `review.json`, `review status` syncs receipt state from `review.md`, and `verify-feature` writes `verify.json` alongside `verify.md`
+- **Optional deep verification mode** — `verify-feature --deep` records deep scan intent and completion in `verify.json`
+- **Consistency checker** — `npm run check:consistency` validates version drift, receipt/docs alignment, help text, and CI expectations before tests
+- **Windows CI coverage** — GitHub Actions now runs on `ubuntu-latest` and `windows-latest`
+
+### Changed
+- **Command guard hardening** — shell control syntax is blocked before execution, and shell interpreters such as `powershell`, `pwsh`, and `cmd` are no longer in the default allowlist
+- **Archive gate** — `archive <feature>` now requires `verify.json` with `PASS` or `CONDITIONAL`
+- **Review gate** — `verify-feature` now requires both review stages to pass via `review.json`
+- **Verification contract** — core verification is the default; deep scans are explicit and optional
+- **Test harness behavior** — smoke and command-level tests now skip cleanly when restricted environments block nested child Node processes instead of failing noisily
+
+### Fixed
+- **IDE config banner drift** — installer output now derives the injected IDE config count from the actual config array
+- **Version drift** — package version, runtime header, and fallback `SW_VERSION` are aligned for release
+- **Skill handoff wording** — engine and verify skill docs now match the receipt-based archive and verification flow
+
 ## [6.0.0] "Integrity Release" - 2026-03-14
 
 ### The Vision

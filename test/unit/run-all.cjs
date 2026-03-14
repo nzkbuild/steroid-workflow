@@ -9,8 +9,9 @@ const fs = require('fs');
 const path = require('path');
 
 const testDir = __dirname;
-const testFiles = fs.readdirSync(testDir)
-    .filter(f => f.endsWith('.test.cjs'))
+const testFiles = fs
+    .readdirSync(testDir)
+    .filter((f) => f.endsWith('.test.cjs'))
     .sort();
 
 let totalPassed = 0;

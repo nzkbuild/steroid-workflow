@@ -393,9 +393,9 @@ When `node steroid-run.cjs check-plan <feature>` exits with code 0 (all tasks co
 
 1. Output to the user: "🔨 All tasks complete. Running verification..."
 2. **Hand off to the `steroid-verify` skill** (see `skills/steroid-verify/SKILL.md`).
-   The verify skill performs spec compliance review, code quality review, test execution, and anti-pattern scanning. It writes results to `.memory/changes/<feature>/verify.md`.
+   The verify skill performs the core verification gate, can run optional deep scans, and writes results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<feature>/verify.json`.
 3. If verification **PASSES**:
-   - Archive the feature: `node steroid-run.cjs archive <feature>`
+   - Archive the feature: `node steroid-run.cjs archive <feature>` (this now requires a passing `verify.json` receipt)
    - Output: "🎉 The technical blueprint is fully implemented and verified!"
    - Signal completion: `<promise>COMPLETE</promise>`
 4. If verification **FAILS**:

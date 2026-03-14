@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 5.7.0
+ * @version 6.1.0
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -99,8 +99,14 @@ function mergeKnowledge(existing, incoming) {
     for (const [key, value] of Object.entries(incoming)) {
         if (Array.isArray(value) && Array.isArray(result[key])) {
             result[key] = [...new Set([...result[key], ...value])];
-        } else if (value && typeof value === 'object' && !Array.isArray(value)
-            && result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+        } else if (
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            result[key] &&
+            typeof result[key] === 'object' &&
+            !Array.isArray(result[key])
+        ) {
             result[key] = mergeKnowledge(result[key], value);
         } else {
             result[key] = value;
@@ -119,20 +125,327 @@ function mergeKnowledge(existing, incoming) {
  */
 function friendlyHint(key) {
     const hints = {
-        'gate-blocked': '\n  💡 This is normal — the AI needs to finish the previous step first.\n  Ask it to "continue with the steroid pipeline."',
-        'gate-incomplete': '\n  💡 The previous step\'s output looks too short. Ask the AI to "redo the previous phase with more detail."',
+        'gate-blocked':
+            '\n  💡 This is normal — the AI needs to finish the previous step first.\n  Ask it to "continue with the steroid pipeline."',
+        'gate-incomplete':
+            '\n  💡 The previous step\'s output looks too short. Ask the AI to "redo the previous phase with more detail."',
         'circuit-tripped': '\n  💡 Too many errors. The AI is stuck. Try: "Use steroid recover to diagnose the issue."',
-        'git-failed': '\n  💡 A save operation failed. This usually fixes itself. Ask the AI to "try the commit again."',
+        'git-failed':
+            '\n  💡 A save operation failed. This usually fixes itself. Ask the AI to "try the commit again."',
         'no-git': '\n  💡 No git repository found. Run: git init && git add -A && git commit -m "Initial commit"',
-        'no-remote': '\n  💡 Your code is saved locally. To back it up to the cloud:\n  1. Go to github.com → New Repository\n  2. Copy the URL\n  3. Run: git remote add origin <your-url>\n  4. Run: git push -u origin main'
+        'no-remote':
+            '\n  💡 Your code is saved locally. To back it up to the cloud:\n  1. Go to github.com → New Repository\n  2. Copy the URL\n  3. Run: git remote add origin <your-url>\n  4. Run: git push -u origin main',
     };
     return hints[key] || '';
+}
+
+/**
+ * Removes a single matching pair of wrapping quotes from a string.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function stripWrappingQuotes(value) {
+    if (!value || value.length < 2) return value;
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' || first === "'") && first === last) {
+        return value.slice(1, -1);
+    }
+    return value;
+}
+
+/**
+ * Tokenizes a shell-like command string while preserving quoted substrings.
+ * This is used for allowlist inspection and targeted shell-syntax blocking.
+ *
+ * @param {string} input
+ * @returns {string[]}
+ */
+function tokenizeCommand(input) {
+    const source = stripWrappingQuotes((input || '').trim());
+    const tokens = [];
+    let current = '';
+    let quote = null;
+    let escape = false;
+
+    for (const char of source) {
+        if (escape) {
+            current += char;
+            escape = false;
+            continue;
+        }
+
+        if (char === '\\' && quote === '"') {
+            escape = true;
+            continue;
+        }
+
+        if (quote) {
+            if (char === quote) {
+                quote = null;
+            } else {
+                current += char;
+            }
+            continue;
+        }
+
+        if (char === '"' || char === "'") {
+            quote = char;
+            continue;
+        }
+
+        if (/\s/.test(char)) {
+            if (current) {
+                tokens.push(current);
+                current = '';
+            }
+            continue;
+        }
+
+        current += char;
+    }
+
+    if (quote) {
+        throw new Error(`Unterminated ${quote === '"' ? 'double' : 'single'} quote in command.`);
+    }
+
+    if (current) tokens.push(current);
+    return tokens;
+}
+
+/**
+ * Detects blocked shell syntax that would allow command chaining or subshells.
+ *
+ * @param {string} input
+ * @returns {string|null}
+ */
+function findBlockedShellSyntax(input) {
+    const blockedPatterns = [
+        { label: '&&', pattern: /&&/ },
+        { label: '||', pattern: /\|\|/ },
+        { label: ';', pattern: /;/ },
+        { label: '&', pattern: /&/ },
+        { label: '`', pattern: /`/ },
+        { label: '$(', pattern: /\$\(/ },
+        { label: 'newline', pattern: /\r|\n/ },
+    ];
+
+    for (const blocked of blockedPatterns) {
+        if (blocked.pattern.test(input)) return blocked.label;
+    }
+
+    return null;
+}
+
+/**
+ * Safely reads JSON from disk.
+ *
+ * @param {string} filePath
+ * @returns {Record<string, any>|null}
+ */
+function readJsonFile(filePath) {
+    if (!fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Writes JSON to disk with stable formatting.
+ *
+ * @param {string} filePath
+ * @param {Record<string, any>} data
+ */
+function writeJsonFile(filePath, data) {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+/**
+ * Parses stage statuses from review.md when present.
+ *
+ * @param {string} content
+ * @returns {{ stage1: string, stage2: string }}
+ */
+function parseReviewMarkdown(content) {
+    const stage1Patterns = [/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/, /Stage 1 Result:\s*(PASS|FAIL|PENDING)/];
+    const stage2Patterns = [/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/, /Stage 2 Result:\s*(PASS|FAIL|PENDING)/];
+
+    let stage1 = 'PENDING';
+    let stage2 = 'PENDING';
+
+    for (const pattern of stage1Patterns) {
+        const match = content.match(pattern);
+        if (match) {
+            stage1 = match[1];
+            break;
+        }
+    }
+
+    for (const pattern of stage2Patterns) {
+        const match = content.match(pattern);
+        if (match) {
+            stage2 = match[1];
+            break;
+        }
+    }
+
+    return { stage1, stage2 };
+}
+
+/**
+ * Loads review receipt state and backfills it from review.md if possible.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @returns {{ feature: string, stage1: string, stage2: string, source: string, updatedAt: string|null }}
+ */
+function loadReviewReceipt(feature, featureDir) {
+    const reviewJsonPath = path.join(featureDir, 'review.json');
+    const reviewMdPath = path.join(featureDir, 'review.md');
+    const existing = readJsonFile(reviewJsonPath);
+    const reviewMdExists = fs.existsSync(reviewMdPath);
+
+    if (reviewMdExists) {
+        const parsed = parseReviewMarkdown(fs.readFileSync(reviewMdPath, 'utf-8'));
+        const receipt = {
+            feature,
+            stage1: parsed.stage1,
+            stage2: parsed.stage2,
+            source: 'review.md-synced',
+            updatedAt: new Date().toISOString(),
+        };
+        if (
+            !existing ||
+            existing.feature !== feature ||
+            existing.stage1 !== receipt.stage1 ||
+            existing.stage2 !== receipt.stage2
+        ) {
+            writeJsonFile(reviewJsonPath, receipt);
+        }
+        return receipt;
+    }
+
+    if (existing && existing.feature === feature) {
+        return {
+            feature,
+            stage1: existing.stage1 || 'PENDING',
+            stage2: existing.stage2 || 'PENDING',
+            source: existing.source || 'review.json',
+            updatedAt: existing.updatedAt || null,
+        };
+    }
+
+    return {
+        feature,
+        stage1: 'PENDING',
+        stage2: 'PENDING',
+        source: 'none',
+        updatedAt: null,
+    };
+}
+
+/**
+ * Writes review receipt state.
+ *
+ * @param {string} featureDir
+ * @param {{ feature: string, stage1: string, stage2: string, source?: string, updatedAt?: string|null }} receipt
+ */
+function saveReviewReceipt(featureDir, receipt) {
+    writeJsonFile(path.join(featureDir, 'review.json'), {
+        feature: receipt.feature,
+        stage1: receipt.stage1,
+        stage2: receipt.stage2,
+        source: receipt.source || 'review.json',
+        updatedAt: receipt.updatedAt || new Date().toISOString(),
+    });
+}
+
+/**
+ * Parses the verification status from verify.md.
+ *
+ * @param {string} content
+ * @returns {string|null}
+ */
+function parseVerifyMarkdownStatus(content) {
+    const match = content.match(/\*\*Status:\*\*\s*(PASS|FAIL|CONDITIONAL)/);
+    return match ? match[1] : null;
+}
+
+/**
+ * Loads verify receipt state and backfills from verify.md if possible.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @returns {{ feature: string, status: string|null, reviewPassed: boolean, checks: Record<string, any>, updatedAt: string|null, source: string }}
+ */
+function loadVerifyReceipt(feature, featureDir) {
+    const verifyJsonPath = path.join(featureDir, 'verify.json');
+    const verifyMdPath = path.join(featureDir, 'verify.md');
+    const existing = readJsonFile(verifyJsonPath);
+
+    if (existing && existing.feature === feature) {
+        return {
+            feature,
+            status: existing.status || null,
+            reviewPassed: !!existing.reviewPassed,
+            checks: existing.checks || {},
+            updatedAt: existing.updatedAt || null,
+            source: existing.source || 'verify.json',
+        };
+    }
+
+    if (fs.existsSync(verifyMdPath)) {
+        const status = parseVerifyMarkdownStatus(fs.readFileSync(verifyMdPath, 'utf-8'));
+        if (status) {
+            const receipt = {
+                feature,
+                status,
+                reviewPassed: false,
+                checks: {},
+                updatedAt: new Date().toISOString(),
+                source: 'verify.md',
+            };
+            writeJsonFile(verifyJsonPath, receipt);
+            return receipt;
+        }
+    }
+
+    return {
+        feature,
+        status: null,
+        reviewPassed: false,
+        checks: {},
+        updatedAt: null,
+        source: 'none',
+    };
+}
+
+/**
+ * Writes verify receipt state.
+ *
+ * @param {string} featureDir
+ * @param {{ feature: string, status: string, reviewPassed: boolean, checks: Record<string, any>, updatedAt?: string, source?: string }} receipt
+ */
+function saveVerifyReceipt(featureDir, receipt) {
+    writeJsonFile(path.join(featureDir, 'verify.json'), {
+        feature: receipt.feature,
+        status: receipt.status,
+        reviewPassed: !!receipt.reviewPassed,
+        checks: receipt.checks || {},
+        deepRequested: !!receipt.deepRequested,
+        deepCompleted: !!receipt.deepCompleted,
+        updatedAt: receipt.updatedAt || new Date().toISOString(),
+        source: receipt.source || 'verify.json',
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.0.0';
+let SW_VERSION = '6.1.0';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -145,7 +458,9 @@ try {
             SW_VERSION = fs.readFileSync(versionFile, 'utf-8').trim();
         }
     }
-} catch { /* use hardcoded fallback */ }
+} catch {
+    /* use hardcoded fallback */
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // § ARGUMENT PARSING & HELP
@@ -170,8 +485,8 @@ Usage:
     node steroid-run.cjs commit <message>                  Atomic git commit in steroid format
     node steroid-run.cjs log <feature> <message>           Append to progress log
     node steroid-run.cjs check-plan <feature>              Count remaining tasks in plan
-    node steroid-run.cjs archive <feature>                 Archive completed feature
-    node steroid-run.cjs verify-feature <feature>          Run verification (writes verify.md)
+    node steroid-run.cjs archive <feature>                 Archive completed feature (requires verify.json)
+    node steroid-run.cjs verify-feature <feature> [--deep] Run verification (writes verify.md + verify.json)
 
   Stories:
     node steroid-run.cjs stories <feature>                 List prioritized stories (P1/P2/P3)
@@ -180,7 +495,7 @@ Usage:
   Review:
     node steroid-run.cjs review spec <feature>             Stage 1: Spec compliance review
     node steroid-run.cjs review quality <feature>          Stage 2: Code quality review
-    node steroid-run.cjs review status <feature>           Show review stage status
+    node steroid-run.cjs review status <feature>           Show review stage status and sync review.json
     node steroid-run.cjs review reset <feature>            Reset review for re-review
 
   Reports:
@@ -226,7 +541,14 @@ if (!fs.existsSync(stateFile)) {
     if (!fs.existsSync(path.dirname(stateFile))) {
         fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     }
-    fs.writeFileSync(stateFile, JSON.stringify({ error_count: 0, last_error: null, status: 'active', recovery_actions: [], error_history: [] }, null, 2));
+    fs.writeFileSync(
+        stateFile,
+        JSON.stringify(
+            { error_count: 0, last_error: null, status: 'active', recovery_actions: [], error_history: [] },
+            null,
+            2,
+        ),
+    );
 }
 
 let state;
@@ -247,7 +569,9 @@ try {
     if (fs.existsSync(configPath)) {
         userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     }
-} catch { /* use defaults */ }
+} catch {
+    /* use defaults */
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // § TELEMETRY & SESSION AWARENESS (v5.9.0)
@@ -260,13 +584,19 @@ if (args[0] && args[0] !== '--help' && args[0] !== '-h') {
         const usageFile = path.join(metricsDir, 'usage.json');
         let usage = { commands: {}, totalRuns: 0, lastRun: null };
         if (fs.existsSync(usageFile)) {
-            try { usage = JSON.parse(fs.readFileSync(usageFile, 'utf-8')); } catch { /* reset */ }
+            try {
+                usage = JSON.parse(fs.readFileSync(usageFile, 'utf-8'));
+            } catch {
+                /* reset */
+            }
         }
         usage.commands[args[0]] = (usage.commands[args[0]] || 0) + 1;
         usage.totalRuns = (usage.totalRuns || 0) + 1;
         usage.lastRun = new Date().toISOString();
         fs.writeFileSync(usageFile, JSON.stringify(usage, null, 2));
-    } catch { /* telemetry is best-effort */ }
+    } catch {
+        /* telemetry is best-effort */
+    }
 }
 
 // Welcome-back awareness: if >4 hours since last state write, print status
@@ -276,22 +606,26 @@ try {
     if (hoursSince > 4 && args[0] !== 'reset' && args[0] !== '--help') {
         const hoursAgo = Math.round(hoursSince);
         console.log(`[steroid-run] 👋 Welcome back! Last activity: ${hoursAgo} hours ago`);
-        console.log(`  🔋 Circuit breaker: ${state.error_count}/5 errors${state.error_count === 0 ? ' (all clear)' : ''}`);
+        console.log(
+            `  🔋 Circuit breaker: ${state.error_count}/5 errors${state.error_count === 0 ? ' (all clear)' : ''}`,
+        );
         // Find active feature
         if (fs.existsSync(changesDir)) {
-            const features = fs.readdirSync(changesDir).filter(f =>
-                fs.statSync(path.join(changesDir, f)).isDirectory()
-            );
+            const features = fs
+                .readdirSync(changesDir)
+                .filter((f) => fs.statSync(path.join(changesDir, f)).isDirectory());
             if (features.length > 0) {
                 const latest = features[features.length - 1];
-                const phases = ['context.md','vibe.md','spec.md','research.md','plan.md','diagnosis.md'];
-                const done = phases.filter(p => fs.existsSync(path.join(changesDir, latest, p))).length;
+                const phases = ['context.md', 'vibe.md', 'spec.md', 'research.md', 'plan.md', 'diagnosis.md'];
+                const done = phases.filter((p) => fs.existsSync(path.join(changesDir, latest, p))).length;
                 console.log(`  📍 Feature: ${latest} (${done}/8 phases)`);
             }
         }
         console.log('');
     }
-} catch { /* welcome-back is best-effort */ }
+} catch {
+    /* welcome-back is best-effort */
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // § COMMANDS: CIRCUIT BREAKER (reset, recover, status)
@@ -344,12 +678,16 @@ if (args[0] === 'report' && (!args[1] || args[1] === '--help' || args[1] === 'bu
     // Check for feature folders
     const changesPath = path.join(memoryDir, 'changes');
     let featureDirs = [];
-    try { featureDirs = fs.readdirSync(changesPath).filter(f => fs.statSync(path.join(changesPath, f)).isDirectory()); } catch (e) { /* no changes dir */ }
+    try {
+        featureDirs = fs.readdirSync(changesPath).filter((f) => fs.statSync(path.join(changesPath, f)).isDirectory());
+    } catch (e) {
+        /* no changes dir */
+    }
 
     if (featureDirs.length > 0) {
-        featureDirs.forEach(feature => {
+        featureDirs.forEach((feature) => {
             report += `### Feature: \`${feature}\`\n\n`;
-            memoryFiles.forEach(mf => {
+            memoryFiles.forEach((mf) => {
                 const fp = path.join(changesPath, feature, mf);
                 try {
                     const content = fs.readFileSync(fp, 'utf-8').trim();
@@ -395,7 +733,11 @@ if (args[0] === 'recover') {
     let errorPatterns = { patterns: [] };
     const errorPatternsFile = path.join(metricsDir, 'error-patterns.json');
     if (fs.existsSync(errorPatternsFile)) {
-        try { errorPatterns = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8')); } catch (e) { /* ignore */ }
+        try {
+            errorPatterns = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8'));
+        } catch (e) {
+            /* ignore */
+        }
     }
 
     console.log(`\n[steroid-run] 🔧 Smart Recovery — Error Level ${level}/5\n`);
@@ -426,9 +768,7 @@ if (args[0] === 'recover') {
         console.log('');
         if (errorPatterns.patterns.length > 0) {
             const lastErr = (state.last_error || '').toLowerCase();
-            const matches = errorPatterns.patterns.filter(p =>
-                lastErr.includes((p.keyword || '').toLowerCase())
-            );
+            const matches = errorPatterns.patterns.filter((p) => lastErr.includes((p.keyword || '').toLowerCase()));
             if (matches.length > 0) {
                 console.log('  🎯 Matching error patterns found:');
                 for (const m of matches) {
@@ -501,14 +841,14 @@ if (args[0] === 'pipeline-status') {
     }
 
     const phases = [
-        { name: 'scan',      file: 'context.md',   label: 'Codebase context' },
-        { name: 'vibe',      file: 'vibe.md',      label: 'Vibe capture' },
-        { name: 'specify',   file: 'spec.md',      label: 'Specification' },
-        { name: 'research',  file: 'research.md',  label: 'Tech research' },
-        { name: 'architect', file: 'plan.md',      label: 'Architecture plan' },
-        { name: 'diagnose',  file: 'diagnosis.md', label: 'Diagnosis (fix path)' },
-        { name: 'engine',    file: 'plan.md',      label: 'Engine execution' },
-        { name: 'verify',    file: 'plan.md',      label: 'Verification' },
+        { name: 'scan', file: 'context.md', label: 'Codebase context' },
+        { name: 'vibe', file: 'vibe.md', label: 'Vibe capture' },
+        { name: 'specify', file: 'spec.md', label: 'Specification' },
+        { name: 'research', file: 'research.md', label: 'Tech research' },
+        { name: 'architect', file: 'plan.md', label: 'Architecture plan' },
+        { name: 'diagnose', file: 'diagnosis.md', label: 'Diagnosis (fix path)' },
+        { name: 'engine', file: 'plan.md', label: 'Engine execution' },
+        { name: 'verify', file: 'plan.md', label: 'Verification' },
     ];
 
     console.log(`\n[steroid-run] Pipeline status for: ${feature}\n`);
@@ -534,7 +874,7 @@ if (args[0] === 'pipeline-status') {
     const auditFile = path.join(memoryDir, 'audit-trail.md');
     if (fs.existsSync(auditFile)) {
         const auditLines = fs.readFileSync(auditFile, 'utf-8').split('\n');
-        const featureEntries = auditLines.filter(l => l.includes(feature));
+        const featureEntries = auditLines.filter((l) => l.includes(feature));
         if (featureEntries.length > 0) {
             console.log(`  📋 Audit trail: ${featureEntries.length} gate receipt(s) recorded`);
         }
@@ -670,7 +1010,11 @@ Stores:
         const storeFile = path.join(knowledgeDir, `${store}.json`);
         let existing = {};
         if (fs.existsSync(storeFile)) {
-            try { existing = JSON.parse(fs.readFileSync(storeFile, 'utf-8')); } catch (e) { existing = {}; }
+            try {
+                existing = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+            } catch (e) {
+                existing = {};
+            }
         }
 
         const merged = mergeKnowledge(existing, newData);
@@ -688,7 +1032,7 @@ Stores:
             if (fs.existsSync(storeFile)) {
                 try {
                     const data = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
-                    const keys = Object.keys(data).filter(k => k !== '_lastUpdated');
+                    const keys = Object.keys(data).filter((k) => k !== '_lastUpdated');
                     console.log(`  ${store}: ${keys.length} entries (updated: ${data._lastUpdated || 'unknown'})`);
                     totalEntries += keys.length;
                 } catch (e) {
@@ -705,14 +1049,18 @@ Stores:
                 const ep = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8'));
                 const patterns = ep.patterns || [];
                 console.log(`  error-patterns: ${patterns.length} patterns tracked`);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                /* ignore */
+            }
         }
         if (fs.existsSync(featuresFile)) {
             try {
                 const feat = JSON.parse(fs.readFileSync(featuresFile, 'utf-8'));
-                const features = Object.keys(feat).filter(k => k !== '_lastUpdated');
+                const features = Object.keys(feat).filter((k) => k !== '_lastUpdated');
                 console.log(`  features: ${features.length} features tracked`);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                /* ignore */
+            }
         }
         console.log(`\n  Total knowledge entries: ${totalEntries}`);
         process.exit(0);
@@ -733,7 +1081,9 @@ if (args[0] === 'audit') {
     try {
         const pkgPath = path.join(__dirname, '..', 'package.json');
         version = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
-    } catch (e) { /* installed copy may not have package.json nearby */ }
+    } catch (e) {
+        /* installed copy may not have package.json nearby */
+    }
 
     console.log('');
     console.log(`[steroid-run] 🔍 Auditing enforcement layers... (v${version})`);
@@ -917,7 +1267,7 @@ if (args[0] === 'audit') {
     // v5.0: Reports health
     console.log('  Handoff reports:');
     if (fs.existsSync(reportsDir)) {
-        const reports = fs.readdirSync(reportsDir).filter(f => f.endsWith('.md'));
+        const reports = fs.readdirSync(reportsDir).filter((f) => f.endsWith('.md'));
         console.log(`    ${reports.length} report(s) generated`);
     } else {
         console.log('    \u25cb  No reports generated yet');
@@ -928,7 +1278,9 @@ if (args[0] === 'audit') {
     console.log('  Review system: \u2705 Two-stage review available (v' + SW_VERSION + ')');
 
     console.log('');
-    console.log(`  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s), ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores, review system v${SW_VERSION}`);
+    console.log(
+        `  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s), ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores, review system v${SW_VERSION}`,
+    );
 
     if (failed > 0) {
         console.log('');
@@ -947,7 +1299,7 @@ if (args[0] === 'audit') {
     for (const f of filesToAudit) {
         if (fs.existsSync(f)) {
             const content = fs.readFileSync(f, 'utf-8');
-            const oldVersions = (content.match(/v\d+\.\d+\.\d+/g) || []).filter(v => v !== `v${SW_VERSION}`);
+            const oldVersions = (content.match(/v\d+\.\d+\.\d+/g) || []).filter((v) => v !== `v${SW_VERSION}`);
             if (oldVersions.length > 0) {
                 const unique = [...new Set(oldVersions)];
                 console.log(`    ⚠️  ${path.basename(f)}: found stale version refs: ${unique.join(', ')}`);
@@ -978,13 +1330,21 @@ if (args[0] === 'smoke-test') {
             if (pkg.scripts && pkg.scripts.build) {
                 console.log('[steroid-run]   Stack: Node.js (build script detected)');
                 const build = spawnSync('npm', ['run', 'build'], {
-                    cwd: targetDir, stdio: 'pipe', timeout: 60000, shell: true,
+                    cwd: targetDir,
+                    stdio: 'pipe',
+                    timeout: 60000,
+                    shell: true,
                 });
                 if (build.status === 0) {
                     console.log('[steroid-run] ✅ Smoke test PASSED: build succeeded.');
                     process.exit(0);
                 } else {
-                    const errOutput = (build.stderr || build.stdout || Buffer.from('')).toString().trim().split('\n').slice(-8).join('\n');
+                    const errOutput = (build.stderr || build.stdout || Buffer.from(''))
+                        .toString()
+                        .trim()
+                        .split('\n')
+                        .slice(-8)
+                        .join('\n');
                     console.error('[steroid-run] ❌ Smoke test FAILED: build error.');
                     console.error(errOutput);
                     state.error_count += 1;
@@ -1001,14 +1361,22 @@ if (args[0] === 'smoke-test') {
                 if (fs.existsSync(tsConfig)) {
                     console.log('[steroid-run]   Stack: TypeScript (no build script, using tsc --noEmit)');
                     const tsc = spawnSync('npx', ['tsc', '--noEmit'], {
-                        cwd: targetDir, stdio: 'pipe', timeout: 60000, shell: true,
+                        cwd: targetDir,
+                        stdio: 'pipe',
+                        timeout: 60000,
+                        shell: true,
                     });
                     if (tsc.status === 0) {
                         console.log('[steroid-run] ✅ Smoke test PASSED: type check succeeded.');
                         process.exit(0);
                     } else {
                         console.error('[steroid-run] ❌ Smoke test FAILED: type errors found.');
-                        const errOutput = (tsc.stdout || Buffer.from('')).toString().trim().split('\n').slice(-8).join('\n');
+                        const errOutput = (tsc.stdout || Buffer.from(''))
+                            .toString()
+                            .trim()
+                            .split('\n')
+                            .slice(-8)
+                            .join('\n');
                         console.error(errOutput);
                         process.exit(1);
                     }
@@ -1127,9 +1495,10 @@ if (args[0] === 'fs-cp') {
             count++;
         }
     } else {
-        const destFile = fs.existsSync(resolvedDest) && fs.statSync(resolvedDest).isDirectory()
-            ? path.join(resolvedDest, path.basename(resolvedSrc))
-            : resolvedDest;
+        const destFile =
+            fs.existsSync(resolvedDest) && fs.statSync(resolvedDest).isDirectory()
+                ? path.join(resolvedDest, path.basename(resolvedSrc))
+                : resolvedDest;
         fs.copyFileSync(resolvedSrc, destFile);
         count = 1;
     }
@@ -1180,8 +1549,9 @@ if (args[0] === 'fs-ls') {
 
     const printTree = (dir, prefix, maxDepth, currentDepth) => {
         if (currentDepth >= maxDepth) return;
-        const entries = fs.readdirSync(dir, { withFileTypes: true })
-            .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules')
+        const entries = fs
+            .readdirSync(dir, { withFileTypes: true })
+            .filter((e) => !e.name.startsWith('.') && e.name !== 'node_modules')
             .sort((a, b) => {
                 if (a.isDirectory() && !b.isDirectory()) return -1;
                 if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -1232,7 +1602,8 @@ if (args[0] === 'git-init') {
     }
 
     const commit = spawnSync('git', ['commit', '-m', 'feat(steroid): initial scaffold checkpoint'], {
-        cwd: targetDir, stdio: 'inherit',
+        cwd: targetDir,
+        stdio: 'inherit',
     });
     if (commit.status !== 0) {
         console.error('[steroid-run] ❌ git commit failed.');
@@ -1272,7 +1643,9 @@ if (args[0] === 'init-feature') {
         } else if (/--/.test(slug)) {
             console.error(`[steroid-run] ❌ Feature name cannot contain consecutive hyphens. Got: "${slug}"`);
         } else {
-            console.error(`[steroid-run] ❌ Feature name must be kebab-case (e.g., habit-tracker, todo-app). Got: "${slug}"`);
+            console.error(
+                `[steroid-run] ❌ Feature name must be kebab-case (e.g., habit-tracker, todo-app). Got: "${slug}"`,
+            );
         }
         process.exit(1);
     }
@@ -1309,8 +1682,18 @@ if (args[0] === 'gate') {
         research: { requires: 'spec.md', minLines: 10, label: 'Specification' },
         architect: { requires: 'research.md', minLines: 10, label: 'Research' },
         diagnose: { requires: 'context.md', minLines: 5, label: 'Codebase scan' },
-        engine: { requires: 'plan.md', minLines: 10, label: 'Architecture', alt: { requires: 'diagnosis.md', minLines: 10, label: 'Diagnosis' } },
-        verify: { requires: 'plan.md', minLines: 10, label: 'Engine execution', alt: { requires: 'diagnosis.md', minLines: 10, label: 'Diagnosis (fix pipeline)' } },
+        engine: {
+            requires: 'plan.md',
+            minLines: 10,
+            label: 'Architecture',
+            alt: { requires: 'diagnosis.md', minLines: 10, label: 'Diagnosis' },
+        },
+        verify: {
+            requires: 'plan.md',
+            minLines: 10,
+            label: 'Engine execution',
+            alt: { requires: 'diagnosis.md', minLines: 10, label: 'Diagnosis (fix pipeline)' },
+        },
     };
 
     const gate = gates[phase];
@@ -1328,10 +1711,14 @@ if (args[0] === 'gate') {
         if (fs.existsSync(altFile)) {
             const altLines = fs.readFileSync(altFile, 'utf-8').split('\n').length;
             if (altLines >= gate.alt.minLines) {
-                console.log(`[steroid-run] ✅ Gate passed (alt): ${gate.alt.requires} exists (${altLines} lines). Proceeding to ${phase} via fix pipeline.`);
+                console.log(
+                    `[steroid-run] ✅ Gate passed (alt): ${gate.alt.requires} exists (${altLines} lines). Proceeding to ${phase} via fix pipeline.`,
+                );
                 process.exit(0);
             } else {
-                console.error(`[steroid-run] 🚫 GATE BLOCKED: ${gate.alt.requires} looks incomplete (${altLines} lines, need ${gate.alt.minLines}+).`);
+                console.error(
+                    `[steroid-run] 🚫 GATE BLOCKED: ${gate.alt.requires} looks incomplete (${altLines} lines, need ${gate.alt.minLines}+).`,
+                );
                 process.exit(1);
             }
         }
@@ -1343,14 +1730,18 @@ if (args[0] === 'gate') {
         if (gate.alt) {
             console.error(`  Alt path: .memory/changes/${feature}/${gate.alt.requires} (also missing)`);
         }
-        console.error(`  The "${phase}" phase cannot start until ${gate.requires}${gate.alt ? ` or ${gate.alt.requires}` : ''} exists.`);
+        console.error(
+            `  The "${phase}" phase cannot start until ${gate.requires}${gate.alt ? ` or ${gate.alt.requires}` : ''} exists.`,
+        );
         console.error(friendlyHint('gate-blocked'));
         process.exit(1);
     }
 
     const lines = fs.readFileSync(requiredFile, 'utf-8').split('\n').length;
     if (lines < gate.minLines) {
-        console.error(`[steroid-run] 🚫 GATE BLOCKED: ${gate.requires} looks incomplete (${lines} lines, need ${gate.minLines}+).`);
+        console.error(
+            `[steroid-run] 🚫 GATE BLOCKED: ${gate.requires} looks incomplete (${lines} lines, need ${gate.minLines}+).`,
+        );
         console.error(friendlyHint('gate-incomplete'));
         process.exit(1);
     }
@@ -1359,17 +1750,26 @@ if (args[0] === 'gate') {
 
     // Audit trail receipt (v5.9.0) — tamper-evident log of gate passes
     try {
-        const hash = crypto.createHash('sha256')
-            .update(fs.readFileSync(requiredFile, 'utf-8')).digest('hex').slice(0, 12);
+        const hash = crypto
+            .createHash('sha256')
+            .update(fs.readFileSync(requiredFile, 'utf-8'))
+            .digest('hex')
+            .slice(0, 12);
         const auditFile = path.join(memoryDir, 'audit-trail.md');
-        const receipt = `\n## [${new Date().toISOString()}] Gate: ${phase} → ${feature}\n`
-            + `- **Passed**: ${gate.requires} (${lines} lines, sha256: ${hash})\n`
-            + `- **Circuit breaker**: ${state.error_count}/5 errors\n`;
+        const receipt =
+            `\n## [${new Date().toISOString()}] Gate: ${phase} → ${feature}\n` +
+            `- **Passed**: ${gate.requires} (${lines} lines, sha256: ${hash})\n` +
+            `- **Circuit breaker**: ${state.error_count}/5 errors\n`;
         if (!fs.existsSync(auditFile)) {
-            fs.writeFileSync(auditFile, '# Steroid Audit Trail\n\n_Tamper-evident log of pipeline phase completions._\n');
+            fs.writeFileSync(
+                auditFile,
+                '# Steroid Audit Trail\n\n_Tamper-evident log of pipeline phase completions._\n',
+            );
         }
         fs.appendFileSync(auditFile, receipt);
-    } catch { /* audit trail is best-effort */ }
+    } catch {
+        /* audit trail is best-effort */
+    }
 
     process.exit(0);
 }
@@ -1400,10 +1800,15 @@ if (args[0] === 'commit') {
     const requiredGitignoreEntries = ['.memory/', 'steroid-run.cjs', '.agents/', 'src/forks/'];
     if (fs.existsSync(gitignorePath)) {
         const giContent = fs.readFileSync(gitignorePath, 'utf-8');
-        const missing = requiredGitignoreEntries.filter(e => !giContent.includes(e));
+        const missing = requiredGitignoreEntries.filter((e) => !giContent.includes(e));
         if (missing.length > 0) {
-            fs.appendFileSync(gitignorePath, '\n# Steroid-Workflow (auto-restored by commit guard)\n' + missing.join('\n') + '\n');
-            console.log(`[steroid-run] ⚠️  .gitignore was missing steroid entries. Auto-restored: ${missing.join(', ')}`);
+            fs.appendFileSync(
+                gitignorePath,
+                '\n# Steroid-Workflow (auto-restored by commit guard)\n' + missing.join('\n') + '\n',
+            );
+            console.log(
+                `[steroid-run] ⚠️  .gitignore was missing steroid entries. Auto-restored: ${missing.join(', ')}`,
+            );
         }
     }
 
@@ -1555,9 +1960,9 @@ if (args[0] === 'stories') {
     }
 
     if (!sub || sub === 'list') {
-        const p1 = stories.filter(s => s.priority === 'P1');
-        const p2 = stories.filter(s => s.priority === 'P2');
-        const p3 = stories.filter(s => s.priority === 'P3');
+        const p1 = stories.filter((s) => s.priority === 'P1');
+        const p2 = stories.filter((s) => s.priority === 'P2');
+        const p3 = stories.filter((s) => s.priority === 'P3');
 
         console.log(`\n[steroid-run] 📋 Stories for "${feature}"\n`);
 
@@ -1576,10 +1981,10 @@ if (args[0] === 'stories') {
         renderGroup('🟡 P2 — Should Have', p2);
         renderGroup('🟢 P3 — Nice to Have', p3);
 
-        const doneCount = stories.filter(s => s.status === 'done').length;
+        const doneCount = stories.filter((s) => s.status === 'done').length;
         console.log(`  Progress: ${doneCount}/${stories.length} stories complete`);
 
-        const p1Incomplete = p1.filter(s => s.status !== 'done');
+        const p1Incomplete = p1.filter((s) => s.status !== 'done');
         if (p1Incomplete.length > 0) {
             console.log(`\n  ⚠️  FOUNDATIONAL BLOCK: ${p1Incomplete.length} P1 stories incomplete.`);
             console.log('  Complete all P1 stories before starting P2/P3 work.');
@@ -1589,17 +1994,17 @@ if (args[0] === 'stories') {
     }
 
     if (sub === 'next') {
-        const p1Todo = stories.filter(s => s.priority === 'P1' && s.status === 'todo');
-        const p2Todo = stories.filter(s => s.priority === 'P2' && s.status === 'todo');
-        const p3Todo = stories.filter(s => s.priority === 'P3' && s.status === 'todo');
+        const p1Todo = stories.filter((s) => s.priority === 'P1' && s.status === 'todo');
+        const p2Todo = stories.filter((s) => s.priority === 'P2' && s.status === 'todo');
+        const p3Todo = stories.filter((s) => s.priority === 'P3' && s.status === 'todo');
 
-        const p1Incomplete = stories.filter(s => s.priority === 'P1' && s.status !== 'done');
+        const p1Incomplete = stories.filter((s) => s.priority === 'P1' && s.status !== 'done');
         if (p1Incomplete.length > 0 && p1Todo.length > 0) {
             console.log(`[steroid-run] 🎯 Next story: #${p1Todo[0].index} ${p1Todo[0].title} (P1 — foundational)`);
             process.exit(0);
         }
         if (p1Incomplete.length > 0 && p1Todo.length === 0) {
-            const inProgress = p1Incomplete.filter(s => s.status === 'in-progress');
+            const inProgress = p1Incomplete.filter((s) => s.status === 'in-progress');
             if (inProgress.length > 0) {
                 console.log(`[steroid-run] ⏳ P1 story in progress: #${inProgress[0].index} ${inProgress[0].title}`);
                 console.log('  Complete this before moving to the next story.');
@@ -1638,17 +2043,16 @@ if (args[0] === 'archive') {
         process.exit(1);
     }
 
-    // v3.1: Verification gate — archive requires verify.md with PASS/CONDITIONAL
-    const verifyFile = path.join(featureDir, 'verify.md');
-    if (fs.existsSync(verifyFile)) {
-        const verifyContent = fs.readFileSync(verifyFile, 'utf-8');
-        if (!verifyContent.includes('PASS') && !verifyContent.includes('CONDITIONAL')) {
-            console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: verify.md exists but has no PASS/CONDITIONAL verdict.`);
+    // v6.1.0: Verification gate — archive requires verify.json with PASS/CONDITIONAL
+    const verifyReceipt = loadVerifyReceipt(feature, featureDir);
+    if (verifyReceipt.status) {
+        if (!['PASS', 'CONDITIONAL'].includes(verifyReceipt.status)) {
+            console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: verify.json status is ${verifyReceipt.status}.`);
             console.error(`  Run verification first: node steroid-run.cjs verify-feature ${feature}`);
             process.exit(1);
         }
     } else {
-        console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: No verify.md found.`);
+        console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: No verify.json receipt found.`);
         console.error(`  Features must be verified before archiving.`);
         console.error(`  Run: node steroid-run.cjs verify-feature ${feature}`);
         if (!args.includes('--force')) {
@@ -1663,7 +2067,18 @@ if (args[0] === 'archive') {
 
     // Ported from ralph.sh: archive with date stamp
     const date = new Date().toISOString().split('T')[0];
-    const filesToArchive = ['context.md', 'vibe.md', 'spec.md', 'research.md', 'plan.md', 'verify.md', 'diagnosis.md', 'review.md'];
+    const filesToArchive = [
+        'context.md',
+        'vibe.md',
+        'spec.md',
+        'research.md',
+        'plan.md',
+        'verify.md',
+        'verify.json',
+        'diagnosis.md',
+        'review.md',
+        'review.json',
+    ];
     let archived = 0;
 
     for (const file of filesToArchive) {
@@ -1684,7 +2099,11 @@ if (args[0] === 'archive') {
     const featuresFile = path.join(metricsDir, 'features.json');
     let featuresData = {};
     if (fs.existsSync(featuresFile)) {
-        try { featuresData = JSON.parse(fs.readFileSync(featuresFile, 'utf-8')); } catch (e) { featuresData = {}; }
+        try {
+            featuresData = JSON.parse(fs.readFileSync(featuresFile, 'utf-8'));
+        } catch (e) {
+            featuresData = {};
+        }
     }
     featuresData[feature] = {
         archived: new Date().toISOString(),
@@ -1707,7 +2126,6 @@ if (args[0] === 'archive') {
     };
     const specContent = findArchiveFile('spec.md');
     const verifyContent = findArchiveFile('verify.md');
-    const planContent = findArchiveFile('plan.md');
     const reviewContent = findArchiveFile('review.md');
 
     let report = `# Handoff Report: ${feature}\n\n`;
@@ -1803,7 +2221,9 @@ if (args[0] === 'scan') {
             const oldHash = crypto.createHash('sha256').update(oldContent).digest('hex').slice(0, 12);
             // Store for post-scan comparison (uses global for simplicity)
             global.__steroidDrift = { oldHash, oldFiles };
-        } catch { /* drift detection is best-effort */ }
+        } catch {
+            /* drift detection is best-effort */
+        }
     }
 
     // Auto-detect basic project info and bootstrap context.md
@@ -1819,8 +2239,11 @@ if (args[0] === 'scan') {
         try {
             const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
             language = 'JavaScript/TypeScript';
-            packageManager = fs.existsSync(path.join(targetDir, 'pnpm-lock.yaml')) ? 'pnpm'
-                : fs.existsSync(path.join(targetDir, 'yarn.lock')) ? 'yarn' : 'npm';
+            packageManager = fs.existsSync(path.join(targetDir, 'pnpm-lock.yaml'))
+                ? 'pnpm'
+                : fs.existsSync(path.join(targetDir, 'yarn.lock'))
+                  ? 'yarn'
+                  : 'npm';
 
             // Detect framework
             const deps = { ...pkg.dependencies, ...pkg.devDependencies };
@@ -1834,16 +2257,27 @@ if (args[0] === 'scan') {
             else framework = 'Node.js';
 
             // Detect test framework
-            if (deps['vitest']) { testFramework = 'Vitest'; testCommand = 'npx vitest'; }
-            else if (deps['jest']) { testFramework = 'Jest'; testCommand = 'npx jest'; }
-            else if (deps['mocha']) { testFramework = 'Mocha'; testCommand = 'npx mocha'; }
-            else if (deps['@playwright/test']) { testFramework = 'Playwright'; testCommand = 'npx playwright test'; }
+            if (deps['vitest']) {
+                testFramework = 'Vitest';
+                testCommand = 'npx vitest';
+            } else if (deps['jest']) {
+                testFramework = 'Jest';
+                testCommand = 'npx jest';
+            } else if (deps['mocha']) {
+                testFramework = 'Mocha';
+                testCommand = 'npx mocha';
+            } else if (deps['@playwright/test']) {
+                testFramework = 'Playwright';
+                testCommand = 'npx playwright test';
+            }
 
             // Override with scripts.test if available
             if (pkg.scripts && pkg.scripts.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
                 testCommand = 'npm test';
             }
-        } catch (e) { /* ignore parse errors */ }
+        } catch (e) {
+            /* ignore parse errors */
+        }
     }
 
     // Refine: check for TypeScript specifically
@@ -1856,13 +2290,22 @@ if (args[0] === 'scan') {
     }
 
     // Detect from Python
-    if (fs.existsSync(path.join(targetDir, 'requirements.txt')) || fs.existsSync(path.join(targetDir, 'pyproject.toml'))) {
+    if (
+        fs.existsSync(path.join(targetDir, 'requirements.txt')) ||
+        fs.existsSync(path.join(targetDir, 'pyproject.toml'))
+    ) {
         language = 'Python';
         packageManager = 'pip';
         if (fs.existsSync(path.join(targetDir, 'pyproject.toml'))) packageManager = 'poetry/pip';
-        framework = fs.existsSync(path.join(targetDir, 'manage.py')) ? 'Django'
-            : fs.existsSync(path.join(targetDir, 'app.py')) ? 'Flask' : 'Python';
-        if (fs.existsSync(path.join(targetDir, 'pytest.ini')) || fs.existsSync(path.join(targetDir, 'pyproject.toml'))) {
+        framework = fs.existsSync(path.join(targetDir, 'manage.py'))
+            ? 'Django'
+            : fs.existsSync(path.join(targetDir, 'app.py'))
+              ? 'Flask'
+              : 'Python';
+        if (
+            fs.existsSync(path.join(targetDir, 'pytest.ini')) ||
+            fs.existsSync(path.join(targetDir, 'pyproject.toml'))
+        ) {
             testFramework = 'Pytest';
             testCommand = 'pytest';
         }
@@ -1893,11 +2336,16 @@ if (args[0] === 'scan') {
         try {
             const items = fs.readdirSync(dir, { recursive: true });
             for (const item of items) {
-                if (typeof item === 'string' && (item.includes('.test.') || item.includes('.spec.') || item.startsWith('test_'))) {
+                if (
+                    typeof item === 'string' &&
+                    (item.includes('.test.') || item.includes('.spec.') || item.startsWith('test_'))
+                ) {
                     testCount++;
                 }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
     };
     countTestsIn(path.join(targetDir, 'src'));
     countTestsIn(path.join(targetDir, 'tests'));
@@ -1945,7 +2393,9 @@ if (args[0] === 'scan') {
         if (newHash !== global.__steroidDrift.oldHash) {
             const fileDiff = newFiles - global.__steroidDrift.oldFiles;
             const direction = fileDiff > 0 ? `+${fileDiff} new` : fileDiff < 0 ? `${fileDiff} removed` : 'same count';
-            console.log(`[steroid-run] 🔄 Drift detected: context changed (${direction} files, hash ${global.__steroidDrift.oldHash} → ${newHash})`);
+            console.log(
+                `[steroid-run] 🔄 Drift detected: context changed (${direction} files, hash ${global.__steroidDrift.oldHash} → ${newHash})`,
+            );
         } else {
             console.log('[steroid-run] ✅ No drift: codebase unchanged since last scan.');
         }
@@ -1983,7 +2433,7 @@ if (args[0] === 'scan') {
         if (existing.includes('[Patterns will be added here')) {
             const updated = existing.replace(
                 /\[Patterns will be added here[^\]]*\]/,
-                `**Language**: ${language}\n- **Framework**: ${framework}\n- **Package Manager**: ${packageManager}\n- **Test Framework**: ${testFramework}\n- **Test Command**: \`${testCommand}\`\n- **Existing Tests**: ${testCount}`
+                `**Language**: ${language}\n- **Framework**: ${framework}\n- **Package Manager**: ${packageManager}\n- **Test Framework**: ${testFramework}\n- **Test Command**: \`${testCommand}\`\n- **Existing Tests**: ${testCount}`,
             );
             fs.writeFileSync(progressFile, updated);
             console.log(`[steroid-run]    Updated progress.md codebase patterns.`);
@@ -2008,11 +2458,58 @@ if (args[0] === 'detect-intent') {
 
     // Keyword-based scoring (reliable, no AI needed)
     const intents = {
-        fix: ['fix', 'bug', 'debug', 'broken', 'error', 'crash', 'issue', 'wrong', 'failing', 'not working', 'doesnt work', "doesn't work", 'investigate'],
-        refactor: ['refactor', 'restructure', 'reorganize', 'clean up', 'cleanup', 'improve', 'optimize', 'simplify', 'extract', 'decouple'],
+        fix: [
+            'fix',
+            'bug',
+            'debug',
+            'broken',
+            'error',
+            'crash',
+            'issue',
+            'wrong',
+            'failing',
+            'not working',
+            'doesnt work',
+            "doesn't work",
+            'investigate',
+        ],
+        refactor: [
+            'refactor',
+            'restructure',
+            'reorganize',
+            'clean up',
+            'cleanup',
+            'improve',
+            'optimize',
+            'simplify',
+            'extract',
+            'decouple',
+        ],
         migrate: ['migrate', 'migration', 'upgrade', 'switch to', 'move to', 'convert', 'port', 'transition'],
-        document: ['document', 'docs', 'readme', 'jsdoc', 'comment', 'explain', 'annotate', 'api docs', 'documentation'],
-        build: ['build', 'create', 'add', 'make', 'implement', 'feature', 'new', 'design', 'develop', 'setup', 'set up'],
+        document: [
+            'document',
+            'docs',
+            'readme',
+            'jsdoc',
+            'comment',
+            'explain',
+            'annotate',
+            'api docs',
+            'documentation',
+        ],
+        build: [
+            'build',
+            'create',
+            'add',
+            'make',
+            'implement',
+            'feature',
+            'new',
+            'design',
+            'develop',
+            'setup',
+            'set up',
+        ],
     };
 
     let bestIntent = 'build'; // default
@@ -2087,9 +2584,12 @@ if (args[0] === 'detect-tests') {
                     console.log(`  📋 Test script: "${testScript}"`);
                 }
                 if (pkg.scripts['test:watch']) console.log(`  📋 Watch script: "${pkg.scripts['test:watch']}"`);
-                if (pkg.scripts['test:coverage']) console.log(`  📋 Coverage script: "${pkg.scripts['test:coverage']}"`);
+                if (pkg.scripts['test:coverage'])
+                    console.log(`  📋 Coverage script: "${pkg.scripts['test:coverage']}"`);
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
     }
 
     if (!detected) {
@@ -2101,13 +2601,14 @@ if (args[0] === 'detect-tests') {
     process.exit(0);
 }
 
-/** CMD: verify-feature — Physical verification: build, lint, test, routes, memory (v6.0.0) */
+/** CMD: verify-feature — Core verification with optional deep scans (v6.1.0) */
 if (args[0] === 'verify-feature') {
     const feature = args[1];
     if (!feature) {
-        console.error('[steroid-run] Usage: npx steroid-run verify-feature <feature>');
+        console.error('[steroid-run] Usage: npx steroid-run verify-feature <feature> [--deep]');
         process.exit(1);
     }
+    const deepMode = args.includes('--deep');
 
     const featureDir = path.join(changesDir, feature);
     const planFile = path.join(featureDir, 'plan.md');
@@ -2117,10 +2618,29 @@ if (args[0] === 'verify-feature') {
         process.exit(1);
     }
 
-    console.log(`\n[steroid-run] 🔍 VERIFICATION: ${feature} (v${SW_VERSION})\n`);
+    console.log(`\n[steroid-run] 🔍 VERIFICATION: ${feature} (v${SW_VERSION})`);
+    console.log(`  Mode: ${deepMode ? 'core + deep scans' : 'core only'}\n`);
 
     const results = [];
     let hasFailure = false;
+
+    // ── Step 0: Review gate ──
+    const reviewReceipt = loadReviewReceipt(feature, featureDir);
+    const reviewPassed = reviewReceipt.stage1 === 'PASS' && reviewReceipt.stage2 === 'PASS';
+    if (!reviewPassed) {
+        results.push({
+            step: 'Review gate',
+            status: 'FAIL',
+            detail: `review.json requires Stage 1 PASS and Stage 2 PASS (got ${reviewReceipt.stage1}/${reviewReceipt.stage2})`,
+        });
+        hasFailure = true;
+    } else {
+        results.push({
+            step: 'Review gate',
+            status: 'PASS',
+            detail: `Two-stage review passed (${reviewReceipt.stage1}/${reviewReceipt.stage2})`,
+        });
+    }
 
     // ── Step 1: Plan completeness (existing) ──
     const planContent = fs.readFileSync(planFile, 'utf-8');
@@ -2141,13 +2661,25 @@ if (args[0] === 'verify-feature') {
             if (pkg.scripts && pkg.scripts.build) {
                 console.log('  ⏳ Running build check (npm run build)...');
                 const build = spawnSync('npm', ['run', 'build'], {
-                    cwd: targetDir, stdio: 'pipe', timeout: 120000, shell: true,
+                    cwd: targetDir,
+                    stdio: 'pipe',
+                    timeout: 120000,
+                    shell: true,
                 });
                 if (build.status === 0) {
                     results.push({ step: 'Build', status: 'PASS', detail: 'npm run build succeeded' });
                 } else {
-                    const errOutput = (build.stderr || build.stdout || Buffer.from('')).toString().trim().split('\n').slice(-5).join('\n');
-                    results.push({ step: 'Build', status: 'FAIL', detail: errOutput || 'npm run build failed (no output)' });
+                    const errOutput = (build.stderr || build.stdout || Buffer.from(''))
+                        .toString()
+                        .trim()
+                        .split('\n')
+                        .slice(-5)
+                        .join('\n');
+                    results.push({
+                        step: 'Build',
+                        status: 'FAIL',
+                        detail: errOutput || 'npm run build failed (no output)',
+                    });
                     hasFailure = true;
                 }
             } else {
@@ -2158,12 +2690,20 @@ if (args[0] === 'verify-feature') {
             if (pkg.scripts && pkg.scripts.lint) {
                 console.log('  ⏳ Running lint check (npm run lint)...');
                 const lint = spawnSync('npm', ['run', 'lint'], {
-                    cwd: targetDir, stdio: 'pipe', timeout: 60000, shell: true,
+                    cwd: targetDir,
+                    stdio: 'pipe',
+                    timeout: 60000,
+                    shell: true,
                 });
                 if (lint.status === 0) {
                     results.push({ step: 'Lint', status: 'PASS', detail: 'npm run lint passed' });
                 } else {
-                    const errOutput = (lint.stderr || lint.stdout || Buffer.from('')).toString().trim().split('\n').slice(-5).join('\n');
+                    const errOutput = (lint.stderr || lint.stdout || Buffer.from(''))
+                        .toString()
+                        .trim()
+                        .split('\n')
+                        .slice(-5)
+                        .join('\n');
                     results.push({ step: 'Lint', status: 'WARN', detail: errOutput || 'Lint issues detected' });
                 }
             } else {
@@ -2174,19 +2714,31 @@ if (args[0] === 'verify-feature') {
             if (pkg.scripts && pkg.scripts.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
                 console.log('  ⏳ Running test check (npm test)...');
                 const test = spawnSync('npm', ['test'], {
-                    cwd: targetDir, stdio: 'pipe', timeout: 120000, shell: true,
+                    cwd: targetDir,
+                    stdio: 'pipe',
+                    timeout: 120000,
+                    shell: true,
                 });
                 if (test.status === 0) {
                     results.push({ step: 'Tests', status: 'PASS', detail: 'npm test passed' });
                 } else {
-                    const errOutput = (test.stderr || test.stdout || Buffer.from('')).toString().trim().split('\n').slice(-5).join('\n');
+                    const errOutput = (test.stderr || test.stdout || Buffer.from(''))
+                        .toString()
+                        .trim()
+                        .split('\n')
+                        .slice(-5)
+                        .join('\n');
                     results.push({ step: 'Tests', status: 'WARN', detail: errOutput || 'Test failures detected' });
                 }
             } else {
                 // Check if plan contains test items but no test command
                 const testItems = (planContent.match(/write test|unit test|test:/gi) || []).length;
                 if (testItems > 0) {
-                    results.push({ step: 'Tests', status: 'WARN', detail: `Plan has ${testItems} test item(s) but no test script configured` });
+                    results.push({
+                        step: 'Tests',
+                        status: 'WARN',
+                        detail: `Plan has ${testItems} test item(s) but no test script configured`,
+                    });
                 } else {
                     results.push({ step: 'Tests', status: 'SKIP', detail: 'No test script in package.json' });
                 }
@@ -2207,7 +2759,11 @@ if (args[0] === 'verify-feature') {
                 console.log(`  ⏳ Detected ${alt.name} project. Running ${alt.cmd} ${alt.args.join(' ')}...`);
                 const check = spawnSync(alt.cmd, alt.args, { cwd: targetDir, stdio: 'pipe', timeout: 120000 });
                 if (check.status === 0) {
-                    results.push({ step: `Build (${alt.name})`, status: 'PASS', detail: `${alt.cmd} ${alt.args.join(' ')} succeeded` });
+                    results.push({
+                        step: `Build (${alt.name})`,
+                        status: 'PASS',
+                        detail: `${alt.cmd} ${alt.args.join(' ')} succeeded`,
+                    });
                 } else {
                     results.push({ step: `Build (${alt.name})`, status: 'FAIL', detail: `${alt.cmd} failed` });
                     hasFailure = true;
@@ -2249,8 +2805,9 @@ if (args[0] === 'verify-feature') {
                     const appDir = path.join(srcDir, 'app');
                     if (fs.existsSync(appDir)) {
                         const routeDir = path.join(appDir, route.replace(/^\//, ''));
-                        const pageExists = ['page.tsx', 'page.jsx', 'page.ts', 'page.js']
-                            .some(p => fs.existsSync(path.join(routeDir, p)));
+                        const pageExists = ['page.tsx', 'page.jsx', 'page.ts', 'page.js'].some((p) =>
+                            fs.existsSync(path.join(routeDir, p)),
+                        );
                         if (!pageExists) {
                             deadRoutes.push({ route, file: path.relative(targetDir, file) });
                         }
@@ -2258,8 +2815,12 @@ if (args[0] === 'verify-feature') {
                 }
             }
             if (deadRoutes.length > 0) {
-                const routeList = deadRoutes.map(r => `${r.route} (in ${r.file})`).join(', ');
-                results.push({ step: 'Dead routes', status: 'WARN', detail: `${deadRoutes.length} route(s) link to missing pages: ${routeList}` });
+                const routeList = deadRoutes.map((r) => `${r.route} (in ${r.file})`).join(', ');
+                results.push({
+                    step: 'Dead routes',
+                    status: 'WARN',
+                    detail: `${deadRoutes.length} route(s) link to missing pages: ${routeList}`,
+                });
             } else {
                 results.push({ step: 'Dead routes', status: 'PASS', detail: 'All linked routes have page files' });
             }
@@ -2275,10 +2836,10 @@ if (args[0] === 'verify-feature') {
             const orphans = [];
             const hooksDir = path.join(srcDir, 'hooks');
             const typesDir = path.join(srcDir, 'types');
-            const checkDirs = [hooksDir, typesDir].filter(d => fs.existsSync(d));
+            const checkDirs = [hooksDir, typesDir].filter((d) => fs.existsSync(d));
 
             for (const dir of checkDirs) {
-                for (const file of fs.readdirSync(dir).filter(f => /\.(ts|tsx|js|jsx)$/.test(f))) {
+                for (const file of fs.readdirSync(dir).filter((f) => /\.(ts|tsx|js|jsx)$/.test(f))) {
                     const basename = file.replace(/\.(ts|tsx|js|jsx)$/, '');
                     // Search for imports of this file across the entire src directory
                     let found = false;
@@ -2289,7 +2850,11 @@ if (args[0] === 'verify-feature') {
                             const fullPath = path.join(searchDir, entry.name);
                             if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
                                 walkForImports(fullPath);
-                            } else if (entry.isFile() && /\.(tsx?|jsx?)$/.test(entry.name) && fullPath !== path.join(dir, file)) {
+                            } else if (
+                                entry.isFile() &&
+                                /\.(tsx?|jsx?)$/.test(entry.name) &&
+                                fullPath !== path.join(dir, file)
+                            ) {
                                 const content = fs.readFileSync(fullPath, 'utf-8');
                                 if (content.includes(basename)) {
                                     found = true;
@@ -2305,9 +2870,17 @@ if (args[0] === 'verify-feature') {
             }
 
             if (orphans.length > 0) {
-                results.push({ step: 'Orphan detection', status: 'WARN', detail: `${orphans.length} file(s) never imported: ${orphans.join(', ')}` });
+                results.push({
+                    step: 'Orphan detection',
+                    status: 'WARN',
+                    detail: `${orphans.length} file(s) never imported: ${orphans.join(', ')}`,
+                });
             } else if (checkDirs.length > 0) {
-                results.push({ step: 'Orphan detection', status: 'PASS', detail: 'All hooks/types are imported somewhere' });
+                results.push({
+                    step: 'Orphan detection',
+                    status: 'PASS',
+                    detail: 'All hooks/types are imported somewhere',
+                });
             }
         }
     } catch (e) {
@@ -2319,26 +2892,121 @@ if (args[0] === 'verify-feature') {
     if (fs.existsSync(techStackFile)) {
         try {
             const ts = JSON.parse(fs.readFileSync(techStackFile, 'utf-8'));
-            const unknowns = ['language', 'framework', 'packageManager']
-                .filter(k => ts[k] === 'Unknown' || !ts[k]);
+            const unknowns = ['language', 'framework', 'packageManager'].filter((k) => ts[k] === 'Unknown' || !ts[k]);
             if (unknowns.length > 0) {
-                results.push({ step: 'Memory freshness', status: 'WARN', detail: `tech-stack.json has Unknown values: ${unknowns.join(', ')}. Run: node steroid-run.cjs scan ${feature} --force` });
+                results.push({
+                    step: 'Memory freshness',
+                    status: 'WARN',
+                    detail: `tech-stack.json has Unknown values: ${unknowns.join(', ')}. Run: node steroid-run.cjs scan ${feature} --force`,
+                });
             } else {
                 results.push({ step: 'Memory freshness', status: 'PASS', detail: 'tech-stack.json populated' });
             }
         } catch (e) {
-            results.push({ step: 'Memory freshness', status: 'WARN', detail: `tech-stack.json parse error: ${e.message}` });
+            results.push({
+                step: 'Memory freshness',
+                status: 'WARN',
+                detail: `tech-stack.json parse error: ${e.message}`,
+            });
         }
     } else {
-        results.push({ step: 'Memory freshness', status: 'WARN', detail: 'tech-stack.json not found. Run: node steroid-run.cjs scan ' + feature });
+        results.push({
+            step: 'Memory freshness',
+            status: 'WARN',
+            detail: 'tech-stack.json not found. Run: node steroid-run.cjs scan ' + feature,
+        });
+    }
+
+    // ── Step 8: Optional deep scans ──
+    if (deepMode) {
+        const deepScans = [
+            {
+                step: 'Deep scan: knip',
+                shouldRun: fs.existsSync(pkgPath),
+                run: () =>
+                    spawnSync('npx', ['knip', '--no-exit-code', '--reporter', 'compact'], {
+                        cwd: targetDir,
+                        stdio: 'pipe',
+                        timeout: 120000,
+                        shell: true,
+                    }),
+                pass: 'knip completed',
+                fail: 'knip reported issues or could not run',
+                severity: 'WARN',
+            },
+            {
+                step: 'Deep scan: madge',
+                shouldRun: fs.existsSync(path.join(targetDir, 'src')),
+                run: () =>
+                    spawnSync('npx', ['madge', '--circular', 'src'], {
+                        cwd: targetDir,
+                        stdio: 'pipe',
+                        timeout: 120000,
+                        shell: true,
+                    }),
+                pass: 'madge completed',
+                fail: 'madge reported circular dependencies or could not run',
+                severity: 'WARN',
+            },
+            {
+                step: 'Deep scan: gitleaks',
+                shouldRun: true,
+                run: () =>
+                    spawnSync('npx', ['@ziul285/gitleaks', 'detect', '--no-git', '--source', '.'], {
+                        cwd: targetDir,
+                        stdio: 'pipe',
+                        timeout: 120000,
+                        shell: true,
+                    }),
+                pass: 'gitleaks completed',
+                fail: 'gitleaks reported findings or could not run',
+                severity: 'WARN',
+            },
+            {
+                step: 'Deep scan: license-checker',
+                shouldRun: fs.existsSync(pkgPath),
+                run: () =>
+                    spawnSync('npx', ['license-checker', '--summary'], {
+                        cwd: targetDir,
+                        stdio: 'pipe',
+                        timeout: 120000,
+                        shell: true,
+                    }),
+                pass: 'license-checker completed',
+                fail: 'license-checker reported issues or could not run',
+                severity: 'WARN',
+            },
+        ];
+
+        for (const scan of deepScans) {
+            if (!scan.shouldRun) {
+                results.push({ step: scan.step, status: 'SKIP', detail: 'Not applicable for this project' });
+                continue;
+            }
+
+            console.log(`  ⏳ Running ${scan.step}...`);
+            const outcome = scan.run();
+            if (outcome.status === 0) {
+                results.push({ step: scan.step, status: 'PASS', detail: scan.pass });
+            } else {
+                const detail =
+                    (outcome.stderr || outcome.stdout || Buffer.from(''))
+                        .toString()
+                        .trim()
+                        .split('\n')
+                        .slice(-5)
+                        .join('\n') || scan.fail;
+                results.push({ step: scan.step, status: scan.severity, detail });
+            }
+        }
     }
 
     // ── Print results ──
     console.log('');
-    const passCount = results.filter(r => r.status === 'PASS').length;
-    const failCount = results.filter(r => r.status === 'FAIL').length;
-    const warnCount = results.filter(r => r.status === 'WARN').length;
-    const skipCount = results.filter(r => r.status === 'SKIP').length;
+    const passCount = results.filter((r) => r.status === 'PASS').length;
+    const failCount = results.filter((r) => r.status === 'FAIL').length;
+    const warnCount = results.filter((r) => r.status === 'WARN').length;
+    const skipCount = results.filter((r) => r.status === 'SKIP').length;
 
     for (const r of results) {
         const icon = r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : r.status === 'WARN' ? '⚠️' : '⏭️';
@@ -2351,21 +3019,49 @@ if (args[0] === 'verify-feature') {
     console.log('');
     console.log(`  Result: ${passCount} passed, ${failCount} failed, ${warnCount} warnings, ${skipCount} skipped`);
 
+    const verifyStatus = hasFailure ? 'FAIL' : warnCount > 0 ? 'CONDITIONAL' : 'PASS';
+
     // ── Write verify.md ──
     let verifyMd = `# Verification Report: ${feature}\n\n`;
     verifyMd += `**Date:** ${new Date().toISOString()}\n`;
     verifyMd += `**Version:** steroid-workflow v${SW_VERSION}\n`;
-    verifyMd += `**Status:** ${hasFailure ? 'FAIL' : warnCount > 0 ? 'CONDITIONAL' : 'PASS'}\n\n`;
-    verifyMd += `## Checks\n\n`;
+    verifyMd += `**Mode:** ${deepMode ? 'core + deep scans' : 'core only'}\n`;
+    verifyMd += `**Status:** ${verifyStatus}\n\n`;
+    verifyMd += `## Core Verification\n\n`;
     for (const r of results) {
         const icon = r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : r.status === 'WARN' ? '⚠️' : '⏭️';
-        verifyMd += `- ${icon} **${r.step}**: ${r.status}\n`;
-        if (r.detail) verifyMd += `  - ${r.detail}\n`;
+        if (!r.step.startsWith('Deep scan:')) {
+            verifyMd += `- ${icon} **${r.step}**: ${r.status}\n`;
+            if (r.detail) verifyMd += `  - ${r.detail}\n`;
+        }
+    }
+    if (deepMode) {
+        verifyMd += `\n## Deep Verification\n\n`;
+        const deepResults = results.filter((r) => r.step.startsWith('Deep scan:'));
+        if (deepResults.length === 0) {
+            verifyMd += '- ⏭️ No deep scans ran.\n';
+        } else {
+            for (const r of deepResults) {
+                const icon =
+                    r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : r.status === 'WARN' ? '⚠️' : '⏭️';
+                verifyMd += `- ${icon} **${r.step}**: ${r.status}\n`;
+                if (r.detail) verifyMd += `  - ${r.detail}\n`;
+            }
+        }
     }
     verifyMd += `\n---\n_Generated by steroid-workflow v${SW_VERSION}_\n`;
     fs.writeFileSync(path.join(featureDir, 'verify.md'), verifyMd);
+    saveVerifyReceipt(featureDir, {
+        feature,
+        status: verifyStatus,
+        reviewPassed,
+        checks: Object.fromEntries(results.map((r) => [r.step, r.status])),
+        deepRequested: deepMode,
+        deepCompleted: deepMode,
+    });
 
     console.log(`  Report: .memory/changes/${feature}/verify.md`);
+    console.log(`  Receipt: .memory/changes/${feature}/verify.json`);
 
     if (hasFailure) {
         console.log('');
@@ -2404,7 +3100,7 @@ Stages:
   Stage 2 (Quality Review) — "Is it well-built?"
                              Only runs after Stage 1 passes.
 
-Output: .memory/changes/<feature>/review.md
+Output: .memory/changes/<feature>/review.md + review.json
 
 Source: src/forks/superpowers/subagent.md (two-stage review flow)
 `);
@@ -2418,28 +3114,30 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
 
     const featureDir = path.join(changesDir, feature);
     const reviewFile = path.join(featureDir, 'review.md');
+    const reviewReceiptFile = path.join(featureDir, 'review.json');
 
     if (sub === 'status') {
-        if (!fs.existsSync(reviewFile)) {
+        if (!fs.existsSync(reviewFile) && !fs.existsSync(reviewReceiptFile)) {
             console.log(`[steroid-run] 📋 No review started for "${feature}".`);
             console.log('  Run: node steroid-run.cjs review spec ' + feature);
             process.exit(0);
         }
-        const content = fs.readFileSync(reviewFile, 'utf-8');
-        const specMatch = content.match(/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/);
-        const qualityMatch = content.match(/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/);
-        const specStatus = specMatch ? specMatch[1] : 'NOT RUN';
-        const qualityStatus = qualityMatch ? qualityMatch[1] : 'NOT RUN';
+        const receipt = loadReviewReceipt(feature, featureDir);
+        const specStatus = receipt.stage1 || 'NOT RUN';
+        const qualityStatus = receipt.stage2 || 'NOT RUN';
 
         const icons = { PASS: '✅', FAIL: '❌', PENDING: '⏳', 'NOT RUN': '○' };
         console.log(`[steroid-run] 📋 Review Status for "${feature}":`);
         console.log(`  ${icons[specStatus]} Stage 1 (Spec Compliance): ${specStatus}`);
         console.log(`  ${icons[qualityStatus]} Stage 2 (Code Quality): ${qualityStatus}`);
+        if (receipt.updatedAt) console.log(`  🧾 Receipt updated: ${receipt.updatedAt}`);
 
         if (specStatus === 'PASS' && qualityStatus === 'PASS') {
             console.log('\n  ✅ Both stages passed. Ready for verification.');
         } else if (specStatus === 'FAIL') {
-            console.log('\n  ❌ Spec review failed. Fix issues and re-run: node steroid-run.cjs review spec ' + feature);
+            console.log(
+                '\n  ❌ Spec review failed. Fix issues and re-run: node steroid-run.cjs review spec ' + feature,
+            );
         } else if (specStatus === 'PASS' && qualityStatus !== 'PASS') {
             console.log('\n  ⏳ Spec passed. Run quality review: node steroid-run.cjs review quality ' + feature);
         }
@@ -2447,9 +3145,18 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
     }
 
     if (sub === 'reset') {
+        const hadReviewFile = fs.existsSync(reviewFile);
+        const hadReviewReceipt = fs.existsSync(reviewReceiptFile);
         if (fs.existsSync(reviewFile)) {
             fs.unlinkSync(reviewFile);
-            console.log(`[steroid-run] 🔄 Review reset for "${feature}". Run: node steroid-run.cjs review spec ${feature}`);
+        }
+        if (fs.existsSync(reviewReceiptFile)) {
+            fs.unlinkSync(reviewReceiptFile);
+        }
+        if (hadReviewFile || hadReviewReceipt) {
+            console.log(
+                `[steroid-run] 🔄 Review reset for "${feature}". Run: node steroid-run.cjs review spec ${feature}`,
+            );
         } else {
             console.log(`[steroid-run] No review to reset for "${feature}".`);
         }
@@ -2461,11 +3168,15 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         const planFile = path.join(featureDir, 'plan.md');
 
         if (!fs.existsSync(specFile)) {
-            console.error(`[steroid-run] ❌ No spec.md found for "${feature}". Cannot run spec review without acceptance criteria.`);
+            console.error(
+                `[steroid-run] ❌ No spec.md found for "${feature}". Cannot run spec review without acceptance criteria.`,
+            );
             process.exit(1);
         }
         if (!fs.existsSync(planFile)) {
-            console.error(`[steroid-run] ❌ No plan.md found for "${feature}". Cannot run spec review without task list.`);
+            console.error(
+                `[steroid-run] ❌ No plan.md found for "${feature}". Cannot run spec review without task list.`,
+            );
             process.exit(1);
         }
 
@@ -2479,28 +3190,38 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         console.log('  5. Write findings to .memory/changes/' + feature + '/review.md');
         console.log('');
         console.log('  Source: src/forks/superpowers/spec-reviewer-prompt.md');
-        console.log('  CRITICAL: Do NOT trust the implementer\'s report. Read the actual code.');
+        console.log("  CRITICAL: Do NOT trust the implementer's report. Read the actual code.");
         console.log('');
 
         const reviewContent = `# Review Report: ${feature}\n\n**Started:** ${new Date().toISOString()}\n\n## Review Status\n\n- Stage 1 (Spec): PENDING\n- Stage 2 (Quality): PENDING\n\n## Stage 1: Spec Compliance Review\n\n_AI: Fill this section after reviewing code against spec.md criteria._\n\n| # | Criterion | Status | Evidence |\n|---|-----------|--------|----------|\n| 1 | _from spec.md_ | _status_ | _file:line_ |\n\n**Spec Score:** _/_ criteria verified\n**Stage 1 Result:** PENDING\n\n---\n\n## Stage 2: Code Quality Review\n\n_Blocked until Stage 1 passes._\n\n---\n\n_Reviewer: steroid-review v${SW_VERSION}_\n`;
         if (!fs.existsSync(featureDir)) fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(reviewFile, reviewContent);
+        saveReviewReceipt(featureDir, {
+            feature,
+            stage1: 'PENDING',
+            stage2: 'PENDING',
+        });
         console.log(`[steroid-run] 📝 Review template written to .memory/changes/${feature}/review.md`);
+        console.log(`[steroid-run] 🧾 Receipt written to .memory/changes/${feature}/review.json`);
         console.log('  AI: Complete the spec review, then update Stage 1 Result to PASS or FAIL.');
         process.exit(0);
     }
 
     if (sub === 'quality') {
-        if (!fs.existsSync(reviewFile)) {
-            console.error(`[steroid-run] ❌ No review started. Run Stage 1 first: node steroid-run.cjs review spec ${feature}`);
+        if (!fs.existsSync(reviewFile) && !fs.existsSync(reviewReceiptFile)) {
+            console.error(
+                `[steroid-run] ❌ No review started. Run Stage 1 first: node steroid-run.cjs review spec ${feature}`,
+            );
             process.exit(1);
         }
 
-        const content = fs.readFileSync(reviewFile, 'utf-8');
-        if (!content.includes('Stage 1 (Spec): PASS') && !content.includes('Stage 1 Result: PASS')) {
+        const receipt = loadReviewReceipt(feature, featureDir);
+        if (receipt.stage1 !== 'PASS') {
             console.error('[steroid-run] 🚫 REVIEW GATE: Stage 1 (Spec) has not passed.');
             console.error('  Stage 2 (Quality) cannot run until Stage 1 passes.');
-            console.error('  Fix spec issues and update review.md, or re-run: node steroid-run.cjs review spec ' + feature);
+            console.error(
+                '  Fix spec issues and update review.md, then re-run: node steroid-run.cjs review status ' + feature,
+            );
             process.exit(1);
         }
 
@@ -2549,7 +3270,7 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
     }
 
     if (sub === 'list') {
-        const files = fs.existsSync(reportsDir) ? fs.readdirSync(reportsDir).filter(f => f.endsWith('.md')) : [];
+        const files = fs.existsSync(reportsDir) ? fs.readdirSync(reportsDir).filter((f) => f.endsWith('.md')) : [];
         if (files.length === 0) {
             console.log('[steroid-run] 📭 No handoff reports yet. Archive a feature to generate one.');
             process.exit(0);
@@ -2591,8 +3312,9 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
 
         const findFile = (name) => {
             if (fs.existsSync(archiveDir)) {
-                const archiveFiles = fs.readdirSync(archiveDir).filter(f => f.endsWith(name));
-                if (archiveFiles.length > 0) return fs.readFileSync(path.join(archiveDir, archiveFiles[archiveFiles.length - 1]), 'utf-8');
+                const archiveFiles = fs.readdirSync(archiveDir).filter((f) => f.endsWith(name));
+                if (archiveFiles.length > 0)
+                    return fs.readFileSync(path.join(archiveDir, archiveFiles[archiveFiles.length - 1]), 'utf-8');
             }
             const activePath = path.join(featureDir, name);
             if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
@@ -2701,9 +3423,13 @@ if (args[0] === 'dashboard') {
     const featuresFile = path.join(metricsDir, 'features.json');
     let featuresData = {};
     if (fs.existsSync(featuresFile)) {
-        try { featuresData = JSON.parse(fs.readFileSync(featuresFile, 'utf-8')); } catch (e) { /* ignore */ }
+        try {
+            featuresData = JSON.parse(fs.readFileSync(featuresFile, 'utf-8'));
+        } catch (e) {
+            /* ignore */
+        }
     }
-    const featureNames = Object.keys(featuresData).filter(k => k !== '_lastUpdated');
+    const featureNames = Object.keys(featuresData).filter((k) => k !== '_lastUpdated');
 
     console.log('  ── Features ──────────────────────────────');
     if (featureNames.length === 0) {
@@ -2736,7 +3462,9 @@ if (args[0] === 'dashboard') {
                     const kw = p.keyword || 'unknown';
                     keywords[kw] = (keywords[kw] || 0) + 1;
                 }
-                const sorted = Object.entries(keywords).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                const sorted = Object.entries(keywords)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
                 if (sorted.length > 0) {
                     console.log('  Top error sources:');
                     for (const [kw, count] of sorted) console.log(`    ${count}x — ${kw}`);
@@ -2754,7 +3482,7 @@ if (args[0] === 'dashboard') {
     const levels = ['🟢 CLEAR', '🟡 LOGGED', '🟠 RE-READ', '🔶 DIAGNOSING', '🔴 ESCALATED', '🛑 TRIPPED'];
     const level = Math.min(state.error_count, 5);
     console.log(`  Current: ${levels[level]} (${state.error_count}/5 errors)`);
-    const tripCount = (state.recovery_actions || []).filter(a => a.includes('L4') || a.includes('L5')).length;
+    const tripCount = (state.recovery_actions || []).filter((a) => a.includes('L4') || a.includes('L5')).length;
     console.log(`  Escalations this session: ${tripCount}`);
 
     // 4. Knowledge store health
@@ -2766,7 +3494,7 @@ if (args[0] === 'dashboard') {
         if (fs.existsSync(storeFile)) {
             try {
                 const data = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
-                const entries = Object.keys(data).filter(k => k !== '_lastUpdated').length;
+                const entries = Object.keys(data).filter((k) => k !== '_lastUpdated').length;
                 console.log(`  ✅ ${store}: ${entries} entries`);
                 populated++;
             } catch (e) {
@@ -2781,7 +3509,7 @@ if (args[0] === 'dashboard') {
     // 5. Reports
     console.log('\n  ── Handoff Reports ───────────────────────');
     if (fs.existsSync(reportsDir)) {
-        const reports = fs.readdirSync(reportsDir).filter(f => f.endsWith('.md'));
+        const reports = fs.readdirSync(reportsDir).filter((f) => f.endsWith('.md'));
         console.log(`  ${reports.length} report(s) generated`);
     } else {
         console.log('  No reports generated yet.');
@@ -2818,10 +3546,10 @@ Run: node steroid-run.cjs reset       (to resume after fixing)
 // --- Verify Command (Anti-Summarization) ---
 if (args[0] === 'verify') {
     const targetFile = args[1];
-    const minLinesArg = args.find(a => a.startsWith('--min-lines='));
+    const minLinesArg = args.find((a) => a.startsWith('--min-lines='));
 
     if (!targetFile || !minLinesArg) {
-        console.error("Usage: node steroid-run.cjs verify <file> --min-lines=<number>");
+        console.error('Usage: node steroid-run.cjs verify <file> --min-lines=<number>');
         process.exit(1);
     }
 
@@ -2848,30 +3576,31 @@ if (args[0] === 'verify') {
 }
 
 // --- Execution Mode ---
-let commandStr = args.join(' ');
+const commandStr = args.join(' ');
+const normalizedCommandStr = stripWrappingQuotes(commandStr.trim());
 
 // --- Scaffold Safety Guard (v5.6.0) ---
 // Blocks scaffold commands targeting root dir (. or ./) to prevent
 // tools like create-vite from deleting all existing files.
 // See: incident_report.md — portfolio3 directory wipe incident.
 const SCAFFOLD_PATTERNS = [
-    /npm\s+create\s+\S+\s+\.(?:\/|\s|$)/i,      // npm create vite .
-    /npx\s+create-\S+\s+\.(?:\/|\s|$)/i,        // npx create-react-app .
-    /npm\s+init\s+\S+\s+\.(?:\/|\s|$)/i,        // npm init vite .
-    /yarn\s+create\s+\S+\s+\.(?:\/|\s|$)/i,     // yarn create vite .
-    /pnpm\s+create\s+\S+\s+\.(?:\/|\s|$)/i,     // pnpm create vite .
+    /npm\s+create\s+\S+\s+\.(?:\/|\s|$)/i, // npm create vite .
+    /npx\s+create-\S+\s+\.(?:\/|\s|$)/i, // npx create-react-app .
+    /npm\s+init\s+\S+\s+\.(?:\/|\s|$)/i, // npm init vite .
+    /yarn\s+create\s+\S+\s+\.(?:\/|\s|$)/i, // yarn create vite .
+    /pnpm\s+create\s+\S+\s+\.(?:\/|\s|$)/i, // pnpm create vite .
     /pnpm\s+dlx\s+create-\S+\s+\.(?:\/|\s|$)/i, // pnpm dlx create-vite .
-    /bunx?\s+create-\S+\s+\.(?:\/|\s|$)/i,      // bun create-vite . | bunx create-vite .
+    /bunx?\s+create-\S+\s+\.(?:\/|\s|$)/i, // bun create-vite . | bunx create-vite .
 ];
 
 for (const pattern of SCAFFOLD_PATTERNS) {
-    if (pattern.test(commandStr)) {
+    if (pattern.test(normalizedCommandStr)) {
         const safeName = '.steroid-scaffold-tmp';
-        const safeCmd = commandStr
+        const safeCmd = normalizedCommandStr
             .replace(/\s+\.\/?\s*/, ` ${safeName} `)
             .replace(/\s+\.\/?\s*$/, ` ${safeName}`);
         console.error(`\n[STEROID-SCAFFOLD-GUARD] 🛑 BLOCKED: In-place scaffold detected!`);
-        console.error(`  Command: "${commandStr}"`);
+        console.error(`  Command: "${normalizedCommandStr}"`);
         console.error(`  Risk: Scaffold tools may DELETE ALL existing files in the current directory.`);
         console.error(`  This would destroy .git/, .memory/, steroid-run.cjs, and all infrastructure.\n`);
         console.error(`  ✅ SAFE ALTERNATIVE:`);
@@ -2889,39 +3618,95 @@ console.log(`[steroid-run] Executing: ${commandStr}`);
 // Only known development commands are allowed through the circuit breaker.
 // This prevents prompt injection attacks from executing arbitrary shell commands.
 const ALLOWED_COMMANDS = new Set([
-    'npm', 'npx', 'node', 'pnpm', 'yarn', 'bun', 'bunx', 'deno',
-    'git', 'echo', 'cat', 'ls', 'dir', 'mkdir', 'cp', 'mv', 'type', 'where',
-    'rm', 'rmdir', 'del', 'rd', 'move', 'copy', 'xcopy',       // v6.0.0: shell utilities
-    'powershell', 'pwsh', 'cmd',                                 // v6.0.0: shell invocations
-    'grep', 'findstr', 'head', 'tail', 'touch', 'sed', 'awk',   // v6.0.0: text utilities
-    'python', 'python3', 'pip', 'pip3', 'poetry', 'uv',
-    'cargo', 'rustc', 'rustup',
+    'npm',
+    'npx',
+    'node',
+    'pnpm',
+    'yarn',
+    'bun',
+    'bunx',
+    'deno',
+    'git',
+    'echo',
+    'cat',
+    'ls',
+    'dir',
+    'mkdir',
+    'cp',
+    'mv',
+    'type',
+    'where',
+    'rm',
+    'rmdir',
+    'del',
+    'rd',
+    'move',
+    'copy',
+    'xcopy', // v6.0.0: shell utilities
+    'grep',
+    'findstr',
+    'head',
+    'tail',
+    'touch',
+    'sed',
+    'awk', // v6.0.0: text utilities
+    'python',
+    'python3',
+    'pip',
+    'pip3',
+    'poetry',
+    'uv',
+    'cargo',
+    'rustc',
+    'rustup',
     'go',
     'dotnet',
-    'flutter', 'dart',
-    'ruby', 'gem', 'bundle', 'rake',
-    'php', 'composer',
-    'java', 'javac', 'mvn', 'gradle', 'gradlew',
-    'make', 'cmake',
-    'docker', 'docker-compose',
-    'tsc', 'eslint', 'prettier', 'jest', 'vitest', 'mocha', 'pytest',
-    'knip', 'madge', 'gitleaks',
+    'flutter',
+    'dart',
+    'ruby',
+    'gem',
+    'bundle',
+    'rake',
+    'php',
+    'composer',
+    'java',
+    'javac',
+    'mvn',
+    'gradle',
+    'gradlew',
+    'make',
+    'cmake',
+    'docker',
+    'docker-compose',
+    'tsc',
+    'eslint',
+    'prettier',
+    'jest',
+    'vitest',
+    'mocha',
+    'pytest',
+    'knip',
+    'madge',
+    'gitleaks',
 ]);
 
-// v6.0.0: Smart re-quoting — wrap arguments containing spaces in quotes
-const parts = commandStr.trim().split(/\s+/);
-if (parts.length > 1) {
-    const requoted = parts.map((p, i) => {
-        if (i === 0) return p; // don't re-quote the command itself
-        if (p.includes(' ') && !p.startsWith('"') && !p.startsWith("'")) {
-            return `"${p}"`;
-        }
-        return p;
-    });
-    commandStr = requoted.join(' ');
+const blockedSyntax = findBlockedShellSyntax(normalizedCommandStr);
+if (blockedSyntax) {
+    console.error(`\n[STEROID-COMMAND-GUARD] 🛑 BLOCKED: Shell control syntax "${blockedSyntax}" is not allowed.`);
+    console.error('  Run one command at a time through the circuit breaker.');
+    console.error('  For multi-step work, execute separate steroid-run commands.');
+    process.exit(1);
 }
 
-const baseCommand = commandStr.trim().split(/\s+/)[0].replace(/^['"]|['"]$/g, '').toLowerCase();
+let commandTokens = [];
+try {
+    commandTokens = tokenizeCommand(commandStr);
+} catch (error) {
+    console.error(`\n[STEROID-COMMAND-GUARD] 🛑 BLOCKED: ${error.message}`);
+    process.exit(1);
+}
+
+const baseCommand = (commandTokens[0] || '').replace(/^['"]|['"]$/g, '').toLowerCase();
 if (!ALLOWED_COMMANDS.has(baseCommand)) {
     console.error(`\n[STEROID-COMMAND-GUARD] 🛑 BLOCKED: Unknown command "${baseCommand}"`);
     console.error(`  Only known development commands are allowed through the circuit breaker.`);
@@ -2929,7 +3714,8 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
 
     // Command suggestion (v5.9.0) — Levenshtein-based typo detection
     const levenshtein = (a, b) => {
-        const m = a.length, n = b.length;
+        const m = a.length,
+            n = b.length;
         const dp = Array.from({ length: m + 1 }, (_, i) => {
             const row = new Array(n + 1);
             row[0] = i;
@@ -2938,19 +3724,46 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
         for (let j = 0; j <= n; j++) dp[0][j] = j;
         for (let i = 1; i <= m; i++) {
             for (let j = 1; j <= n; j++) {
-                dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
-                    : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+                dp[i][j] =
+                    a[i - 1] === b[j - 1]
+                        ? dp[i - 1][j - 1]
+                        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
             }
         }
         return dp[m][n];
     };
-    const KNOWN_CMDS = ['reset','recover','status','pipeline-status','progress','memory','audit',
-        'init-feature','gate','commit','log','check-plan','stories','archive','scan',
-        'detect-intent','detect-tests','verify-feature','review','report','dashboard','verify'];
-    let bestMatch = null, bestDist = Infinity;
+    const KNOWN_CMDS = [
+        'reset',
+        'recover',
+        'status',
+        'pipeline-status',
+        'progress',
+        'memory',
+        'audit',
+        'init-feature',
+        'gate',
+        'commit',
+        'log',
+        'check-plan',
+        'stories',
+        'archive',
+        'scan',
+        'detect-intent',
+        'detect-tests',
+        'verify-feature',
+        'review',
+        'report',
+        'dashboard',
+        'verify',
+    ];
+    let bestMatch = null,
+        bestDist = Infinity;
     for (const cmd of KNOWN_CMDS) {
         const d = levenshtein(baseCommand, cmd);
-        if (d < bestDist) { bestDist = d; bestMatch = cmd; }
+        if (d < bestDist) {
+            bestDist = d;
+            bestMatch = cmd;
+        }
     }
     if (bestMatch && bestDist <= 3) {
         console.error(`  💡 Did you mean: ${bestMatch}?`);
@@ -2961,7 +3774,7 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
 
 const child = spawnSync(commandStr, {
     shell: true,
-    stdio: 'inherit'
+    stdio: 'inherit',
 });
 
 // --- State Machine Update ---
@@ -2989,10 +3802,14 @@ if (child.status !== 0) {
     const errorPatternsFile = path.join(metricsDir, 'error-patterns.json');
     let errorPatterns = { patterns: [] };
     if (fs.existsSync(errorPatternsFile)) {
-        try { errorPatterns = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8')); } catch (e) { /* ignore */ }
+        try {
+            errorPatterns = JSON.parse(fs.readFileSync(errorPatternsFile, 'utf-8'));
+        } catch (e) {
+            /* ignore */
+        }
     }
     errorPatterns.patterns.push({
-        keyword: commandStr.split(' ')[0],
+        keyword: baseCommand || 'unknown',
         error: state.last_error,
         timestamp: new Date().toISOString(),
     });

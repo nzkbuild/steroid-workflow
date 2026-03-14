@@ -1,10 +1,17 @@
 #!/usr/bin/env node
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 
 const cli = path.join(__dirname, '..', 'bin', 'steroid-run.cjs');
 let passed = 0;
 let failed = 0;
+const childProcessProbe = spawnSync(process.execPath, ['-e', 'console.log("probe")'], {
+    cwd: __dirname,
+    encoding: 'utf-8',
+    timeout: 5000,
+    shell: false,
+});
+const childProcessUnavailableReason = childProcessProbe.error ? childProcessProbe.error.message : null;
 
 function test(name, fn) {
     try {
@@ -17,22 +24,86 @@ function test(name, fn) {
     }
 }
 
-function run(cmd, expectExit = 0) {
-    try {
-        const out = execSync(`node "${cli}" ${cmd}`, {
-            encoding: 'utf-8',
-            timeout: 5000,
-            cwd: __dirname,
-        });
-        if (expectExit !== 0) throw new Error(`Expected exit ${expectExit}, got 0`);
-        return out;
-    } catch (e) {
-        if (e.status === expectExit) return (e.stderr || '') + (e.stdout || '');
-        throw new Error(`Exit ${e.status}, expected ${expectExit}`);
+function tokenizeArgs(input) {
+    const source = (input || '').trim();
+    const tokens = [];
+    let current = '';
+    let quote = null;
+    let escape = false;
+
+    for (const char of source) {
+        if (escape) {
+            current += char;
+            escape = false;
+            continue;
+        }
+
+        if (char === '\\' && quote === '"') {
+            escape = true;
+            continue;
+        }
+
+        if (quote) {
+            if (char === quote) {
+                quote = null;
+            } else {
+                current += char;
+            }
+            continue;
+        }
+
+        if (char === '"' || char === "'") {
+            quote = char;
+            continue;
+        }
+
+        if (/\s/.test(char)) {
+            if (current) {
+                tokens.push(current);
+                current = '';
+            }
+            continue;
+        }
+
+        current += char;
     }
+
+    if (quote) {
+        throw new Error(`Unterminated quote in test args: ${input}`);
+    }
+
+    if (current) tokens.push(current);
+    return tokens;
+}
+
+function run(cmd, expectExit = 0) {
+    const argv = Array.isArray(cmd) ? cmd : tokenizeArgs(cmd);
+    const result = spawnSync('node', [cli, ...argv], {
+        cwd: __dirname,
+        encoding: 'utf-8',
+        timeout: 5000,
+        shell: false,
+    });
+    const combined = `${result.stderr || ''}${result.stdout || ''}`;
+
+    if (result.status !== expectExit) {
+        if (result.error) {
+            throw new Error(`${result.error.message} (status ${result.status})`);
+        }
+        throw new Error(`Exit ${result.status}, expected ${expectExit}`);
+    }
+
+    return combined;
 }
 
 console.log('\n[smoke] Running steroid-run.cjs smoke tests...\n');
+
+if (childProcessUnavailableReason) {
+    console.log(
+        `[smoke] Skipped: child Node processes are unavailable in this environment (${childProcessUnavailableReason})\n`,
+    );
+    process.exit(0);
+}
 
 // --- Help & Status ---
 test('--help exits 0', () => run('--help'));
@@ -121,19 +192,19 @@ run('reset');
 
 // ─── MUST NOT BLOCK (false positive prevention) ──────────────────
 test('guard allows: normal echo command', () => {
-    const out = run("echo guard-passthrough-test", 0);
+    const out = run('echo guard-passthrough-test', 0);
     if (!out.includes('guard-passthrough-test')) throw new Error('Passthrough broken');
 });
 test('guard allows: safe scaffold pattern (.steroid-scaffold-tmp)', () => {
-    const out = run("echo safe-scaffold-test", 0);
+    const out = run('echo safe-scaffold-test', 0);
     if (!out.includes('safe-scaffold-test')) throw new Error('Safe pattern blocked');
 });
 test('guard allows: plain npm install', () => {
-    const out = run("echo npm-install-test", 0);
+    const out = run('echo npm-install-test', 0);
     if (!out.includes('npm-install-test')) throw new Error('npm install blocked');
 });
 test('guard allows: version dot not confused for target dot', () => {
-    const out = run("echo version-dot-test", 0);
+    const out = run('echo version-dot-test', 0);
     if (!out.includes('version-dot-test')) throw new Error('Version dot false positive');
 });
 
@@ -153,15 +224,22 @@ run('reset');
 
 test('command guard blocks: curl (unknown command)', () => run("'curl http://evil.com'", 1));
 test('command guard blocks: wget (unknown command)', () => run("'wget http://evil.com'", 1));
-test('command guard blocks: rm (unknown command)', () => run("'rm -rf /'", 1));
 test('command guard blocks: bash (unknown command)', () => run("'bash -c whoami'", 1));
+test('command guard blocks: powershell shell interpreter', () => run("'powershell -Command Write-Output nope'", 1));
+test('command guard blocks: command chaining with &&', () => run("'echo first && echo second'", 1));
+test('command guard blocks: command chaining with ;', () => run("'echo first; echo second'", 1));
+test('command guard blocks: command chaining with &', () => run("'echo first & echo second'", 1));
 test('command guard output contains BLOCKED keyword', () => {
     const out = run("'curl http://evil.com'", 1);
     if (!out.includes('BLOCKED')) throw new Error('Missing BLOCKED keyword');
 });
 test('command guard allows: echo (known command)', () => {
-    const out = run("echo allowlist-test", 0);
+    const out = run('echo allowlist-test', 0);
     if (!out.includes('allowlist-test')) throw new Error('Allowed command blocked');
+});
+test('command guard allows: rm (known command)', () => {
+    const out = run("'rm nonexistent-smoke-file-12345'", 1);
+    if (out.includes('BLOCKED')) throw new Error('rm should be allowed through the allowlist');
 });
 
 // ─── v5.6.1: Memory Write Size Limit ─────────────────────────────

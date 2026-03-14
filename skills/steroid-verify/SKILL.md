@@ -1,6 +1,6 @@
 ---
 name: steroid-verify
-description: The verification skill for Steroid-Workflow. This skill runs after the engine completes all tasks, proving the code works before allowing archival. It performs spec compliance review, code quality review, test execution, and anti-pattern scanning. Produces verify.md as evidence.
+description: The verification skill for Steroid-Workflow. This skill runs after the engine completes all tasks, proving the code works before allowing archival. It performs core verification by default and can run optional deep scans. Produces verify.md and verify.json as evidence.
 ---
 
 # Steroid Verify (Proof of Work)
@@ -43,7 +43,12 @@ Then run the feature verification pre-check:
 ```
 node steroid-run.cjs verify-feature <feature>
 ```
-This confirms all tasks in `plan.md` are marked `[x]`.
+This is the core verification gate. It confirms review status, task completion, and runtime checks.
+
+If you want optional deep scans for code smells and license auditing, run:
+```bash
+node steroid-run.cjs verify-feature <feature> --deep
+```
 
 ## Two-Stage Review Gate (v5.0)
 
@@ -58,7 +63,7 @@ If both stages show PASS, proceed to verification. If not:
 1. Run `node steroid-run.cjs review spec <feature>` — then complete Stage 1
 2. Run `node steroid-run.cjs review quality <feature>` — then complete Stage 2
 
-**The review MUST pass both stages before verify.md can be written.**
+**The review MUST pass both stages before core verification can pass and before `verify.json` can record a passing result.**
 
 Source: `src/forks/superpowers/subagent.md` — "Spec compliance first, then code quality. Never skip reviews."
 
@@ -145,7 +150,7 @@ Categorize issues by severity:
 - ⚠️ **Important** — Works but fragile (no error handling, hardcoded values)
 - ℹ️ **Minor** — Cosmetic or style issues (naming, unused imports)
 
-### Step 3b: AI Code Smell Scan (v5.5.0, upgraded v5.5.1)
+### Step 3b: AI Code Smell Scan (optional deep verification)
 
 AI models frequently produce code with invisible defects that non-technical users will never catch. Run these scans on the project:
 
@@ -269,9 +274,9 @@ Report each check in verify.md under `## Infrastructure`.
 
 **CONDITIONAL** — All criteria implemented but Important issues exist or no tests
 
-### Step 7: Write verify.md
+### Step 7: Write verify.md / verify.json
 
-Write results to `.memory/changes/<feature>/verify.md`:
+Write results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<feature>/verify.json`:
 
 ```markdown
 # Verification Report: <feature>
@@ -331,7 +336,7 @@ _Verifier: steroid-verify_
 
 ### If PASS:
 1. Output: "✅ Verification passed. Feature ready to archive."
-2. The archive command will now succeed (gate requires verify.md with PASS)
+2. The archive command will now succeed (gate requires `verify.json` with PASS)
 
 ### If FAIL:
 1. Output: "❌ Verification failed. <count> issues must be resolved."

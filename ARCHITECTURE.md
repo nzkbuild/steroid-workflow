@@ -55,8 +55,8 @@ All AI terminal commands are routed through this CLI wrapper.
 | `commit <message>` | Atomic commit in `feat(steroid):` format | Ralph/GSD |
 | `log <feature> <message>` | Append to progress log | Ralph |
 | `check-plan <feature>` | Count remaining tasks | New |
-| `verify-feature <feature>` | Pre-check before verification skill | GSD |
-| `archive <feature>` | Date-stamped feature archival (requires verify.md PASS) | Ralph |
+| `verify-feature <feature> [--deep]` | Core verification gate; `--deep` adds optional scanners | GSD |
+| `archive <feature>` | Date-stamped feature archival (requires `verify.json` PASS/CONDITIONAL) | Ralph |
 
 ### Intelligence (v3.0)
 | Command | Purpose | Origin |
@@ -119,7 +119,7 @@ All AI terminal commands are routed through this CLI wrapper.
 | `diagnose` | `context.md` | — | 5 |
 | `engine` | `plan.md` | `diagnosis.md` | 10 |
 | `verify` | `plan.md` | `diagnosis.md` | 10 |
-| `archive` | `verify.md` (PASS/CONDITIONAL) | `--force` flag | — |
+| `archive` | `verify.json` (PASS/CONDITIONAL) | `--force` flag | — |
 
 ## Project Structure
 
@@ -145,7 +145,10 @@ your-project/
 │           ├── spec.md            ← Acceptance criteria
 │           ├── research.md        ← Tech investigation results
 │           ├── plan.md            ← Atomic execution checklist (supports P1/P2/P3 priorities)
-│           ├── verify.md          ← Verification report (v3.0)
+│           ├── review.md          ← Human-readable two-stage review notes
+│           ├── review.json        ← Machine-readable review receipt
+│           ├── verify.md          ← Human-readable verification report
+│           ├── verify.json        ← Machine-readable verification receipt
 │           ├── diagnosis.md       ← Bug diagnosis (v3.0, fix intent only)
 │           └── archive/           ← Completed features
 ├── .agents/

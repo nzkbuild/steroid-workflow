@@ -55,10 +55,7 @@ test('handles empty arrays', () => {
 
 // --- Deep Object Merge ---
 test('deep-merges nested objects', () => {
-    const result = mergeKnowledge(
-        { config: { a: 1, b: 2 } },
-        { config: { b: 3, c: 4 } }
-    );
+    const result = mergeKnowledge({ config: { a: 1, b: 2 } }, { config: { b: 3, c: 4 } });
     if (!deepEqual(result.config, { a: 1, b: 3, c: 4 })) throw new Error(`Got: ${JSON.stringify(result.config)}`);
 });
 

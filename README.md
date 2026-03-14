@@ -65,7 +65,7 @@ graph LR
 | **Research** | Investigates tech choices, security, deployment, architecture | `research.md` |
 | **Architect** | Creates atomic execution plan with quality, docs, and deploy tasks | `plan.md` |
 | **Engine** | Builds using TDD, commits atomically, captures learnings | Working code |
-| **Verify** | Proves spec compliance, code quality, tests, license audit | `verify.md` |
+| **Verify** | Runs core verification by default, with optional deep scans for code smells and licenses | `verify.md`, `verify.json` |
 | **Diagnose** | Root cause analysis for bugs (fix intent only) | `diagnosis.md` |
 
 Each phase hands off to the next. No manual intervention needed.
@@ -91,7 +91,7 @@ A **git pre-commit hook** blocks any code commit unless the AI went through the 
 A **5-level circuit breaker** tracks command failures. At level 1, the AI retries. By level 4, it stops and presents the error history for human review. At level 5, execution is halted entirely.
 
 ### Proof Your Code Matches the Spec
-A **two-stage review** system checks (1) whether the AI built what was requested and (2) whether it's well-built. Both stages must pass before archiving.
+A **two-stage review** system checks (1) whether the AI built what was requested and (2) whether it's well-built. Both stages must pass before core verification can succeed, and archive now depends on a machine-readable verification receipt.
 
 ### Enterprise-Grade Output
 Every project automatically includes:
@@ -110,7 +110,7 @@ Protections specifically designed for non-technical users:
 - **Anti-Deletion Guard** — can't silently remove working code
 - **True TDD Guard** — fake tests like `expect(true).toBe(true)` are blocked
 - **Anti-Loop Directive** — stops the AI from guessing the same broken fix repeatedly
-- **Code Smell Scan** — uses `knip`, `madge`, and `gitleaks` to catch issues
+- **Optional Deep Verification** — `verify-feature --deep` can run `knip`, `madge`, `gitleaks`, and license checks when you want extra scrutiny
 - **Command Allowlist** — only known dev commands can execute through the circuit breaker
 
 ## Language Support
