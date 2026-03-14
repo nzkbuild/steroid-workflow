@@ -132,7 +132,7 @@ function friendlyHint(key) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '5.9.1';
+let SW_VERSION = '6.0.0';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -964,6 +964,286 @@ if (args[0] === 'audit') {
 }
 
 // ============================================================
+// v6.0.0: SHELL-FREE SUBCOMMANDS (Node.js fs-based operations)
+// ============================================================
+
+/** CMD: smoke-test — Stack-aware compilation/build check (v6.0.0) */
+if (args[0] === 'smoke-test') {
+    console.log('[steroid-run] 🔍 Running smoke test...');
+
+    const pkgPath = path.join(targetDir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+        try {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+            if (pkg.scripts && pkg.scripts.build) {
+                console.log('[steroid-run]   Stack: Node.js (build script detected)');
+                const build = spawnSync('npm', ['run', 'build'], {
+                    cwd: targetDir, stdio: 'pipe', timeout: 60000, shell: true,
+                });
+                if (build.status === 0) {
+                    console.log('[steroid-run] ✅ Smoke test PASSED: build succeeded.');
+                    process.exit(0);
+                } else {
+                    const errOutput = (build.stderr || build.stdout || Buffer.from('')).toString().trim().split('\n').slice(-8).join('\n');
+                    console.error('[steroid-run] ❌ Smoke test FAILED: build error.');
+                    console.error(errOutput);
+                    state.error_count += 1;
+                    state.last_error = 'smoke-test: build failed';
+                    if (!state.error_history) state.error_history = [];
+                    state.error_history.push(`[${new Date().toISOString()}] smoke-test: build failed`);
+                    state.status = state.error_count >= 5 ? 'tripped' : 'active';
+                    fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+                    process.exit(1);
+                }
+            } else {
+                // Fallback: TypeScript type check
+                const tsConfig = path.join(targetDir, 'tsconfig.json');
+                if (fs.existsSync(tsConfig)) {
+                    console.log('[steroid-run]   Stack: TypeScript (no build script, using tsc --noEmit)');
+                    const tsc = spawnSync('npx', ['tsc', '--noEmit'], {
+                        cwd: targetDir, stdio: 'pipe', timeout: 60000, shell: true,
+                    });
+                    if (tsc.status === 0) {
+                        console.log('[steroid-run] ✅ Smoke test PASSED: type check succeeded.');
+                        process.exit(0);
+                    } else {
+                        console.error('[steroid-run] ❌ Smoke test FAILED: type errors found.');
+                        const errOutput = (tsc.stdout || Buffer.from('')).toString().trim().split('\n').slice(-8).join('\n');
+                        console.error(errOutput);
+                        process.exit(1);
+                    }
+                } else {
+                    console.log('[steroid-run] ⏭️  No build script or tsconfig.json. Smoke test skipped.');
+                    process.exit(0);
+                }
+            }
+        } catch (e) {
+            console.error(`[steroid-run] ❌ Smoke test error: ${e.message}`);
+            process.exit(1);
+        }
+    } else {
+        // Non-JS stacks
+        const altStacks = [
+            { file: 'Cargo.toml', cmd: 'cargo', args: ['check'], name: 'Rust' },
+            { file: 'go.mod', cmd: 'go', args: ['build', './...'], name: 'Go' },
+        ];
+        for (const alt of altStacks) {
+            if (fs.existsSync(path.join(targetDir, alt.file))) {
+                console.log(`[steroid-run]   Stack: ${alt.name}`);
+                const check = spawnSync(alt.cmd, alt.args, { cwd: targetDir, stdio: 'pipe', timeout: 120000 });
+                if (check.status === 0) {
+                    console.log(`[steroid-run] ✅ Smoke test PASSED: ${alt.cmd} ${alt.args.join(' ')} succeeded.`);
+                } else {
+                    console.error(`[steroid-run] ❌ Smoke test FAILED: ${alt.cmd} check failed.`);
+                }
+                process.exit(check.status === 0 ? 0 : 1);
+            }
+        }
+        console.log('[steroid-run] ⏭️  No recognized project file. Smoke test skipped.');
+        process.exit(0);
+    }
+}
+
+/** CMD: fs-mkdir — Create directories recursively (v6.0.0) */
+if (args[0] === 'fs-mkdir') {
+    const dirPath = args[1];
+    if (!dirPath) {
+        console.error('[steroid-run] Usage: npx steroid-run fs-mkdir <path>');
+        process.exit(1);
+    }
+    const resolved = path.resolve(targetDir, dirPath);
+    fs.mkdirSync(resolved, { recursive: true });
+    console.log(`[steroid-run] ✅ Created: ${path.relative(targetDir, resolved)}/`);
+    process.exit(0);
+}
+
+/** CMD: fs-rm — Remove files/directories with safety guard (v6.0.0) */
+if (args[0] === 'fs-rm') {
+    const rmPath = args[1];
+    if (!rmPath) {
+        console.error('[steroid-run] Usage: npx steroid-run fs-rm <path>');
+        process.exit(1);
+    }
+    const resolved = path.resolve(targetDir, rmPath);
+
+    // Safety guard: refuse to delete critical paths
+    const safePaths = ['.git', '.memory', 'steroid-run.cjs', 'node_modules'];
+    const relPath = path.relative(targetDir, resolved);
+    for (const safe of safePaths) {
+        if (relPath === safe || relPath.startsWith(safe + path.sep)) {
+            console.error(`[steroid-run] 🚫 SAFETY: Refusing to delete "${relPath}" (protected path).`);
+            process.exit(1);
+        }
+    }
+
+    if (!fs.existsSync(resolved)) {
+        console.log(`[steroid-run] ⏭️  Path does not exist: ${relPath}`);
+        process.exit(0);
+    }
+    fs.rmSync(resolved, { recursive: true, force: true });
+    console.log(`[steroid-run] ✅ Removed: ${relPath}`);
+    process.exit(0);
+}
+
+/** CMD: fs-cp — Recursive copy (v6.0.0) */
+if (args[0] === 'fs-cp') {
+    const src = args[1];
+    const dest = args[2];
+    if (!src || !dest) {
+        console.error('[steroid-run] Usage: npx steroid-run fs-cp <src> <dest>');
+        process.exit(1);
+    }
+    const resolvedSrc = path.resolve(targetDir, src);
+    const resolvedDest = path.resolve(targetDir, dest);
+
+    if (!fs.existsSync(resolvedSrc)) {
+        console.error(`[steroid-run] ❌ Source does not exist: ${src}`);
+        process.exit(1);
+    }
+
+    const copyRecursive = (srcPath, destPath) => {
+        const stat = fs.statSync(srcPath);
+        if (stat.isDirectory()) {
+            if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
+            for (const child of fs.readdirSync(srcPath)) {
+                // Skip node_modules and .git for speed
+                if (child === 'node_modules' || child === '.git') continue;
+                copyRecursive(path.join(srcPath, child), path.join(destPath, child));
+            }
+        } else {
+            const destDir = path.dirname(destPath);
+            if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+            fs.copyFileSync(srcPath, destPath);
+        }
+    };
+
+    let count = 0;
+    const stat = fs.statSync(resolvedSrc);
+    if (stat.isDirectory()) {
+        // Copy contents of src INTO dest (merge)
+        for (const child of fs.readdirSync(resolvedSrc)) {
+            if (child === 'node_modules' || child === '.git') continue;
+            copyRecursive(path.join(resolvedSrc, child), path.join(resolvedDest, child));
+            count++;
+        }
+    } else {
+        const destFile = fs.existsSync(resolvedDest) && fs.statSync(resolvedDest).isDirectory()
+            ? path.join(resolvedDest, path.basename(resolvedSrc))
+            : resolvedDest;
+        fs.copyFileSync(resolvedSrc, destFile);
+        count = 1;
+    }
+    console.log(`[steroid-run] ✅ Copied ${count} item(s): ${src} → ${dest}`);
+    process.exit(0);
+}
+
+/** CMD: fs-mv — Move/rename with cross-device fallback (v6.0.0) */
+if (args[0] === 'fs-mv') {
+    const src = args[1];
+    const dest = args[2];
+    if (!src || !dest) {
+        console.error('[steroid-run] Usage: npx steroid-run fs-mv <src> <dest>');
+        process.exit(1);
+    }
+    const resolvedSrc = path.resolve(targetDir, src);
+    const resolvedDest = path.resolve(targetDir, dest);
+
+    if (!fs.existsSync(resolvedSrc)) {
+        console.error(`[steroid-run] ❌ Source does not exist: ${src}`);
+        process.exit(1);
+    }
+
+    try {
+        fs.renameSync(resolvedSrc, resolvedDest);
+    } catch (e) {
+        // Cross-device fallback: copy then delete
+        if (e.code === 'EXDEV') {
+            fs.copyFileSync(resolvedSrc, resolvedDest);
+            fs.unlinkSync(resolvedSrc);
+        } else {
+            throw e;
+        }
+    }
+    console.log(`[steroid-run] ✅ Moved: ${src} → ${dest}`);
+    process.exit(0);
+}
+
+/** CMD: fs-ls — List directory contents as tree (v6.0.0) */
+if (args[0] === 'fs-ls') {
+    const lsPath = args[1] || '.';
+    const resolved = path.resolve(targetDir, lsPath);
+
+    if (!fs.existsSync(resolved)) {
+        console.error(`[steroid-run] ❌ Path does not exist: ${lsPath}`);
+        process.exit(1);
+    }
+
+    const printTree = (dir, prefix, maxDepth, currentDepth) => {
+        if (currentDepth >= maxDepth) return;
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+            .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules')
+            .sort((a, b) => {
+                if (a.isDirectory() && !b.isDirectory()) return -1;
+                if (!a.isDirectory() && b.isDirectory()) return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            const isLast = i === entries.length - 1;
+            const connector = isLast ? '└── ' : '├── ';
+            const childPrefix = isLast ? '    ' : '│   ';
+
+            if (entry.isDirectory()) {
+                console.log(`${prefix}${connector}${entry.name}/`);
+                printTree(path.join(dir, entry.name), prefix + childPrefix, maxDepth, currentDepth + 1);
+            } else {
+                const size = fs.statSync(path.join(dir, entry.name)).size;
+                const sizeStr = size > 1024 ? `${(size / 1024).toFixed(1)}KB` : `${size}B`;
+                console.log(`${prefix}${connector}${entry.name} (${sizeStr})`);
+            }
+        }
+    };
+
+    console.log(`[steroid-run] 📂 ${path.relative(targetDir, resolved) || '.'}/`);
+    printTree(resolved, '  ', 4, 0);
+    process.exit(0);
+}
+
+/** CMD: git-init — Initialize git repo with first commit, shell-free (v6.0.0) */
+if (args[0] === 'git-init') {
+    if (fs.existsSync(path.join(targetDir, '.git'))) {
+        console.log('[steroid-run] ⏭️  Git already initialized. Skipping.');
+        process.exit(0);
+    }
+
+    console.log('[steroid-run] Initializing git repository...');
+
+    const init = spawnSync('git', ['init'], { cwd: targetDir, stdio: 'inherit' });
+    if (init.status !== 0) {
+        console.error('[steroid-run] ❌ git init failed.');
+        process.exit(1);
+    }
+
+    const add = spawnSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'inherit' });
+    if (add.status !== 0) {
+        console.error('[steroid-run] ❌ git add -A failed.');
+        process.exit(1);
+    }
+
+    const commit = spawnSync('git', ['commit', '-m', 'feat(steroid): initial scaffold checkpoint'], {
+        cwd: targetDir, stdio: 'inherit',
+    });
+    if (commit.status !== 0) {
+        console.error('[steroid-run] ❌ git commit failed.');
+        process.exit(1);
+    }
+
+    console.log('[steroid-run] ✅ Git initialized with scaffold checkpoint.');
+    process.exit(0);
+}
+
+// ============================================================
 // PIPELINE ENFORCEMENT COMMANDS (Ported from ecosystem forks)
 // ============================================================
 
@@ -1497,16 +1777,24 @@ if (args[0] === 'scan') {
 
     const contextFile = path.join(featureDir, 'context.md');
 
+    // Check for --force flag (v6.0.0: bypass freshness check after scaffold)
+    const forceFlag = args.includes('--force');
+
     // Check for existing context.md that's less than 24h old
     if (fs.existsSync(contextFile)) {
         const stats = fs.statSync(contextFile);
         const ageMs = Date.now() - stats.mtimeMs;
         const ageHours = ageMs / (1000 * 60 * 60);
-        if (ageHours < 24) {
+        if (ageHours < 24 && !forceFlag) {
             console.log(`[steroid-run] ✅ Context already captured (${Math.round(ageHours)}h ago). Skipping scan.`);
+            console.log(`[steroid-run]    Use --force to bypass freshness check.`);
             process.exit(0);
         }
-        console.log(`[steroid-run] ⚠️  Context is ${Math.round(ageHours)}h old. Re-scanning...`);
+        if (forceFlag) {
+            console.log(`[steroid-run] 🔄 Force rescan requested. Bypassing freshness check...`);
+        } else {
+            console.log(`[steroid-run] ⚠️  Context is ${Math.round(ageHours)}h old. Re-scanning...`);
+        }
 
         // Drift detection (v5.9.0): hash old context for comparison after re-scan
         try {
@@ -1813,7 +2101,7 @@ if (args[0] === 'detect-tests') {
     process.exit(0);
 }
 
-/** CMD: verify-feature — Pre-check that all plan.md tasks are complete */
+/** CMD: verify-feature — Physical verification: build, lint, test, routes, memory (v6.0.0) */
 if (args[0] === 'verify-feature') {
     const feature = args[1];
     if (!feature) {
@@ -1829,19 +2117,264 @@ if (args[0] === 'verify-feature') {
         process.exit(1);
     }
 
-    // Check all tasks are done
-    const content = fs.readFileSync(planFile, 'utf-8');
-    const total = (content.match(/- \[[ x/]\]/g) || []).length;
-    const done = (content.match(/- \[x\]/g) || []).length;
+    console.log(`\n[steroid-run] 🔍 VERIFICATION: ${feature} (v${SW_VERSION})\n`);
 
+    const results = [];
+    let hasFailure = false;
+
+    // ── Step 1: Plan completeness (existing) ──
+    const planContent = fs.readFileSync(planFile, 'utf-8');
+    const total = (planContent.match(/- \[[ x/]\]/g) || []).length;
+    const done = (planContent.match(/- \[x\]/g) || []).length;
     if (done < total) {
-        console.error(`[steroid-run] ❌ Plan incomplete (${done}/${total}). Finish all tasks before verification.`);
+        results.push({ step: 'Plan completeness', status: 'FAIL', detail: `${done}/${total} tasks complete` });
+        hasFailure = true;
+    } else {
+        results.push({ step: 'Plan completeness', status: 'PASS', detail: `${done}/${total} tasks complete` });
+    }
+
+    // ── Step 2: Build check ──
+    const pkgPath = path.join(targetDir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+        try {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+            if (pkg.scripts && pkg.scripts.build) {
+                console.log('  ⏳ Running build check (npm run build)...');
+                const build = spawnSync('npm', ['run', 'build'], {
+                    cwd: targetDir, stdio: 'pipe', timeout: 120000, shell: true,
+                });
+                if (build.status === 0) {
+                    results.push({ step: 'Build', status: 'PASS', detail: 'npm run build succeeded' });
+                } else {
+                    const errOutput = (build.stderr || build.stdout || Buffer.from('')).toString().trim().split('\n').slice(-5).join('\n');
+                    results.push({ step: 'Build', status: 'FAIL', detail: errOutput || 'npm run build failed (no output)' });
+                    hasFailure = true;
+                }
+            } else {
+                results.push({ step: 'Build', status: 'SKIP', detail: 'No build script in package.json' });
+            }
+
+            // ── Step 3: Lint check ──
+            if (pkg.scripts && pkg.scripts.lint) {
+                console.log('  ⏳ Running lint check (npm run lint)...');
+                const lint = spawnSync('npm', ['run', 'lint'], {
+                    cwd: targetDir, stdio: 'pipe', timeout: 60000, shell: true,
+                });
+                if (lint.status === 0) {
+                    results.push({ step: 'Lint', status: 'PASS', detail: 'npm run lint passed' });
+                } else {
+                    const errOutput = (lint.stderr || lint.stdout || Buffer.from('')).toString().trim().split('\n').slice(-5).join('\n');
+                    results.push({ step: 'Lint', status: 'WARN', detail: errOutput || 'Lint issues detected' });
+                }
+            } else {
+                results.push({ step: 'Lint', status: 'SKIP', detail: 'No lint script in package.json' });
+            }
+
+            // ── Step 4: Test check ──
+            if (pkg.scripts && pkg.scripts.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
+                console.log('  ⏳ Running test check (npm test)...');
+                const test = spawnSync('npm', ['test'], {
+                    cwd: targetDir, stdio: 'pipe', timeout: 120000, shell: true,
+                });
+                if (test.status === 0) {
+                    results.push({ step: 'Tests', status: 'PASS', detail: 'npm test passed' });
+                } else {
+                    const errOutput = (test.stderr || test.stdout || Buffer.from('')).toString().trim().split('\n').slice(-5).join('\n');
+                    results.push({ step: 'Tests', status: 'WARN', detail: errOutput || 'Test failures detected' });
+                }
+            } else {
+                // Check if plan contains test items but no test command
+                const testItems = (planContent.match(/write test|unit test|test:/gi) || []).length;
+                if (testItems > 0) {
+                    results.push({ step: 'Tests', status: 'WARN', detail: `Plan has ${testItems} test item(s) but no test script configured` });
+                } else {
+                    results.push({ step: 'Tests', status: 'SKIP', detail: 'No test script in package.json' });
+                }
+            }
+        } catch (e) {
+            results.push({ step: 'Build/Lint/Test', status: 'SKIP', detail: `package.json parse error: ${e.message}` });
+        }
+    } else {
+        // Non-JS project fallback: check for Cargo.toml, pyproject.toml, go.mod
+        const altStacks = [
+            { file: 'Cargo.toml', cmd: 'cargo', args: ['check'], name: 'Rust' },
+            { file: 'go.mod', cmd: 'go', args: ['build', './...'], name: 'Go' },
+        ];
+        let detected = false;
+        for (const alt of altStacks) {
+            if (fs.existsSync(path.join(targetDir, alt.file))) {
+                detected = true;
+                console.log(`  ⏳ Detected ${alt.name} project. Running ${alt.cmd} ${alt.args.join(' ')}...`);
+                const check = spawnSync(alt.cmd, alt.args, { cwd: targetDir, stdio: 'pipe', timeout: 120000 });
+                if (check.status === 0) {
+                    results.push({ step: `Build (${alt.name})`, status: 'PASS', detail: `${alt.cmd} ${alt.args.join(' ')} succeeded` });
+                } else {
+                    results.push({ step: `Build (${alt.name})`, status: 'FAIL', detail: `${alt.cmd} failed` });
+                    hasFailure = true;
+                }
+                break;
+            }
+        }
+        if (!detected) {
+            results.push({ step: 'Build', status: 'SKIP', detail: 'No package.json, Cargo.toml, or go.mod found' });
+        }
+    }
+
+    // ── Step 5: Dead route detection ──
+    try {
+        const srcDir = path.join(targetDir, 'src');
+        if (fs.existsSync(srcDir)) {
+            const allFiles = [];
+            const walkDir = (dir) => {
+                for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+                        walkDir(fullPath);
+                    } else if (entry.isFile() && /\.(tsx?|jsx?)$/.test(entry.name)) {
+                        allFiles.push(fullPath);
+                    }
+                }
+            };
+            walkDir(srcDir);
+
+            // Find all route links (href="/...")
+            const deadRoutes = [];
+            const hrefPattern = /href=["'](\/[^"']+)["']/g;
+            for (const file of allFiles) {
+                const fileContent = fs.readFileSync(file, 'utf-8');
+                let match;
+                while ((match = hrefPattern.exec(fileContent)) !== null) {
+                    const route = match[1];
+                    // Check if a page file exists for this route (Next.js App Router)
+                    const appDir = path.join(srcDir, 'app');
+                    if (fs.existsSync(appDir)) {
+                        const routeDir = path.join(appDir, route.replace(/^\//, ''));
+                        const pageExists = ['page.tsx', 'page.jsx', 'page.ts', 'page.js']
+                            .some(p => fs.existsSync(path.join(routeDir, p)));
+                        if (!pageExists) {
+                            deadRoutes.push({ route, file: path.relative(targetDir, file) });
+                        }
+                    }
+                }
+            }
+            if (deadRoutes.length > 0) {
+                const routeList = deadRoutes.map(r => `${r.route} (in ${r.file})`).join(', ');
+                results.push({ step: 'Dead routes', status: 'WARN', detail: `${deadRoutes.length} route(s) link to missing pages: ${routeList}` });
+            } else {
+                results.push({ step: 'Dead routes', status: 'PASS', detail: 'All linked routes have page files' });
+            }
+        }
+    } catch (e) {
+        results.push({ step: 'Dead routes', status: 'SKIP', detail: `Scan error: ${e.message}` });
+    }
+
+    // ── Step 6: Unused exports (hooks, types never imported) ──
+    try {
+        const srcDir = path.join(targetDir, 'src');
+        if (fs.existsSync(srcDir)) {
+            const orphans = [];
+            const hooksDir = path.join(srcDir, 'hooks');
+            const typesDir = path.join(srcDir, 'types');
+            const checkDirs = [hooksDir, typesDir].filter(d => fs.existsSync(d));
+
+            for (const dir of checkDirs) {
+                for (const file of fs.readdirSync(dir).filter(f => /\.(ts|tsx|js|jsx)$/.test(f))) {
+                    const basename = file.replace(/\.(ts|tsx|js|jsx)$/, '');
+                    // Search for imports of this file across the entire src directory
+                    let found = false;
+                    const walkForImports = (searchDir) => {
+                        if (found) return;
+                        for (const entry of fs.readdirSync(searchDir, { withFileTypes: true })) {
+                            if (found) return;
+                            const fullPath = path.join(searchDir, entry.name);
+                            if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+                                walkForImports(fullPath);
+                            } else if (entry.isFile() && /\.(tsx?|jsx?)$/.test(entry.name) && fullPath !== path.join(dir, file)) {
+                                const content = fs.readFileSync(fullPath, 'utf-8');
+                                if (content.includes(basename)) {
+                                    found = true;
+                                }
+                            }
+                        }
+                    };
+                    walkForImports(srcDir);
+                    if (!found) {
+                        orphans.push(`${path.relative(targetDir, path.join(dir, file))}`);
+                    }
+                }
+            }
+
+            if (orphans.length > 0) {
+                results.push({ step: 'Orphan detection', status: 'WARN', detail: `${orphans.length} file(s) never imported: ${orphans.join(', ')}` });
+            } else if (checkDirs.length > 0) {
+                results.push({ step: 'Orphan detection', status: 'PASS', detail: 'All hooks/types are imported somewhere' });
+            }
+        }
+    } catch (e) {
+        results.push({ step: 'Orphan detection', status: 'SKIP', detail: `Scan error: ${e.message}` });
+    }
+
+    // ── Step 7: Memory freshness ──
+    const techStackFile = path.join(knowledgeDir, 'tech-stack.json');
+    if (fs.existsSync(techStackFile)) {
+        try {
+            const ts = JSON.parse(fs.readFileSync(techStackFile, 'utf-8'));
+            const unknowns = ['language', 'framework', 'packageManager']
+                .filter(k => ts[k] === 'Unknown' || !ts[k]);
+            if (unknowns.length > 0) {
+                results.push({ step: 'Memory freshness', status: 'WARN', detail: `tech-stack.json has Unknown values: ${unknowns.join(', ')}. Run: node steroid-run.cjs scan ${feature} --force` });
+            } else {
+                results.push({ step: 'Memory freshness', status: 'PASS', detail: 'tech-stack.json populated' });
+            }
+        } catch (e) {
+            results.push({ step: 'Memory freshness', status: 'WARN', detail: `tech-stack.json parse error: ${e.message}` });
+        }
+    } else {
+        results.push({ step: 'Memory freshness', status: 'WARN', detail: 'tech-stack.json not found. Run: node steroid-run.cjs scan ' + feature });
+    }
+
+    // ── Print results ──
+    console.log('');
+    const passCount = results.filter(r => r.status === 'PASS').length;
+    const failCount = results.filter(r => r.status === 'FAIL').length;
+    const warnCount = results.filter(r => r.status === 'WARN').length;
+    const skipCount = results.filter(r => r.status === 'SKIP').length;
+
+    for (const r of results) {
+        const icon = r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : r.status === 'WARN' ? '⚠️' : '⏭️';
+        console.log(`  ${icon} ${r.step}: ${r.status}`);
+        if (r.status !== 'PASS' && r.status !== 'SKIP') {
+            console.log(`     ${r.detail}`);
+        }
+    }
+
+    console.log('');
+    console.log(`  Result: ${passCount} passed, ${failCount} failed, ${warnCount} warnings, ${skipCount} skipped`);
+
+    // ── Write verify.md ──
+    let verifyMd = `# Verification Report: ${feature}\n\n`;
+    verifyMd += `**Date:** ${new Date().toISOString()}\n`;
+    verifyMd += `**Version:** steroid-workflow v${SW_VERSION}\n`;
+    verifyMd += `**Status:** ${hasFailure ? 'FAIL' : warnCount > 0 ? 'CONDITIONAL' : 'PASS'}\n\n`;
+    verifyMd += `## Checks\n\n`;
+    for (const r of results) {
+        const icon = r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : r.status === 'WARN' ? '⚠️' : '⏭️';
+        verifyMd += `- ${icon} **${r.step}**: ${r.status}\n`;
+        if (r.detail) verifyMd += `  - ${r.detail}\n`;
+    }
+    verifyMd += `\n---\n_Generated by steroid-workflow v${SW_VERSION}_\n`;
+    fs.writeFileSync(path.join(featureDir, 'verify.md'), verifyMd);
+
+    console.log(`  Report: .memory/changes/${feature}/verify.md`);
+
+    if (hasFailure) {
+        console.log('');
+        console.log(`  🚫 VERIFICATION FAILED. Fix the failures above before archiving.`);
         process.exit(1);
     }
 
-    console.log(`[steroid-run] ✅ Plan complete (${done}/${total}). Ready for verification.`);
-    console.log(`[steroid-run] 📋 The steroid-verify skill will now run spec compliance and code quality reviews.`);
-    console.log(`[steroid-run]    Results will be written to .memory/changes/${feature}/verify.md`);
+    console.log('');
+    console.log(`  📋 The steroid-verify skill will now run spec compliance and code quality reviews.`);
     process.exit(0);
 }
 
@@ -2315,7 +2848,7 @@ if (args[0] === 'verify') {
 }
 
 // --- Execution Mode ---
-const commandStr = args.join(' ');
+let commandStr = args.join(' ');
 
 // --- Scaffold Safety Guard (v5.6.0) ---
 // Blocks scaffold commands targeting root dir (. or ./) to prevent
@@ -2352,12 +2885,15 @@ for (const pattern of SCAFFOLD_PATTERNS) {
 
 console.log(`[steroid-run] Executing: ${commandStr}`);
 
-// --- Command Allowlist Guard (v5.6.1) ---
+// --- Command Allowlist Guard (v6.0.0) ---
 // Only known development commands are allowed through the circuit breaker.
 // This prevents prompt injection attacks from executing arbitrary shell commands.
 const ALLOWED_COMMANDS = new Set([
     'npm', 'npx', 'node', 'pnpm', 'yarn', 'bun', 'bunx', 'deno',
     'git', 'echo', 'cat', 'ls', 'dir', 'mkdir', 'cp', 'mv', 'type', 'where',
+    'rm', 'rmdir', 'del', 'rd', 'move', 'copy', 'xcopy',       // v6.0.0: shell utilities
+    'powershell', 'pwsh', 'cmd',                                 // v6.0.0: shell invocations
+    'grep', 'findstr', 'head', 'tail', 'touch', 'sed', 'awk',   // v6.0.0: text utilities
     'python', 'python3', 'pip', 'pip3', 'poetry', 'uv',
     'cargo', 'rustc', 'rustup',
     'go',
@@ -2371,6 +2907,19 @@ const ALLOWED_COMMANDS = new Set([
     'tsc', 'eslint', 'prettier', 'jest', 'vitest', 'mocha', 'pytest',
     'knip', 'madge', 'gitleaks',
 ]);
+
+// v6.0.0: Smart re-quoting — wrap arguments containing spaces in quotes
+const parts = commandStr.trim().split(/\s+/);
+if (parts.length > 1) {
+    const requoted = parts.map((p, i) => {
+        if (i === 0) return p; // don't re-quote the command itself
+        if (p.includes(' ') && !p.startsWith('"') && !p.startsWith("'")) {
+            return `"${p}"`;
+        }
+        return p;
+    });
+    commandStr = requoted.join(' ');
+}
 
 const baseCommand = commandStr.trim().split(/\s+/)[0].replace(/^['"]|['"]$/g, '').toLowerCase();
 if (!ALLOWED_COMMANDS.has(baseCommand)) {

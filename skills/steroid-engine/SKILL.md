@@ -64,13 +64,17 @@ NEVER run scaffold commands (`npm create`, `npx create-*`, `npm init`, `yarn cre
 
 The circuit breaker will physically block these commands. If you attempt `node steroid-run.cjs 'npm create vite . ...'`, the circuit breaker will refuse execution and suggest the safe alternative.
 
-**Safe pattern:**
+**Safe pattern (v6.0.0 — uses shell-free fs-* subcommands):**
 1. Scaffold into a temp subdirectory:
-   `node steroid-run.cjs 'npm create vite@latest .steroid-scaffold-tmp -- --template react-ts'`
-2. Move scaffolded files into root (merge, don't overwrite existing):
-   `node steroid-run.cjs 'cp -r .steroid-scaffold-tmp/* . && cp .steroid-scaffold-tmp/.* . 2>/dev/null; rm -rf .steroid-scaffold-tmp'`
-   On Windows: `node steroid-run.cjs 'xcopy .steroid-scaffold-tmp\* . /E /Y && rmdir /S /Q .steroid-scaffold-tmp'`
-3. Run `node steroid-run.cjs 'npm install'`
+   `node steroid-run.cjs 'npx create-next-app@latest .steroid-scaffold-tmp --typescript ...'`
+2. Copy scaffolded files into root:
+   `node steroid-run.cjs fs-cp .steroid-scaffold-tmp .`
+3. Remove temp directory:
+   `node steroid-run.cjs fs-rm .steroid-scaffold-tmp`
+4. Install dependencies:
+   `node steroid-run.cjs 'npm install'`
+5. Rescan to update memory:
+   `node steroid-run.cjs scan <feature> --force`
 
 **Why:** Scaffold tools like `create-vite` prompt "Remove existing files and continue" when the target directory is non-empty. If the AI selects this option (intentionally or accidentally), it deletes `.git/`, `.memory/`, `steroid-run.cjs`, and all infrastructure — destroying the circuit breaker itself and making recovery impossible.
 
@@ -87,10 +91,10 @@ If this command fails, STOP. The architecture phase is not complete.
 Before starting the checklist, create a rollback safety point:
 
 ```
-node steroid-run.cjs 'git init && git add -A && git commit -m steroid-checkpoint --allow-empty'
+node steroid-run.cjs git-init
 ```
 
-If the build goes wrong, the user can recover with `git reset --hard steroid-checkpoint`.
+If the build goes wrong, the user can recover with `git reset --hard`.
 
 ## The Autonomous Execution Loop
 
@@ -156,30 +160,25 @@ After completing the FIRST task in plan.md (typically project init/scaffold):
    - Test framework (from devDependencies — jest/vitest/mocha/etc)
 2. This ensures remaining tasks have accurate context instead of "Unknown".
 
-### Post-Scaffold Rescan (v5.1.0)
+### Post-Scaffold Rescan (v6.0.0 — PHYSICAL GATE)
 
-After the first scaffold task completes (e.g., `npx create-next-app`, `npm create vite`), physically re-run the scan:
-
-```bash
-node steroid-run.cjs scan <feature>
-```
-
-This updates context.md with the actual tech stack so remaining tasks have accurate detection data instead of the bootstrap skeleton.
-
-### Git Init Check (v5.2.0)
-
-After the first scaffold task, verify git is initialized:
+After the first scaffold task completes (e.g., `npx create-next-app`, `npm create vite`), you MUST run:
 
 ```bash
-node steroid-run.cjs 'git status'
+node steroid-run.cjs scan <feature> --force
 ```
 
-If this fails (no `.git/` directory), initialize it:
+The `--force` flag bypasses the 24-hour freshness check. This auto-populates `tech-stack.json` and `progress.md` with actual detected values. Failure to rescan after scaffold means `verify-feature` will report stale memory.
+
+### Git Init Check (v6.0.0)
+
+After the first scaffold task, ensure git is initialized:
+
 ```bash
-node steroid-run.cjs 'git init && git add -A && git commit -m "Initial commit"'
+node steroid-run.cjs git-init
 ```
 
-This is required — the `commit` command will block if `.git/` doesn't exist.
+This command is idempotent — if `.git/` already exists, it skips. If not, it initializes git, stages all files, and creates a scaffold checkpoint commit. The `commit` command will block if `.git/` doesn't exist.
 
 ### Remote Check (v5.3.0)
 
@@ -241,6 +240,21 @@ This gives the user a natural breakpoint to:
 - Prioritize remaining tasks if time/tokens are limited
 - Stop early if the MVP is already sufficient
 
+### Heartbeat Check (v6.0.0)
+
+After completing every 3rd task, run:
+```
+node steroid-run.cjs smoke-test
+```
+
+If the smoke test FAILS:
+1. STOP all forward progress
+2. Fix the build/compile error
+3. Re-run `node steroid-run.cjs smoke-test`
+4. Only proceed to next task after it passes
+
+This prevents dependency drift, missing imports, and cascading build failures. The heartbeat is NOT optional — it is the physical wall against 41-task silent drift.
+
 **Phase 1: Implementation (TDD)**
 
 **Commenting Standards (v5.3.0):** When implementing code, follow these rules:
@@ -263,13 +277,17 @@ The Implementer sub-agent follows the Red-Green-Refactor cycle from the forked T
 
 Reference the full TDD rules in `src/forks/superpowers/tdd.md`. The Implementer MUST follow The Iron Law: no production code without a failing test first.
 
-**True TDD Guard (v5.5.0):** The following are strictly forbidden:
+**True TDD Guard (v6.0.0):** The following are strictly forbidden:
 - Writing production code before the test exists
 - Writing trivial tests like `expect(true).toBe(true)` or `expect(1).toBe(1)`
 - Writing tests that can never fail (e.g., testing a hardcoded return value)
 - Claiming "tests pass" without showing the test runner output
 
 The failing test output MUST be documented in progress.md before any production code is written.
+
+If the plan includes "Write test:" items, the engine MUST install a test framework (jest/vitest) as the FIRST task. If `npm test` is not configured after the first 3 tasks, the smoke-test will report it as a WARNING.
+
+If the plan includes N test items and `verify-feature` later finds 0 test files, verification FAILS regardless of build status. This is a hard gate.
 
 **Anti-Loop Directive (v5.5.0):** If you encounter the same error 3 times in a row (`Error 3/5` from the circuit breaker):
 1. STOP attempting code changes immediately
@@ -316,12 +334,20 @@ Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-qual
 
 Only add patterns that are **general and reusable**, not task-specific details.
 
-**Pattern Persistence (v5.5.1):** Additionally, save the same patterns to the knowledge store so they survive across features:
+**Knowledge Persistence (v6.0.0 — MANDATORY):**
+
+After every 5th completed task, run ALL of the following:
 ```
-node steroid-run.cjs memory write patterns '{"pattern": "<what you learned>", "context": "<why it matters>"}'
+node steroid-run.cjs memory write gotchas '{"<issue>": "<what you learned>"}'
+node steroid-run.cjs memory write patterns '{"<pattern>": "<how to use it>"}'
 ```
 
-This ensures the scan skill picks up your learnings at the start of the NEXT feature — even in a fresh conversation.
+If you encounter a version mismatch (plan says X, installed Y):
+```
+node steroid-run.cjs memory write gotchas '{"version-drift": "<what differed and why>"}'
+```
+
+Failure to write knowledge is a verifiable gap — `verify-feature` checks that knowledge stores were updated after scaffold.
 
 6. **(v5.5.1) Session Learnings** — After each completed task, append a learnings block to `progress.md`:
 

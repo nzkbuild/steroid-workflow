@@ -1,5 +1,38 @@
 # Changelog
 
+## [6.0.0] "Integrity Release" - 2026-03-14
+
+### The Vision
+The SimpleHR incident autopsy revealed that verify-feature was pure theater — it counted `[x]` markers but never ran a build. The engine could produce 41 tasks of silent drift with fabricated outputs, dead routes, and disconnected architecture. v6.0.0 makes the pipeline physically verify what it claims to have built.
+
+### Added — Physical Verification (`steroid-run.cjs`)
+- **`verify-feature` rewrite** — 7-step physical verification: plan completeness, `npm run build`, `npm run lint`, `npm test`, dead route detection, orphan file detection, memory freshness check. Replaces the old `[x]` counter.
+- **`smoke-test` command** — Stack-aware build check. Detects Node.js (build script or `tsc --noEmit`), Rust (`cargo check`), Go (`go build`). Called by engine heartbeat every 3 tasks.
+- **Shell-free subcommands** — `fs-mkdir`, `fs-rm`, `fs-cp`, `fs-mv`, `fs-ls`, `git-init`. Pure Node.js `fs` operations — no shell quoting issues, no POSIX/Windows split.
+- **`fs-rm` safety guard** — Refuses to delete `.git`, `.memory`, `steroid-run.cjs`, `node_modules`.
+- **`scan --force` flag** — Bypasses 24-hour freshness check. Required after scaffold to populate memory immediately.
+- **Dead route detection** — Scans `href=` / `Link href=` in `.tsx`/`.jsx` and checks for matching `page.tsx` in App Router structure.
+- **Orphan file detection** — Finds hooks and type files in `src/hooks/` and `src/types/` that are never imported.
+
+### Added — Allowlist & Quoting
+- **Expanded command allowlist** — 15 new commands: `rm`, `rmdir`, `del`, `rd`, `move`, `copy`, `xcopy`, `powershell`, `pwsh`, `cmd`, `grep`, `findstr`, `head`, `tail`, `touch`, `sed`, `awk`.
+- **Smart re-quoting** — Arguments containing spaces are automatically wrapped in quotes before shell passthrough.
+
+### Added — Engine Skill (`steroid-engine/SKILL.md`)
+- **Heartbeat check** — Mandatory `smoke-test` every 3 tasks. If it fails, engine must stop and fix before continuing.
+- **TDD hard gate** — If plan has test items but `verify-feature` finds 0 test files, verification FAILS regardless of build status.
+- **Mandatory knowledge writes** — Every 5th task must write to `gotchas` and `patterns` knowledge stores. Verified by `verify-feature`.
+- **Scaffold section rewrite** — Uses `fs-cp`/`fs-rm` subcommands instead of platform-specific shell commands.
+- **Git init rewrite** — Uses `git-init` subcommand instead of raw shell `git init && git add -A && git commit`.
+- **Post-scaffold rescan** — Now uses `scan --force` to bypass freshness, marked as PHYSICAL GATE.
+
+### Fixed
+- **`const commandStr` crash** — Re-quoting code reassigned `commandStr` which was declared `const`. Changed to `let`. This would have crashed every shell command execution.
+
+### Changed
+- **Version**: 5.9.1 → 6.0.0 (semver major — `verify-feature` behavior is breaking)
+- **Tests**: 17 new unit tests for v6.0.0 features. Total: 101 tests (54 smoke + 47 unit), 0 failures.
+
 ## [5.9.1] "Universal Agent" - 2026-03-14
 
 ### Added
