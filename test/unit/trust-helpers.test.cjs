@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const path = require('path');
+
 const {
     createArchiveStamp,
     findBlockedShellSyntax,
@@ -60,13 +62,13 @@ test('creates filesystem-safe archive stamps', () => {
 
 test('generates collision-safe archive paths', () => {
     const seen = new Set([
-        'archive\\2026-03-15T07-01-17-123Z-verify.json',
-        'archive\\2026-03-15T07-01-17-123Z-2-verify.json',
+        path.join('archive', '2026-03-15T07-01-17-123Z-verify.json'),
+        path.join('archive', '2026-03-15T07-01-17-123Z-2-verify.json'),
     ]);
     const dest = getArchiveDestinationPath('archive', '2026-03-15T07-01-17-123Z', 'verify.json', (candidate) =>
         seen.has(candidate),
     );
-    if (dest !== 'archive\\2026-03-15T07-01-17-123Z-3-verify.json') {
+    if (dest !== path.join('archive', '2026-03-15T07-01-17-123Z-3-verify.json')) {
         throw new Error(`Unexpected destination: ${dest}`);
     }
 });
