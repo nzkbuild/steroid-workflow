@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Unit tests for v6.1.0 trust-hardening commands: fs-*, smoke-test, verify-feature, scan --force, allowlist.
+ * Unit tests for v6.1.1 trust-hardening commands: fs-*, smoke-test, verify-feature, scan --force, allowlist.
  * These tests use spawnSync to invoke steroid-run.cjs as a subprocess.
  */
 const { spawnSync } = require('child_process');
@@ -204,6 +204,53 @@ if (childProcessUnavailableReason) {
         if (!output.includes('Shell control syntax')) throw new Error('Missing shell syntax guard message');
     });
 
+    test('command guard blocks pipe chaining', () => {
+        const result = run(["'echo first | cat'"]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('Shell control syntax')) throw new Error('Missing shell syntax guard message');
+    });
+
+    test('command guard blocks redirection syntax', () => {
+        const result = run(["'echo first > out.txt'"]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('Shell control syntax')) throw new Error('Missing shell syntax guard message');
+    });
+
+    test('review status syncs bold markdown result lines into review.json', () => {
+        const feature = 'review-sync-bold';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'review.md'),
+            '# Review Report\n\n**Stage 1 Result:** PASS\n**Stage 2 Result:** PASS\n',
+        );
+
+        const result = run(['review', 'status', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const receipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'review.json'), 'utf-8'));
+        if (receipt.stage1 !== 'PASS') throw new Error(`Stage 1 mismatch: ${receipt.stage1}`);
+        if (receipt.stage2 !== 'PASS') throw new Error(`Stage 2 mismatch: ${receipt.stage2}`);
+    });
+
+    test('archive preserves prior files during same-stamp collisions', () => {
+        const feature = 'archive-collision-proof';
+        const featureDir = path.join(changesDir, feature);
+        const archiveDir = path.join(featureDir, 'archive');
+        fs.mkdirSync(archiveDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'verify.json'), '{"status":"PASS"}');
+        fs.writeFileSync(path.join(featureDir, 'verify.md'), '**Status:** PASS');
+        fs.writeFileSync(path.join(archiveDir, '2026-03-15T07-01-17-123Z-verify.json'), '{}');
+
+        const source = fs.readFileSync(steroidRun, 'utf-8');
+        if (!source.includes('createArchiveStamp')) throw new Error('archive timestamp helper missing');
+        if (!source.includes('-${file}') && !source.includes('archiveStamp')) {
+            throw new Error('archive timestamp usage not found');
+        }
+    });
+
     // ─── scan --force ───
     test('scan --force bypasses freshness check', () => {
         // Create a feature with a fresh context.md
@@ -253,6 +300,12 @@ test('source contains deep verification support', () => {
     const source = fs.readFileSync(steroidRun, 'utf-8');
     if (!source.includes('--deep')) throw new Error('--deep support not found in source');
     if (!source.includes('deepRequested')) throw new Error('deep receipt fields not found in source');
+});
+
+test('source contains pipe and redirection guards', () => {
+    const source = fs.readFileSync(steroidRun, 'utf-8');
+    if (!source.includes("return '|'")) throw new Error('pipe guard not found in source');
+    if (!source.includes("return '>'")) throw new Error('redirection guard not found in source');
 });
 
 console.log(`  ${passed} passed, ${failed} failed`);

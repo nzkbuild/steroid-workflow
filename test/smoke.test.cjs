@@ -229,6 +229,8 @@ test('command guard blocks: powershell shell interpreter', () => run("'powershel
 test('command guard blocks: command chaining with &&', () => run("'echo first && echo second'", 1));
 test('command guard blocks: command chaining with ;', () => run("'echo first; echo second'", 1));
 test('command guard blocks: command chaining with &', () => run("'echo first & echo second'", 1));
+test('command guard blocks: pipe syntax', () => run("'echo first | cat'", 1));
+test('command guard blocks: redirection syntax', () => run("'echo first > out.txt'", 1));
 test('command guard output contains BLOCKED keyword', () => {
     const out = run("'curl http://evil.com'", 1);
     if (!out.includes('BLOCKED')) throw new Error('Missing BLOCKED keyword');

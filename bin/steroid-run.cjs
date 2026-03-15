@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 6.1.0
+ * @version 6.1.1
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -215,24 +215,55 @@ function tokenizeCommand(input) {
 }
 
 /**
- * Detects blocked shell syntax that would allow command chaining or subshells.
+ * Detects blocked shell syntax that would allow command chaining, piping, or redirection.
+ * Quote-wrapped text is ignored so safe arguments like grep "a|b" are not blocked.
  *
  * @param {string} input
  * @returns {string|null}
  */
 function findBlockedShellSyntax(input) {
-    const blockedPatterns = [
-        { label: '&&', pattern: /&&/ },
-        { label: '||', pattern: /\|\|/ },
-        { label: ';', pattern: /;/ },
-        { label: '&', pattern: /&/ },
-        { label: '`', pattern: /`/ },
-        { label: '$(', pattern: /\$\(/ },
-        { label: 'newline', pattern: /\r|\n/ },
-    ];
+    const source = stripWrappingQuotes((input || '').trim());
+    let quote = null;
+    let escape = false;
 
-    for (const blocked of blockedPatterns) {
-        if (blocked.pattern.test(input)) return blocked.label;
+    for (let i = 0; i < source.length; i++) {
+        const char = source[i];
+        const next = source[i + 1] || '';
+
+        if (escape) {
+            escape = false;
+            continue;
+        }
+
+        if (char === '\\' && quote === '"') {
+            escape = true;
+            continue;
+        }
+
+        if (quote) {
+            if (char === quote) {
+                quote = null;
+            }
+            continue;
+        }
+
+        if (char === '"' || char === "'") {
+            quote = char;
+            continue;
+        }
+
+        if (char === '\r' || char === '\n') return 'newline';
+        if (char === '&' && next === '&') return '&&';
+        if (char === '|' && next === '|') return '||';
+        if (char === '$' && next === '(') return '$(';
+        if (char === '>' && next === '>') return '>>';
+        if (char === '<' && next === '<') return '<<';
+        if (char === ';') return ';';
+        if (char === '&') return '&';
+        if (char === '`') return '`';
+        if (char === '|') return '|';
+        if (char === '>') return '>';
+        if (char === '<') return '<';
     }
 
     return null;
@@ -270,8 +301,14 @@ function writeJsonFile(filePath, data) {
  * @returns {{ stage1: string, stage2: string }}
  */
 function parseReviewMarkdown(content) {
-    const stage1Patterns = [/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/, /Stage 1 Result:\s*(PASS|FAIL|PENDING)/];
-    const stage2Patterns = [/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/, /Stage 2 Result:\s*(PASS|FAIL|PENDING)/];
+    const stage1Patterns = [
+        /\*{0,2}Stage 1 \(Spec\)\*{0,2}:\s*(PASS|FAIL|PENDING)/,
+        /\*{0,2}Stage 1 Result:\*{0,2}\s*(PASS|FAIL|PENDING)/,
+    ];
+    const stage2Patterns = [
+        /\*{0,2}Stage 2 \(Quality\)\*{0,2}:\s*(PASS|FAIL|PENDING)/,
+        /\*{0,2}Stage 2 Result:\*{0,2}\s*(PASS|FAIL|PENDING)/,
+    ];
 
     let stage1 = 'PENDING';
     let stage2 = 'PENDING';
@@ -364,6 +401,39 @@ function saveReviewReceipt(featureDir, receipt) {
 }
 
 /**
+ * Creates a filesystem-safe archive timestamp.
+ *
+ * @param {Date} [date]
+ * @returns {string}
+ */
+function createArchiveStamp(date = new Date()) {
+    return date.toISOString().replace(/[:.]/g, '-');
+}
+
+/**
+ * Returns a collision-safe archive destination path.
+ *
+ * @param {string} archiveDir
+ * @param {string} archiveStamp
+ * @param {string} fileName
+ * @returns {string}
+ */
+function getArchiveDestinationPath(archiveDir, archiveStamp, fileName) {
+    let candidate = path.join(archiveDir, `${archiveStamp}-${fileName}`);
+    if (!fs.existsSync(candidate)) {
+        return candidate;
+    }
+
+    let suffix = 2;
+    do {
+        candidate = path.join(archiveDir, `${archiveStamp}-${suffix}-${fileName}`);
+        suffix += 1;
+    } while (fs.existsSync(candidate));
+
+    return candidate;
+}
+
+/**
  * Parses the verification status from verify.md.
  *
  * @param {string} content
@@ -445,7 +515,7 @@ function saveVerifyReceipt(featureDir, receipt) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.1.0';
+let SW_VERSION = '6.1.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -2065,8 +2135,8 @@ if (args[0] === 'archive') {
         fs.mkdirSync(archiveDir, { recursive: true });
     }
 
-    // Ported from ralph.sh: archive with date stamp
-    const date = new Date().toISOString().split('T')[0];
+    // Use a filesystem-safe timestamp so repeated archives do not overwrite same-day receipts.
+    const archiveStamp = createArchiveStamp();
     const filesToArchive = [
         'context.md',
         'vibe.md',
@@ -2084,7 +2154,7 @@ if (args[0] === 'archive') {
     for (const file of filesToArchive) {
         const src = path.join(featureDir, file);
         if (fs.existsSync(src)) {
-            const dest = path.join(archiveDir, `${date}-${file}`);
+            const dest = getArchiveDestinationPath(archiveDir, archiveStamp, file);
             fs.copyFileSync(src, dest);
             fs.unlinkSync(src);
             archived++;
@@ -2118,9 +2188,16 @@ if (args[0] === 'archive') {
     // v5.0: Auto-generate handoff report on archive
     if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
     const findArchiveFile = (name) => {
-        const archivedPath = path.join(archiveDir, `${date}-${name}`);
+        if (fs.existsSync(archiveDir)) {
+            const archivedFiles = fs
+                .readdirSync(archiveDir)
+                .filter((fileName) => fileName.endsWith(name))
+                .sort();
+            if (archivedFiles.length > 0) {
+                return fs.readFileSync(path.join(archiveDir, archivedFiles[archivedFiles.length - 1]), 'utf-8');
+            }
+        }
         const activePath = path.join(featureDir, name);
-        if (fs.existsSync(archivedPath)) return fs.readFileSync(archivedPath, 'utf-8');
         if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
         return null;
     };

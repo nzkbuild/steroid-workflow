@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.1.1] "Trust Hardening Patch" - 2026-03-15
+
+### Fixed
+- **Shell guard bypasses** — the command guard now blocks pipe and redirection syntax in addition to chaining/subshell syntax, while ignoring safe quoted literals like `grep "a|b"`
+- **Review receipt sync** — `review status` now correctly parses the bold `**Stage 1 Result:**` and `**Stage 2 Result:**` lines emitted by the review template
+- **Archive collisions** — archive receipts and reports now use filesystem-safe timestamps and collision-safe filenames so repeated archives no longer overwrite same-day history
+
+### Improved
+- **Direct trust-path unit coverage** — new unit tests cover shell guard parsing, review receipt parsing, and archive collision behavior even when nested child Node processes are unavailable
+
 ## [6.1.0] "Trust Hardening" - 2026-03-15
 
 ### The Vision
