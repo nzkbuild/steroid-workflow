@@ -28,6 +28,7 @@ Do not ask the user any questions. Read the following files and make all archite
 1. `.memory/changes/<feature>/vibe.md` — The aesthetic vision
 2. `.memory/changes/<feature>/spec.md` — The acceptance criteria
 3. `.memory/changes/<feature>/research.md` — The investigated tech stack and patterns
+4. `.memory/changes/<feature>/prompt.json` — The normalized prompt interpretation, if present
 
 Use the researched stack from `research.md`. Do NOT guess or pick your own tech stack — the Research skill already investigated and verified the best tools.
 
@@ -80,6 +81,14 @@ Each checklist item must:
 - Be specific enough that an AI sub-agent with fresh context can execute it without ambiguity
 - Reference which user story / acceptance criterion it satisfies (from spec.md)
 - Map to researched libraries (from research.md) — not arbitrary choices
+
+If `prompt.json` exists, adapt the checklist shape to the approved route without breaking the structure:
+- `lite-change` → keep the checklist tight and focused on the smallest viable set of files/tasks
+- `resume-mode` → prefer incremental integration tasks over fresh setup tasks
+- `split-work` → group tasks by sub-problem or story so execution does not blend multiple intents together
+- `research-heavy` → include explicit validation or compatibility tasks before implementation
+
+Do NOT invent new route names. Use `prompt.json` only as planning context inside the existing structure.
 
 ### 4. Task Ordering Rules
 

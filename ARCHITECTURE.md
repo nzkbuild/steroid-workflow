@@ -62,6 +62,9 @@ All AI terminal commands are routed through this CLI wrapper.
 | Command | Purpose | Origin |
 |---------|---------|--------|
 | `detect-intent "<message>"` | Classify user intent (build/fix/refactor/migrate/document) | New |
+| `normalize-prompt "<message>"` | Normalize a raw user prompt into a structured brief | New |
+| `prompt-health "<message>"` | Score prompt clarity, ambiguity, and risk | New |
+| `session-detect` | Detect continuation/recovery/project session state | New |
 | `detect-tests` | Detect test framework in current project | GSD |
 
 ### Progress & Diagnostics
@@ -109,6 +112,30 @@ All AI terminal commands are routed through this CLI wrapper.
 | **migrate** | scan → research → architect → engine → verify |
 | **document** | scan → specify → engine → verify |
 
+### Prompt Intelligence (v6.2.0)
+
+Before vibe capture locks the feature direction, steroid-workflow can create a machine-readable prompt interpretation receipt at `.memory/changes/<feature>/prompt.json` and a human-readable companion at `.memory/changes/<feature>/prompt.md`.
+
+The receipt records:
+- primary and secondary intents
+- continuation state
+- ambiguity, complexity, and risk
+- assumptions and non-goals
+- unresolved questions
+- recommended pipeline route
+
+That receipt is not just an intake helper. It is meant to travel through vibe, spec, research, architect, diagnose, engine, verify, archive, and handoff reporting so later phases do not silently forget early assumptions.
+
+### Approved Adaptive Routes
+| Route | Use Case |
+|-------|----------|
+| `standard-build` | Normal feature work |
+| `diagnose-first` | Bugs, regressions, symptom-driven fixes |
+| `resume-mode` | Continue unfinished work from recent session state |
+| `lite-change` | Trivial, low-risk edits |
+| `research-heavy` | Migrations and high-risk changes |
+| `split-work` | Multi-intent prompts that should be decomposed |
+
 ### Gate Map (v3.1)
 | Phase | Requires | Alt Path | Min Lines |
 |-------|----------|----------|-----------|
@@ -141,6 +168,8 @@ your-project/
 │   └── changes/
 │       └── <feature>/
 │           ├── context.md         ← Codebase scan results (v3.0)
+│           ├── prompt.json        ← Machine-readable prompt interpretation receipt (v6.2.0)
+│           ├── prompt.md          ← Human-readable prompt brief (v6.2.0)
 │           ├── vibe.md            ← Captured user intent
 │           ├── spec.md            ← Acceptance criteria
 │           ├── research.md        ← Tech investigation results

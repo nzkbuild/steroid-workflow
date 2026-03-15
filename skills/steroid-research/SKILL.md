@@ -25,7 +25,7 @@ If this command fails, STOP. The specification phase is not complete.
 
 ### 2. No User Interaction
 
-Do not ask the user any questions. Read `.memory/changes/<feature>/spec.md`, investigate what's needed, and make all recommendations silently.
+Do not ask the user any questions. Read `.memory/changes/<feature>/spec.md`, and if present `.memory/changes/<feature>/prompt.json`, investigate what's needed, and make all recommendations silently.
 
 ### 2. Research Philosophy
 
@@ -49,6 +49,11 @@ Read the `## Hard Constraints` section from spec.md. If the user explicitly requ
 - Explain how to best use the constrained technology, not argue against it
 - Only flag constraints that are technically impossible (e.g., "use React for an iOS native app")
 
+If `prompt.json` exists, also preserve:
+- `recommendedPipeline` as route context for how heavy the research should be
+- `complexity` and `risk` as signals for how cautious the investigation should be
+- `nonGoals` so you do not accidentally expand scope with optional tooling
+
 ### 3c. Brownfield Context Check (v5.5.0)
 
 Read vibe.md for the `Project Type` field. If it says **Brownfield**:
@@ -57,6 +62,8 @@ Read vibe.md for the `Project Type` field. If it says **Brownfield**:
 2. Your research MUST respect the existing stack — do NOT recommend replacing it
 3. Focus on libraries that integrate with what's already there
 4. Note version compatibility with existing dependencies
+
+If `prompt.json` says `continuationState` is `resume` or `mid-feature`, prefer incremental recommendations over broad re-architecture.
 
 ### 4. What To Investigate
 

@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 6.1.1
+ * @version 6.2.0
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -512,10 +512,603 @@ function saveVerifyReceipt(featureDir, receipt) {
     });
 }
 
+/**
+ * Normalizes whitespace in prompt-like input.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizePromptWhitespace(value) {
+    return (value || '').replace(/\s+/g, ' ').trim();
+}
+
+const PROMPT_INTENT_KEYWORDS = {
+    fix: [
+        'fix',
+        'bug',
+        'debug',
+        'broken',
+        'error',
+        'crash',
+        'issue',
+        'wrong',
+        'failing',
+        'not working',
+        'doesnt work',
+        "doesn't work",
+        'investigate',
+        'repair',
+        'regression',
+    ],
+    refactor: [
+        'refactor',
+        'restructure',
+        'reorganize',
+        'clean up',
+        'cleanup',
+        'improve',
+        'optimize',
+        'simplify',
+        'extract',
+        'decouple',
+        'polish',
+    ],
+    migrate: ['migrate', 'migration', 'upgrade', 'switch to', 'move to', 'convert', 'port', 'transition'],
+    document: ['document', 'docs', 'readme', 'jsdoc', 'comment', 'explain', 'annotate', 'api docs', 'documentation'],
+    build: ['build', 'create', 'add', 'make', 'implement', 'feature', 'new', 'design', 'develop', 'setup', 'set up'],
+};
+
+const PROMPT_PIPELINE_HINTS = {
+    build: 'scan → vibe → specify → research → architect → engine → verify',
+    fix: 'scan → diagnose → engine (targeted) → verify',
+    refactor: 'scan → specify (target state) → architect → engine → verify',
+    migrate: 'scan → research (target tech) → architect → engine → verify',
+    document: 'scan → specify (doc scope) → engine (docs) → verify',
+};
+
+const ROUTE_PHASE_HINTS = {
+    'standard-build': ['scan', 'normalize-prompt', 'vibe', 'specify', 'research', 'architect', 'engine', 'verify'],
+    'diagnose-first': ['scan', 'normalize-prompt', 'diagnose', 'engine', 'verify'],
+    'resume-mode': ['scan', 'normalize-prompt', 'resume', 'engine', 'verify'],
+    'lite-change': ['scan', 'normalize-prompt', 'vibe', 'specify', 'architect', 'engine', 'verify'],
+    'research-heavy': ['scan', 'normalize-prompt', 'research', 'architect', 'engine', 'verify'],
+    'split-work': ['scan', 'normalize-prompt', 'vibe', 'specify', 'architect', 'engine', 'verify'],
+};
+
+function scorePromptIntents(message) {
+    const source = normalizePromptWhitespace(message).toLowerCase();
+    const scores = {};
+    for (const [intent, keywords] of Object.entries(PROMPT_INTENT_KEYWORDS)) {
+        let score = 0;
+        for (const keyword of keywords) {
+            if (source.includes(keyword)) {
+                score += keyword.length;
+            }
+        }
+        scores[intent] = score;
+    }
+    return scores;
+}
+
+function inspectPromptSessionState() {
+    const featureStates = [];
+    if (fs.existsSync(changesDir)) {
+        for (const entry of fs.readdirSync(changesDir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            const featureDir = path.join(changesDir, entry.name);
+            const artifactPriority = [
+                'verify.json',
+                'verify.md',
+                'review.json',
+                'review.md',
+                'plan.md',
+                'research.md',
+                'spec.md',
+                'vibe.md',
+                'context.md',
+                'diagnosis.md',
+            ];
+            let lastArtifact = null;
+            for (const artifact of artifactPriority) {
+                if (fs.existsSync(path.join(featureDir, artifact))) {
+                    lastArtifact = artifact;
+                    break;
+                }
+            }
+            let updatedAt = null;
+            try {
+                updatedAt = fs.statSync(featureDir).mtime.toISOString();
+            } catch {
+                updatedAt = null;
+            }
+            const reviewReceipt = readJsonFile(path.join(featureDir, 'review.json'));
+            const verifyReceipt = readJsonFile(path.join(featureDir, 'verify.json'));
+            const incomplete =
+                (!verifyReceipt || !['PASS', 'CONDITIONAL'].includes(verifyReceipt.status || '')) &&
+                (!reviewReceipt || reviewReceipt.stage1 !== 'PASS' || reviewReceipt.stage2 !== 'PASS');
+            featureStates.push({
+                name: entry.name,
+                updatedAt,
+                incomplete,
+                lastArtifact,
+            });
+        }
+    }
+
+    const sorted = featureStates.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    const activeFeature = sorted[0] || null;
+    let defaultState = 'new-work';
+    if ((state.error_count || 0) > 0) {
+        defaultState = 'post-failure';
+    } else if (activeFeature && activeFeature.incomplete) {
+        defaultState = 'resume';
+    } else if (activeFeature && activeFeature.lastArtifact === 'verify.json') {
+        defaultState = 'post-verify';
+    }
+
+    return {
+        activeFeature: activeFeature ? activeFeature.name : null,
+        latestArtifact: activeFeature ? activeFeature.lastArtifact : null,
+        defaultState,
+        knownFeatures: sorted.map((feature) => feature.name),
+        errorCount: state.error_count || 0,
+        recoveryState: state.status || 'active',
+    };
+}
+
+function analyzePrompt(message, sessionState = inspectPromptSessionState()) {
+    const rawPrompt = normalizePromptWhitespace(message);
+    const scores = scorePromptIntents(rawPrompt);
+    const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    const primaryIntent = ranked[0] && ranked[0][1] > 0 ? ranked[0][0] : 'build';
+    const secondaryIntents = ranked
+        .filter(([intent, score]) => intent !== primaryIntent && score > 0)
+        .map(([intent]) => intent);
+    const lower = rawPrompt.toLowerCase();
+
+    let continuationState = sessionState.defaultState || 'new-work';
+    if (/(continue|resume|pick up|carry on|keep going|finish up|where we left off|yesterday)/.test(lower)) {
+        continuationState = sessionState.activeFeature ? 'resume' : 'continuation-requested';
+    } else if (/(last change|just broke|regression|after the last change|stopped working)/.test(lower)) {
+        continuationState = 'post-failure';
+    } else if (/(polish|clean up|cleanup|finish|wrap up|finalize|tighten)/.test(lower)) {
+        continuationState = 'polish';
+    }
+
+    let complexity = 'standard';
+    if (
+        /(rename|change text|button text|label|typo|copy change|small tweak|minor tweak|one line|one-line)/.test(lower)
+    ) {
+        complexity = 'trivial';
+    } else if (
+        /(payment|billing|checkout|auth|authentication|database|schema|infra|security|permissions|role|migration)/.test(
+            lower,
+        ) ||
+        primaryIntent === 'migrate'
+    ) {
+        complexity = 'high-risk';
+    } else if (
+        secondaryIntents.length > 0 ||
+        /(dashboard|onboarding|redesign|architecture|workflow|system|complex|full app|whole app|enterprise)/.test(lower)
+    ) {
+        complexity = 'complex';
+    }
+
+    let ambiguityScore = 0;
+    if (secondaryIntents.length > 0) ambiguityScore += 2;
+    if (
+        /(better|cleaner|premium|modern|nice|good|improve it|make it pop|more robust|enterprise-ready|clean this up)/.test(
+            lower,
+        )
+    ) {
+        ambiguityScore += 2;
+    }
+    if (primaryIntent === 'build') ambiguityScore += 1;
+    if (lower.split(' ').length <= 4) ambiguityScore += 1;
+    if (/(something|stuff|things|whatever|somehow|kinda|sort of|maybe)/.test(lower)) ambiguityScore += 1;
+    const ambiguity = ambiguityScore >= 4 ? 'high' : ambiguityScore >= 2 ? 'medium' : 'low';
+
+    const splitRecommended =
+        secondaryIntents.length > 0 && /( and | also | plus | then | plus also |,)/.test(` ${lower} `);
+    const assumptions = [];
+    if (/(cleaner|premium|modern|confusing|better ux|feel better|look better)/.test(lower)) {
+        assumptions.push(
+            'Interpret design language as UX and visual-hierarchy improvements unless the user says otherwise.',
+        );
+    }
+    if (primaryIntent === 'build' && !/(mobile|responsive|desktop only)/.test(lower)) {
+        assumptions.push('Preserve responsive behavior by default.');
+    }
+    if (primaryIntent === 'fix') {
+        assumptions.push('Prioritize preserving existing behavior outside the reported issue.');
+    }
+    if (complexity === 'high-risk') {
+        assumptions.push(
+            'Require conservative changes and stronger verification because the request touches risky areas.',
+        );
+    }
+
+    const nonGoals = [];
+    if (!/(rewrite|from scratch|rebuild everything|whole app)/.test(lower)) {
+        nonGoals.push('Do not rewrite unrelated parts of the codebase.');
+    }
+    if (secondaryIntents.length > 0) {
+        nonGoals.push('Do not silently merge unrelated requested tasks into one unscoped implementation.');
+    }
+
+    const unresolvedQuestions = [];
+    if (ambiguity === 'high') unresolvedQuestions.push('What concrete outcome would tell us this task is successful?');
+    if (secondaryIntents.length > 0) {
+        unresolvedQuestions.push('Should this be split into multiple features or handled as one scoped effort?');
+    }
+    if (!/(react|vue|svelte|node|python|go|rust|next|express|django|rails|php|java|kotlin)/.test(lower)) {
+        unresolvedQuestions.push('Should the current stack and architecture be preserved as-is?');
+    }
+
+    const suggestedFeatures = splitRecommended
+        ? rawPrompt
+              .split(/\band\b|\balso\b|,/i)
+              .map((part) => normalizePromptWhitespace(part))
+              .filter(Boolean)
+        : [];
+    let recommendedPipeline = 'standard-build';
+    if (continuationState === 'resume') {
+        recommendedPipeline = 'resume-mode';
+    } else if (splitRecommended) {
+        recommendedPipeline = 'split-work';
+    } else if (primaryIntent === 'fix') {
+        recommendedPipeline = 'diagnose-first';
+    } else if (complexity === 'trivial') {
+        recommendedPipeline = 'lite-change';
+    } else if (primaryIntent === 'migrate' || complexity === 'high-risk') {
+        recommendedPipeline = 'research-heavy';
+    }
+
+    return {
+        rawPrompt,
+        normalizedSummary: rawPrompt ? rawPrompt[0].toUpperCase() + rawPrompt.slice(1) : '',
+        primaryIntent,
+        secondaryIntents,
+        confidence: Math.min(1, Math.max(0.2, (scores[primaryIntent] || 0) / 20)).toFixed(2),
+        ambiguity,
+        complexity,
+        risk: complexity === 'high-risk' ? 'high' : complexity === 'complex' ? 'medium' : 'low',
+        continuationState,
+        assumptions,
+        nonGoals,
+        unresolvedQuestions,
+        splitRecommended,
+        suggestedFeatures,
+        recommendedPipeline,
+        pipelineHint: PROMPT_PIPELINE_HINTS[primaryIntent],
+    };
+}
+
+function buildPromptHealth(analysis) {
+    return {
+        clarity: analysis.ambiguity === 'low' ? 5 : analysis.ambiguity === 'medium' ? 3 : 2,
+        completeness: analysis.unresolvedQuestions.length === 0 ? 5 : analysis.unresolvedQuestions.length === 1 ? 4 : 2,
+        ambiguity: analysis.ambiguity,
+        complexity: analysis.complexity,
+        risk: analysis.risk,
+        multiIntent: analysis.splitRecommended ? 'yes' : 'no',
+        modelSensitivity:
+            analysis.ambiguity === 'high' || analysis.complexity === 'high-risk'
+                ? 'high'
+                : analysis.complexity === 'complex'
+                  ? 'medium'
+                  : 'low',
+        recommendedAction: analysis.splitRecommended
+            ? 'split work'
+            : analysis.ambiguity === 'high'
+              ? 'proceed with assumptions'
+              : analysis.complexity === 'high-risk'
+                ? 'proceed carefully'
+                : 'proceed',
+    };
+}
+
+function suggestNextPhase(analysis, artifacts) {
+    if (!artifacts.context) {
+        return { phase: 'scan', reason: 'context.md is missing' };
+    }
+    if (!artifacts.prompt) {
+        return { phase: 'normalize-prompt', reason: 'prompt.json is missing' };
+    }
+
+    const route = analysis.recommendedPipeline || 'standard-build';
+    if (route === 'diagnose-first') {
+        if (!artifacts.diagnosis) {
+            return { phase: 'diagnose', reason: 'diagnosis.md is missing for the targeted fix route' };
+        }
+        if (!artifacts.verify) {
+            return { phase: 'engine', reason: 'Execute the targeted fix and generate verification evidence next' };
+        }
+        return { phase: 'complete', reason: 'Diagnosis and verification artifacts are already present' };
+    }
+
+    if (route === 'research-heavy') {
+        if (!artifacts.research) {
+            return { phase: 'research', reason: 'research.md is missing for the high-risk route' };
+        }
+        if (!artifacts.plan) {
+            return { phase: 'architect', reason: 'plan.md is missing after research' };
+        }
+        if (!artifacts.verify) {
+            return { phase: 'engine', reason: 'Implementation and verification are the next remaining steps' };
+        }
+        return { phase: 'complete', reason: 'Research-heavy route artifacts are present' };
+    }
+
+    if (route === 'resume-mode') {
+        if (artifacts.diagnosis && !artifacts.verify) {
+            return { phase: 'engine', reason: 'Resume from diagnosis.md and complete the targeted fix' };
+        }
+        if (artifacts.plan && !artifacts.verify) {
+            return { phase: 'engine', reason: 'Resume from the existing plan.md and continue implementation' };
+        }
+        if (artifacts.research && !artifacts.plan) {
+            return { phase: 'architect', reason: 'Resume by turning research into plan.md' };
+        }
+        if (artifacts.spec && !artifacts.research) {
+            return { phase: 'research', reason: 'Resume by filling in research.md' };
+        }
+        if (artifacts.vibe && !artifacts.spec) {
+            return { phase: 'specify', reason: 'Resume by turning vibe.md into spec.md' };
+        }
+        if (!artifacts.vibe && analysis.primaryIntent === 'fix') {
+            return { phase: 'diagnose', reason: 'Resume through diagnosis because the prompt still reads like a fix' };
+        }
+        if (!artifacts.vibe) {
+            return { phase: 'vibe', reason: 'Resume by locking the next structured brief in vibe.md' };
+        }
+        if (!artifacts.verify) {
+            return { phase: 'engine', reason: 'Resume the remaining implementation work' };
+        }
+        return { phase: 'complete', reason: 'Resume route artifacts already look complete' };
+    }
+
+    if (route === 'split-work') {
+        if (!artifacts.vibe) {
+            return { phase: 'vibe', reason: 'Capture the split intent explicitly in vibe.md first' };
+        }
+        if (!artifacts.spec) {
+            return { phase: 'specify', reason: 'Turn the split request into separate stories or scoped work' };
+        }
+        if (!artifacts.plan) {
+            return { phase: 'architect', reason: 'Create a scoped implementation plan for the split work' };
+        }
+        if (!artifacts.verify) {
+            return { phase: 'engine', reason: 'Implement one scoped slice at a time, then verify' };
+        }
+        return { phase: 'complete', reason: 'Split-work route artifacts are present' };
+    }
+
+    if (route === 'lite-change') {
+        if (!artifacts.vibe) {
+            return { phase: 'vibe', reason: 'Capture the small change in a minimal vibe.md' };
+        }
+        if (!artifacts.spec) {
+            return { phase: 'specify', reason: 'Define the tiny acceptance boundary before implementation' };
+        }
+        if (!artifacts.plan) {
+            return { phase: 'architect', reason: 'A short plan.md keeps the small change reviewable' };
+        }
+        if (!artifacts.verify) {
+            return { phase: 'engine', reason: 'Implement and verify the small change' };
+        }
+        return { phase: 'complete', reason: 'Lite-change route artifacts are present' };
+    }
+
+    if (!artifacts.vibe) {
+        return { phase: 'vibe', reason: 'vibe.md is missing' };
+    }
+    if (!artifacts.spec) {
+        return { phase: 'specify', reason: 'spec.md is missing' };
+    }
+    if (!artifacts.research) {
+        return { phase: 'research', reason: 'research.md is missing' };
+    }
+    if (!artifacts.plan) {
+        return { phase: 'architect', reason: 'plan.md is missing' };
+    }
+    if (!artifacts.verify) {
+        return { phase: 'engine', reason: 'Implementation should finish and write verification evidence next' };
+    }
+    return { phase: 'complete', reason: 'Standard route artifacts are present' };
+}
+
+function summarizeRouteProgress(analysis, artifacts) {
+    const route = analysis.recommendedPipeline || 'standard-build';
+    let status = 'on-track';
+    let detail = 'Artifacts match the recommended route so far.';
+
+    if (route === 'diagnose-first' && artifacts.plan && !artifacts.diagnosis) {
+        status = 'drifted';
+        detail =
+            'plan.md exists before diagnosis.md, which suggests the fix route may have skipped root-cause capture.';
+    } else if (route === 'research-heavy' && artifacts.plan && !artifacts.research) {
+        status = 'drifted';
+        detail = 'plan.md exists before research.md, which weakens the high-risk route.';
+    } else if (route === 'split-work' && artifacts.plan && !artifacts.spec) {
+        status = 'drifted';
+        detail = 'plan.md exists before spec.md, so the split work may not be scoped clearly yet.';
+    } else if (route === 'resume-mode') {
+        status = 'adaptive';
+        detail = 'Resume mode follows the latest trustworthy artifact rather than a fixed early-phase sequence.';
+    }
+
+    return {
+        expectedRoute: route,
+        expectedPhases: ROUTE_PHASE_HINTS[route] || ROUTE_PHASE_HINTS['standard-build'],
+        next: suggestNextPhase(analysis, artifacts),
+        status,
+        detail,
+    };
+}
+
+function buildFeatureArtifactState(featureDir) {
+    return {
+        context: fs.existsSync(path.join(featureDir, 'context.md')),
+        prompt: fs.existsSync(path.join(featureDir, 'prompt.json')),
+        vibe: fs.existsSync(path.join(featureDir, 'vibe.md')),
+        spec: fs.existsSync(path.join(featureDir, 'spec.md')),
+        research: fs.existsSync(path.join(featureDir, 'research.md')),
+        plan: fs.existsSync(path.join(featureDir, 'plan.md')),
+        diagnosis: fs.existsSync(path.join(featureDir, 'diagnosis.md')),
+        verify:
+            fs.existsSync(path.join(featureDir, 'verify.md')) || fs.existsSync(path.join(featureDir, 'verify.json')),
+    };
+}
+
+function getRouteDisplayPhases(route) {
+    const phases = ROUTE_PHASE_HINTS[route] || ROUTE_PHASE_HINTS['standard-build'];
+    return phases.map((phase) => (phase === 'normalize-prompt' ? 'prompt' : phase));
+}
+
+function getPipelineStatusEntries(featureDir, promptReceipt) {
+    const route = promptReceipt ? promptReceipt.recommendedPipeline || 'standard-build' : 'standard-build';
+    const expectedPhases = new Set(getRouteDisplayPhases(route));
+    const entries = [
+        {
+            name: 'scan',
+            file: 'context.md',
+            label: 'Codebase context',
+            present: fs.existsSync(path.join(featureDir, 'context.md')),
+        },
+        {
+            name: 'prompt',
+            file: 'prompt.json',
+            label: 'Prompt interpretation',
+            present: fs.existsSync(path.join(featureDir, 'prompt.json')),
+        },
+        {
+            name: 'vibe',
+            file: 'vibe.md',
+            label: 'Vibe capture',
+            present: fs.existsSync(path.join(featureDir, 'vibe.md')),
+        },
+        {
+            name: 'specify',
+            file: 'spec.md',
+            label: 'Specification',
+            present: fs.existsSync(path.join(featureDir, 'spec.md')),
+        },
+        {
+            name: 'research',
+            file: 'research.md',
+            label: 'Tech research',
+            present: fs.existsSync(path.join(featureDir, 'research.md')),
+        },
+        {
+            name: 'architect',
+            file: 'plan.md',
+            label: 'Architecture plan',
+            present: fs.existsSync(path.join(featureDir, 'plan.md')),
+        },
+        {
+            name: 'diagnose',
+            file: 'diagnosis.md',
+            label: 'Diagnosis (fix path)',
+            present: fs.existsSync(path.join(featureDir, 'diagnosis.md')),
+        },
+        {
+            name: 'engine',
+            file: route === 'diagnose-first' ? 'diagnosis.md' : 'plan.md',
+            label: route === 'diagnose-first' ? 'Engine execution (from diagnosis)' : 'Engine execution',
+            present:
+                route === 'diagnose-first'
+                    ? fs.existsSync(path.join(featureDir, 'diagnosis.md'))
+                    : fs.existsSync(path.join(featureDir, 'plan.md')),
+        },
+        {
+            name: 'verify',
+            file: 'verify.md',
+            label: 'Verification evidence',
+            present:
+                fs.existsSync(path.join(featureDir, 'verify.md')) ||
+                fs.existsSync(path.join(featureDir, 'verify.json')),
+        },
+    ];
+
+    return entries.map((entry) => ({
+        ...entry,
+        expected: expectedPhases.has(entry.name),
+    }));
+}
+
+function formatPromptMarkdown(feature, analysis, sessionState) {
+    const lines = [
+        `# Prompt Brief: ${feature}`,
+        '',
+        `**Captured:** ${new Date().toISOString()}`,
+        `**Source:** normalize-prompt`,
+        '',
+        '## Summary',
+        '',
+        `- Raw Prompt: ${analysis.rawPrompt || 'None'}`,
+        `- Normalized Summary: ${analysis.normalizedSummary || 'None'}`,
+        `- Primary Intent: ${analysis.primaryIntent || 'Unknown'}`,
+        `- Secondary Intents: ${analysis.secondaryIntents.length > 0 ? analysis.secondaryIntents.join(', ') : 'None'}`,
+        `- Continuation State: ${analysis.continuationState || 'Unknown'}`,
+        `- Complexity / Risk: ${analysis.complexity || 'Unknown'} / ${analysis.risk || 'Unknown'}`,
+        `- Ambiguity: ${analysis.ambiguity || 'Unknown'}`,
+        `- Recommended Route: ${analysis.recommendedPipeline || 'Unknown'}`,
+        `- Pipeline Hint: ${analysis.pipelineHint || 'Unknown'}`,
+        '',
+        '## Assumptions',
+        '',
+    ];
+
+    if (analysis.assumptions.length > 0) {
+        for (const assumption of analysis.assumptions) {
+            lines.push(`- ${assumption}`);
+        }
+    } else {
+        lines.push('- None captured.');
+    }
+
+    lines.push('', '## Non-Goals', '');
+    if (analysis.nonGoals.length > 0) {
+        for (const nonGoal of analysis.nonGoals) {
+            lines.push(`- ${nonGoal}`);
+        }
+    } else {
+        lines.push('- None captured.');
+    }
+
+    lines.push('', '## Unresolved Questions', '');
+    if (analysis.unresolvedQuestions.length > 0) {
+        for (const question of analysis.unresolvedQuestions) {
+            lines.push(`- ${question}`);
+        }
+    } else {
+        lines.push('- None captured.');
+    }
+
+    lines.push('', '## Session Context', '');
+    lines.push(`- Active Feature: ${sessionState.activeFeature || 'None'}`);
+    lines.push(`- Default State: ${sessionState.defaultState || 'Unknown'}`);
+    lines.push(
+        `- Known Features: ${sessionState.knownFeatures && sessionState.knownFeatures.length > 0 ? sessionState.knownFeatures.join(', ') : 'None'}`,
+    );
+    lines.push(`- Circuit State: ${sessionState.recoveryState || 'active'} (${sessionState.errorCount || 0} errors)`);
+
+    if (analysis.splitRecommended && analysis.suggestedFeatures.length > 0) {
+        lines.push('', '## Suggested Split', '');
+        for (const item of analysis.suggestedFeatures) {
+            lines.push(`- ${item}`);
+        }
+    }
+
+    lines.push('', '_Generated by steroid-workflow prompt intelligence._', '');
+    return lines.join('\n');
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.1.1';
+let SW_VERSION = '6.2.0';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -581,6 +1174,11 @@ Usage:
 
   Intelligence:
     node steroid-run.cjs detect-intent "<message>"         Detect user intent (build/fix/refactor/migrate/document)
+    node steroid-run.cjs normalize-prompt "<message>"      Normalize a raw user prompt into a structured brief
+    node steroid-run.cjs normalize-prompt "<message>" --feature <feature> --write
+                                                          Normalize and persist .memory/changes/<feature>/prompt.json
+    node steroid-run.cjs prompt-health "<message>"         Score prompt clarity, ambiguity, and risk
+    node steroid-run.cjs session-detect                    Detect current project/session state
     node steroid-run.cjs detect-tests                      Detect test framework in current project
 
   Progress:
@@ -595,7 +1193,7 @@ Usage:
 
   Diagnostics:
     node steroid-run.cjs audit                             Verify all enforcement layers are installed
-    node steroid-run.cjs pipeline-status <feature>          Show 8-phase pipeline progress for a feature
+    node steroid-run.cjs pipeline-status <feature>          Show pipeline progress plus prompt interpretation state
 
 The circuit breaker tracks errors in .memory/execution_state.json.
 After 5 consecutive errors (graduated recovery at each level), execution is blocked until you run 'reset'.
@@ -897,7 +1495,7 @@ if (args[0] === 'status') {
     process.exit(0);
 }
 
-/** CMD: pipeline-status — Show 8-phase pipeline progress for a feature (v5.9.0) */
+/** CMD: pipeline-status — Show pipeline progress and prompt interpretation for a feature (v6.2.0) */
 if (args[0] === 'pipeline-status') {
     const feature = args[1];
     if (!feature) {
@@ -910,35 +1508,60 @@ if (args[0] === 'pipeline-status') {
         process.exit(1);
     }
 
-    const phases = [
-        { name: 'scan', file: 'context.md', label: 'Codebase context' },
-        { name: 'vibe', file: 'vibe.md', label: 'Vibe capture' },
-        { name: 'specify', file: 'spec.md', label: 'Specification' },
-        { name: 'research', file: 'research.md', label: 'Tech research' },
-        { name: 'architect', file: 'plan.md', label: 'Architecture plan' },
-        { name: 'diagnose', file: 'diagnosis.md', label: 'Diagnosis (fix path)' },
-        { name: 'engine', file: 'plan.md', label: 'Engine execution' },
-        { name: 'verify', file: 'plan.md', label: 'Verification' },
-    ];
+    const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
+    const phases = getPipelineStatusEntries(featureDir, promptReceipt);
 
     console.log(`\n[steroid-run] Pipeline status for: ${feature}\n`);
 
     let completed = 0;
+    const artifactState = buildFeatureArtifactState(featureDir);
     for (const p of phases) {
         const fp = path.join(featureDir, p.file);
-        if (fs.existsSync(fp)) {
+        if (p.present && fs.existsSync(fp)) {
             const lines = fs.readFileSync(fp, 'utf-8').split('\n').length;
-            console.log(`  ✅ ${p.name.padEnd(12)} → ${p.file} (${lines} lines)`);
+            const suffix = p.expected ? `${lines} lines` : `${lines} lines, extra for route`;
+            const icon = p.expected ? '✅' : '⚠️';
+            console.log(`  ${icon} ${p.name.padEnd(12)} → ${p.file} (${suffix})`);
             completed++;
         } else {
-            console.log(`  ⬜ ${p.name.padEnd(12)} → ${p.file} (missing)`);
+            if (!p.expected) {
+                console.log(
+                    `  ⏭️ ${p.name.padEnd(12)} → ${p.file} (not used by ${promptReceipt?.recommendedPipeline || 'standard-build'})`,
+                );
+            } else {
+                console.log(`  ⬜ ${p.name.padEnd(12)} → ${p.file} (missing)`);
+            }
         }
     }
 
-    const total = userConfig.maxPhases || 8;
+    const total = Math.max(userConfig.maxPhases || phases.length, phases.length);
     const barFull = Math.round((completed / total) * 16);
     const bar = '█'.repeat(barFull) + '░'.repeat(16 - barFull);
     console.log(`\n  Progress: ${bar} ${completed}/${total} phases\n`);
+
+    if (promptReceipt) {
+        const routeSummary = summarizeRouteProgress(promptReceipt, artifactState);
+        console.log('  Prompt Intelligence');
+        console.log(`    - Intent: ${promptReceipt.primaryIntent || 'Unknown'}`);
+        if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
+            console.log(`    - Secondary: ${promptReceipt.secondaryIntents.join(', ')}`);
+        }
+        console.log(`    - Route: ${promptReceipt.recommendedPipeline || 'Unknown'}`);
+        console.log(`    - Continuation: ${promptReceipt.continuationState || 'Unknown'}`);
+        console.log(
+            `    - Complexity/Risk: ${promptReceipt.complexity || 'Unknown'} / ${promptReceipt.risk || 'Unknown'}`,
+        );
+        if (Array.isArray(promptReceipt.assumptions) && promptReceipt.assumptions.length > 0) {
+            console.log(`    - Assumptions: ${promptReceipt.assumptions.length}`);
+        }
+        console.log('  Route Guidance');
+        console.log(`    - Status: ${routeSummary.status}`);
+        console.log(`    - Detail: ${routeSummary.detail}`);
+        console.log(`    - Expected phases: ${routeSummary.expectedPhases.join(' -> ')}`);
+        console.log(`    - Next step: ${routeSummary.next.phase}`);
+        console.log(`    - Why next: ${routeSummary.next.reason}`);
+        console.log('');
+    }
 
     // Show audit trail if exists
     const auditFile = path.join(memoryDir, 'audit-trail.md');
@@ -1346,10 +1969,11 @@ if (args[0] === 'audit') {
     // v5.0: Review system check
     console.log('');
     console.log('  Review system: \u2705 Two-stage review available (v' + SW_VERSION + ')');
+    console.log('  Prompt intelligence: \u2705 normalize-prompt, prompt-health, and session-detect available');
 
     console.log('');
     console.log(
-        `  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s), ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores, review system v${SW_VERSION}`,
+        `  Result: ${passed} passed, ${failed} failed, ${ideCount} IDE(s), ${skillCount} skills, ${gateCount} gates, ${knowledgeCount}/4 knowledge stores, review + prompt intelligence v${SW_VERSION}`,
     );
 
     if (failed > 0) {
@@ -1731,6 +2355,7 @@ if (args[0] === 'init-feature') {
     console.log(`[steroid-run] ✅ Feature folder created: .memory/changes/${slug}/`);
     console.log(`  📁 .memory/changes/${slug}/`);
     console.log(`  📁 .memory/changes/${slug}/archive/`);
+    console.log(`  🧠 Next: node steroid-run.cjs normalize-prompt "<user prompt>" --feature ${slug} --write`);
     process.exit(0);
 }
 
@@ -1746,6 +2371,9 @@ if (args[0] === 'gate') {
     }
 
     const featureDir = path.join(changesDir, feature);
+    const artifactState = buildFeatureArtifactState(featureDir);
+    const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
+    const routeSummary = promptReceipt ? summarizeRouteProgress(promptReceipt, artifactState) : null;
     const gates = {
         vibe: { requires: 'context.md', minLines: 5, label: 'Codebase scan' },
         specify: { requires: 'vibe.md', minLines: 5, label: 'Vibe capture' },
@@ -1784,11 +2412,29 @@ if (args[0] === 'gate') {
                 console.log(
                     `[steroid-run] ✅ Gate passed (alt): ${gate.alt.requires} exists (${altLines} lines). Proceeding to ${phase} via fix pipeline.`,
                 );
+                if (routeSummary) {
+                    console.log(
+                        `  Route guidance: ${routeSummary.expectedRoute} (${routeSummary.status}) — ${routeSummary.detail}`,
+                    );
+                    if (routeSummary.next.phase !== 'complete' && routeSummary.next.phase !== phase) {
+                        console.log(`  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}`);
+                    }
+                }
                 process.exit(0);
             } else {
                 console.error(
                     `[steroid-run] 🚫 GATE BLOCKED: ${gate.alt.requires} looks incomplete (${altLines} lines, need ${gate.alt.minLines}+).`,
                 );
+                if (routeSummary) {
+                    console.error(
+                        `  Route guidance: ${routeSummary.expectedRoute} (${routeSummary.status}) — ${routeSummary.detail}`,
+                    );
+                    if (routeSummary.next.phase !== 'complete') {
+                        console.error(
+                            `  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}`,
+                        );
+                    }
+                }
                 process.exit(1);
             }
         }
@@ -1803,6 +2449,14 @@ if (args[0] === 'gate') {
         console.error(
             `  The "${phase}" phase cannot start until ${gate.requires}${gate.alt ? ` or ${gate.alt.requires}` : ''} exists.`,
         );
+        if (routeSummary) {
+            console.error(
+                `  Route guidance: ${routeSummary.expectedRoute} (${routeSummary.status}) — ${routeSummary.detail}`,
+            );
+            if (routeSummary.next.phase !== 'complete') {
+                console.error(`  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}`);
+            }
+        }
         console.error(friendlyHint('gate-blocked'));
         process.exit(1);
     }
@@ -1812,11 +2466,27 @@ if (args[0] === 'gate') {
         console.error(
             `[steroid-run] 🚫 GATE BLOCKED: ${gate.requires} looks incomplete (${lines} lines, need ${gate.minLines}+).`,
         );
+        if (routeSummary) {
+            console.error(
+                `  Route guidance: ${routeSummary.expectedRoute} (${routeSummary.status}) — ${routeSummary.detail}`,
+            );
+            if (routeSummary.next.phase !== 'complete') {
+                console.error(`  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}`);
+            }
+        }
         console.error(friendlyHint('gate-incomplete'));
         process.exit(1);
     }
 
     console.log(`[steroid-run] ✅ Gate passed: ${gate.requires} exists (${lines} lines). Proceeding to ${phase}.`);
+    if (routeSummary) {
+        console.log(
+            `  Route guidance: ${routeSummary.expectedRoute} (${routeSummary.status}) — ${routeSummary.detail}`,
+        );
+        if (routeSummary.next.phase !== 'complete' && routeSummary.next.phase !== phase) {
+            console.log(`  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}`);
+        }
+    }
 
     // Audit trail receipt (v5.9.0) — tamper-evident log of gate passes
     try {
@@ -2139,6 +2809,8 @@ if (args[0] === 'archive') {
     const archiveStamp = createArchiveStamp();
     const filesToArchive = [
         'context.md',
+        'prompt.json',
+        'prompt.md',
         'vibe.md',
         'spec.md',
         'research.md',
@@ -2202,6 +2874,7 @@ if (args[0] === 'archive') {
         return null;
     };
     const specContent = findArchiveFile('spec.md');
+    const promptReceiptContent = findArchiveFile('prompt.json');
     const verifyContent = findArchiveFile('verify.md');
     const reviewContent = findArchiveFile('review.md');
 
@@ -2224,6 +2897,25 @@ if (args[0] === 'archive') {
         report += `**Verification:** ${statusMatch2 ? statusMatch2[1] : 'Unknown'}\n`;
     } else {
         report += '_Not formally verified._\n';
+    }
+
+    report += `\n## Prompt Interpretation\n\n`;
+    if (promptReceiptContent) {
+        try {
+            const promptReceipt = JSON.parse(promptReceiptContent);
+            report += `- Primary Intent: ${promptReceipt.primaryIntent || 'Unknown'}\n`;
+            if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
+                report += `- Secondary Intents: ${promptReceipt.secondaryIntents.join(', ')}\n`;
+            }
+            report += `- Continuation State: ${promptReceipt.continuationState || 'Unknown'}\n`;
+            report += `- Complexity: ${promptReceipt.complexity || 'Unknown'}\n`;
+            report += `- Ambiguity: ${promptReceipt.ambiguity || 'Unknown'}\n`;
+            report += `- Recommended Route: ${promptReceipt.recommendedPipeline || 'Unknown'}\n`;
+        } catch {
+            report += '_prompt.json found but could not be parsed._\n';
+        }
+    } else {
+        report += '_No prompt receipt captured._\n';
     }
 
     report += `\n## Review Status\n\n`;
@@ -2524,100 +3216,137 @@ if (args[0] === 'scan') {
 // § COMMANDS: INTELLIGENCE (detect-intent, detect-tests)
 // ═══════════════════════════════════════════════════════════════════
 
+/** CMD: normalize-prompt — Convert raw user input into a structured prompt brief */
+if (args[0] === 'normalize-prompt') {
+    const featureFlagIndex = args.indexOf('--feature');
+    const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
+    const controlArgs = new Set(['--json', '--write', '--feature']);
+    if (feature) controlArgs.add(feature);
+    const message = args
+        .slice(1)
+        .filter((arg, index) => !(featureFlagIndex !== -1 && index + 1 === featureFlagIndex) && !controlArgs.has(arg))
+        .join(' ');
+    if (!message) {
+        console.error(
+            '[steroid-run] Usage: npx steroid-run normalize-prompt "<user message>" [--json] [--feature <feature> --write]',
+        );
+        process.exit(1);
+    }
+
+    const sessionState = inspectPromptSessionState();
+    const analysis = analyzePrompt(message, sessionState);
+    if (args.includes('--write')) {
+        if (!feature) {
+            console.error('[steroid-run] ❌ --write requires --feature <feature>.');
+            process.exit(1);
+        }
+        const featureDir = path.join(changesDir, feature);
+        if (!fs.existsSync(featureDir)) {
+            console.error(
+                `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}`,
+            );
+            process.exit(1);
+        }
+        writeJsonFile(path.join(featureDir, 'prompt.json'), {
+            ...analysis,
+            sessionState,
+            source: 'normalize-prompt',
+            updatedAt: new Date().toISOString(),
+        });
+        fs.writeFileSync(path.join(featureDir, 'prompt.md'), formatPromptMarkdown(feature, analysis, sessionState));
+    }
+
+    if (args.includes('--json')) {
+        console.log(JSON.stringify({ ...analysis, sessionState }, null, 2));
+    } else {
+        console.log(`[steroid-run] 🧠 Prompt Intelligence`);
+        console.log(`  Summary: ${analysis.normalizedSummary}`);
+        console.log(`  Primary intent: ${analysis.primaryIntent}`);
+        if (analysis.secondaryIntents.length > 0) {
+            console.log(`  Secondary intents: ${analysis.secondaryIntents.join(', ')}`);
+        }
+        console.log(`  Continuation: ${analysis.continuationState}`);
+        console.log(`  Complexity: ${analysis.complexity}`);
+        console.log(`  Ambiguity: ${analysis.ambiguity}`);
+        console.log(`  Recommended route: ${analysis.recommendedPipeline}`);
+        console.log(`  Pipeline hint: ${analysis.pipelineHint}`);
+        if (analysis.assumptions.length > 0) {
+            console.log(`  Assumptions: ${analysis.assumptions.join(' | ')}`);
+        }
+        if (analysis.unresolvedQuestions.length > 0) {
+            console.log(`  Unresolved: ${analysis.unresolvedQuestions.join(' | ')}`);
+        }
+        if (analysis.splitRecommended) {
+            console.log(`  Suggested split: ${analysis.suggestedFeatures.join(' || ')}`);
+        }
+        if (args.includes('--write')) {
+            console.log(`  Receipt: .memory/changes/${feature}/prompt.json`);
+            console.log(`  Brief: .memory/changes/${feature}/prompt.md`);
+        }
+    }
+    process.exit(0);
+}
+
+/** CMD: prompt-health — Score prompt quality and recommend next action */
+if (args[0] === 'prompt-health') {
+    const message = args.slice(1).join(' ');
+    if (!message) {
+        console.error('[steroid-run] Usage: npx steroid-run prompt-health "<user message>"');
+        process.exit(1);
+    }
+
+    const analysis = analyzePrompt(message, inspectPromptSessionState());
+    const health = buildPromptHealth(analysis);
+    console.log(`[steroid-run] 📋 Prompt Health`);
+    console.log(`  Clarity: ${health.clarity}/5`);
+    console.log(`  Completeness: ${health.completeness}/5`);
+    console.log(`  Ambiguity: ${health.ambiguity}`);
+    console.log(`  Complexity: ${health.complexity}`);
+    console.log(`  Risk: ${health.risk}`);
+    console.log(`  Multi-intent: ${health.multiIntent}`);
+    console.log(`  Model sensitivity: ${health.modelSensitivity}`);
+    console.log(`  Recommended action: ${health.recommendedAction}`);
+    process.exit(0);
+}
+
+/** CMD: session-detect — Inspect project/session state for continuation hints */
+if (args[0] === 'session-detect') {
+    const sessionState = inspectPromptSessionState();
+    console.log(`[steroid-run] 🧭 Session Detection`);
+    console.log(`  State: ${sessionState.defaultState}`);
+    console.log(`  Active feature: ${sessionState.activeFeature || 'none'}`);
+    console.log(`  Latest artifact: ${sessionState.latestArtifact || 'none'}`);
+    console.log(
+        `  Known features: ${sessionState.knownFeatures.length > 0 ? sessionState.knownFeatures.join(', ') : 'none'}`,
+    );
+    console.log(`  Circuit state: ${sessionState.recoveryState} (${sessionState.errorCount} errors)`);
+    process.exit(0);
+}
+
 /** CMD: detect-intent — Classify user intent into build/fix/refactor/migrate/document */
 if (args[0] === 'detect-intent') {
-    const message = args.slice(1).join(' ').toLowerCase();
+    const message = args.filter((arg, index) => index > 0 && arg !== '--verbose').join(' ');
     if (!message) {
         console.error('[steroid-run] Usage: npx steroid-run detect-intent "<user message>"');
         console.error('  Example: npx steroid-run detect-intent "fix the login bug"');
         process.exit(1);
     }
 
-    // Keyword-based scoring (reliable, no AI needed)
-    const intents = {
-        fix: [
-            'fix',
-            'bug',
-            'debug',
-            'broken',
-            'error',
-            'crash',
-            'issue',
-            'wrong',
-            'failing',
-            'not working',
-            'doesnt work',
-            "doesn't work",
-            'investigate',
-        ],
-        refactor: [
-            'refactor',
-            'restructure',
-            'reorganize',
-            'clean up',
-            'cleanup',
-            'improve',
-            'optimize',
-            'simplify',
-            'extract',
-            'decouple',
-        ],
-        migrate: ['migrate', 'migration', 'upgrade', 'switch to', 'move to', 'convert', 'port', 'transition'],
-        document: [
-            'document',
-            'docs',
-            'readme',
-            'jsdoc',
-            'comment',
-            'explain',
-            'annotate',
-            'api docs',
-            'documentation',
-        ],
-        build: [
-            'build',
-            'create',
-            'add',
-            'make',
-            'implement',
-            'feature',
-            'new',
-            'design',
-            'develop',
-            'setup',
-            'set up',
-        ],
-    };
-
-    let bestIntent = 'build'; // default
-    let bestScore = 0;
-
-    for (const [intent, keywords] of Object.entries(intents)) {
-        let score = 0;
-        for (const keyword of keywords) {
-            if (message.includes(keyword)) {
-                score += keyword.length; // Longer keywords = more specific = higher weight
-            }
-        }
-        if (score > bestScore) {
-            bestScore = score;
-            bestIntent = intent;
-        }
-    }
-
-    // Pipeline mapping
-    const pipelines = {
-        build: 'scan → vibe → specify → research → architect → engine → verify',
-        fix: 'scan → diagnose → engine (targeted) → verify',
-        refactor: 'scan → specify (target state) → architect → engine → verify',
-        migrate: 'scan → research (target tech) → architect → engine → verify',
-        document: 'scan → specify (doc scope) → engine (docs) → verify',
-    };
-
-    console.log(bestIntent);
+    const analysis = analyzePrompt(message, inspectPromptSessionState());
+    console.log(analysis.primaryIntent);
     if (args.includes('--verbose')) {
-        console.log(`[steroid-run] Intent: ${bestIntent} (score: ${bestScore})`);
-        console.log(`[steroid-run] Pipeline: ${pipelines[bestIntent]}`);
+        console.log(`[steroid-run] Intent: ${analysis.primaryIntent} (confidence: ${analysis.confidence})`);
+        if (analysis.secondaryIntents.length > 0) {
+            console.log(`[steroid-run] Secondary: ${analysis.secondaryIntents.join(', ')}`);
+        }
+        console.log(`[steroid-run] Ambiguity: ${analysis.ambiguity}`);
+        console.log(`[steroid-run] Complexity: ${analysis.complexity}`);
+        console.log(`[steroid-run] Continuation: ${analysis.continuationState}`);
+        console.log(`[steroid-run] Route: ${analysis.recommendedPipeline}`);
+        console.log(`[steroid-run] Pipeline: ${analysis.pipelineHint}`);
+        if (analysis.splitRecommended) {
+            console.log(`[steroid-run] Split suggested: yes`);
+        }
     }
     process.exit(0);
 }
@@ -2689,9 +3418,14 @@ if (args[0] === 'verify-feature') {
 
     const featureDir = path.join(changesDir, feature);
     const planFile = path.join(featureDir, 'plan.md');
+    const diagnosisFile = path.join(featureDir, 'diagnosis.md');
+    const executionFile = fs.existsSync(planFile) ? planFile : fs.existsSync(diagnosisFile) ? diagnosisFile : null;
+    const executionLabel = executionFile === diagnosisFile ? 'diagnosis.md' : 'plan.md';
 
-    if (!fs.existsSync(planFile)) {
-        console.error(`[steroid-run] ❌ No plan found. Complete the engine phase first.`);
+    if (!executionFile) {
+        console.error(
+            `[steroid-run] ❌ No plan.md or diagnosis.md found. Complete the engine or diagnose phase first.`,
+        );
         process.exit(1);
     }
 
@@ -2700,6 +3434,7 @@ if (args[0] === 'verify-feature') {
 
     const results = [];
     let hasFailure = false;
+    const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
 
     // ── Step 0: Review gate ──
     const reviewReceipt = loadReviewReceipt(feature, featureDir);
@@ -2719,15 +3454,69 @@ if (args[0] === 'verify-feature') {
         });
     }
 
-    // ── Step 1: Plan completeness (existing) ──
-    const planContent = fs.readFileSync(planFile, 'utf-8');
-    const total = (planContent.match(/- \[[ x/]\]/g) || []).length;
-    const done = (planContent.match(/- \[x\]/g) || []).length;
-    if (done < total) {
-        results.push({ step: 'Plan completeness', status: 'FAIL', detail: `${done}/${total} tasks complete` });
-        hasFailure = true;
+    // ── Step 0b: Prompt interpretation context ──
+    if (promptReceipt) {
+        const promptDetail = [
+            promptReceipt.primaryIntent ? `intent ${promptReceipt.primaryIntent}` : null,
+            promptReceipt.recommendedPipeline ? `route ${promptReceipt.recommendedPipeline}` : null,
+            promptReceipt.continuationState ? `continuation ${promptReceipt.continuationState}` : null,
+        ]
+            .filter(Boolean)
+            .join(', ');
+        results.push({
+            step: 'Prompt receipt',
+            status: 'PASS',
+            detail: promptDetail || 'prompt.json captured',
+        });
     } else {
-        results.push({ step: 'Plan completeness', status: 'PASS', detail: `${done}/${total} tasks complete` });
+        results.push({
+            step: 'Prompt receipt',
+            status: 'SKIP',
+            detail: 'No prompt.json found (older features remain supported)',
+        });
+    }
+
+    // ── Step 1: Execution source completeness ──
+    const executionContent = fs.readFileSync(executionFile, 'utf-8');
+    if (executionLabel === 'plan.md') {
+        const total = (executionContent.match(/- \[[ x/]\]/g) || []).length;
+        const done = (executionContent.match(/- \[x\]/g) || []).length;
+        if (done < total) {
+            results.push({
+                step: 'Plan completeness',
+                status: 'FAIL',
+                detail: `${done}/${total} tasks complete in ${executionLabel}`,
+            });
+            hasFailure = true;
+        } else {
+            results.push({
+                step: 'Plan completeness',
+                status: 'PASS',
+                detail: `${done}/${total} tasks complete in ${executionLabel}`,
+            });
+        }
+    } else {
+        const total = (executionContent.match(/^- \[[ x/]\]/gm) || []).length;
+        const done = (executionContent.match(/^- \[x\]/gm) || []).length;
+        if (total === 0) {
+            results.push({
+                step: 'Fix plan traceability',
+                status: 'PASS',
+                detail: 'diagnosis.md present for targeted fix pipeline',
+            });
+        } else if (done < total) {
+            results.push({
+                step: 'Fix plan traceability',
+                status: 'WARN',
+                detail: `${done}/${total} diagnosis checklist item(s) marked complete`,
+            });
+        } else {
+            results.push({
+                step: 'Fix plan traceability',
+                status: 'PASS',
+                detail: `${done}/${total} diagnosis checklist item(s) complete`,
+            });
+        }
     }
 
     // ── Step 2: Build check ──
@@ -2809,7 +3598,7 @@ if (args[0] === 'verify-feature') {
                 }
             } else {
                 // Check if plan contains test items but no test command
-                const testItems = (planContent.match(/write test|unit test|test:/gi) || []).length;
+                const testItems = (executionContent.match(/write test|unit test|test:/gi) || []).length;
                 if (testItems > 0) {
                     results.push({
                         step: 'Tests',
@@ -3103,7 +3892,18 @@ if (args[0] === 'verify-feature') {
     verifyMd += `**Date:** ${new Date().toISOString()}\n`;
     verifyMd += `**Version:** steroid-workflow v${SW_VERSION}\n`;
     verifyMd += `**Mode:** ${deepMode ? 'core + deep scans' : 'core only'}\n`;
+    verifyMd += `**Execution Source:** ${executionLabel}\n`;
     verifyMd += `**Status:** ${verifyStatus}\n\n`;
+    if (promptReceipt) {
+        verifyMd += `## Prompt Interpretation\n\n`;
+        verifyMd += `- **Primary Intent:** ${promptReceipt.primaryIntent || 'Unknown'}\n`;
+        if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
+            verifyMd += `- **Secondary Intents:** ${promptReceipt.secondaryIntents.join(', ')}\n`;
+        }
+        verifyMd += `- **Recommended Route:** ${promptReceipt.recommendedPipeline || 'Unknown'}\n`;
+        verifyMd += `- **Continuation State:** ${promptReceipt.continuationState || 'Unknown'}\n`;
+        verifyMd += `- **Complexity / Risk:** ${promptReceipt.complexity || 'Unknown'} / ${promptReceipt.risk || 'Unknown'}\n\n`;
+    }
     verifyMd += `## Core Verification\n\n`;
     for (const r of results) {
         const icon = r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : r.status === 'WARN' ? '⚠️' : '⏭️';
@@ -3399,6 +4199,7 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
         };
 
         const specContent = findFile('spec.md');
+        const promptReceiptContent = findFile('prompt.json');
         const verifyContent = findFile('verify.md');
         const planContent = findFile('plan.md');
         const reviewContent = findFile('review.md');
@@ -3431,6 +4232,25 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
             if (testMatch) report += `**Tests:** ${testMatch[1]}\n`;
         } else {
             report += '_No verify.md found._\n';
+        }
+
+        report += `\n## Prompt Interpretation\n\n`;
+        if (promptReceiptContent) {
+            try {
+                const promptReceipt = JSON.parse(promptReceiptContent);
+                report += `- Primary Intent: ${promptReceipt.primaryIntent || 'Unknown'}\n`;
+                if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
+                    report += `- Secondary Intents: ${promptReceipt.secondaryIntents.join(', ')}\n`;
+                }
+                report += `- Continuation State: ${promptReceipt.continuationState || 'Unknown'}\n`;
+                report += `- Complexity: ${promptReceipt.complexity || 'Unknown'}\n`;
+                report += `- Ambiguity: ${promptReceipt.ambiguity || 'Unknown'}\n`;
+                report += `- Recommended Route: ${promptReceipt.recommendedPipeline || 'Unknown'}\n`;
+            } catch {
+                report += '_prompt.json found but could not be parsed._\n';
+            }
+        } else {
+            report += '_No prompt receipt captured._\n';
         }
 
         report += `\n## Review Status\n\n`;
@@ -3826,6 +4646,9 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
         'archive',
         'scan',
         'detect-intent',
+        'normalize-prompt',
+        'prompt-health',
+        'session-detect',
         'detect-tests',
         'verify-feature',
         'review',

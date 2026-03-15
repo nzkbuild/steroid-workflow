@@ -130,6 +130,18 @@ test('detect-intent "document the API" returns document', () => {
     const out = run('detect-intent "document the API"');
     if (!out.includes('document')) throw new Error(`Got: ${out.trim()}`);
 });
+test('normalize-prompt exits 0', () => {
+    const out = run('normalize-prompt "make it feel more premium"');
+    if (!out.includes('Prompt Intelligence')) throw new Error(`Got: ${out.trim()}`);
+});
+test('prompt-health exits 0', () => {
+    const out = run('prompt-health "fix the weird login issue"');
+    if (!out.includes('Prompt Health')) throw new Error(`Got: ${out.trim()}`);
+});
+test('session-detect exits 0', () => {
+    const out = run('session-detect');
+    if (!out.includes('Session Detection')) throw new Error(`Got: ${out.trim()}`);
+});
 
 // --- Input Validation ---
 test('gate with no args exits 1', () => run('gate', 1));

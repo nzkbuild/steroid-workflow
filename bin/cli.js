@@ -147,6 +147,15 @@ For **build** intent (default): Read \\\`.agents/skills/steroid-scan/SKILL.md\\\
 For **fix** intent: Read \\\`.agents/skills/steroid-diagnose/SKILL.md\\\` after scan.
 For other intents: Follow the pipeline variant above, skipping non-applicable phases.
 
+## Prompt Intelligence (v6.2.0)
+Before the workflow locks onto a path, use the prompt intelligence layer when the request is vague, mixed, non-technical, or resumptive:
+- \\\`node steroid-run.cjs normalize-prompt "<message>"\\\` — infer intent, ambiguity, complexity, assumptions, and recommended route
+- \\\`node steroid-run.cjs normalize-prompt "<message>" --feature <feature> --write\\\` — persist \\\`.memory/changes/<feature>/prompt.json\\\` and \\\`prompt.md\\\`
+- \\\`node steroid-run.cjs prompt-health "<message>"\\\` — score clarity, completeness, ambiguity, and risk
+- \\\`node steroid-run.cjs session-detect\\\` — detect whether this looks like new work, continuation, or post-failure recovery
+
+If \\\`prompt.json\\\` exists, treat it as a first-class handoff artifact. Preserve its assumptions, non-goals, continuation context, and recommended route in later phases.
+
 ## The 8-Skill Pipeline (Build Intent — Full)
 
 | # | Skill | Input | Output |
@@ -180,6 +189,9 @@ The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (optional \\\`--deep\\\` adds scanners)
 - \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature
 - \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
+- \\\`node steroid-run.cjs normalize-prompt "<message>"\\\` — Normalize a raw user prompt into a structured brief
+- \\\`node steroid-run.cjs prompt-health "<message>"\\\` — Score prompt quality before committing to a route
+- \\\`node steroid-run.cjs session-detect\\\` — Inspect current project/session state
 - \\\`node steroid-run.cjs detect-tests\\\` — Detect test framework in project
 
 ## v4.0+ Commands

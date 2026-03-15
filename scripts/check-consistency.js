@@ -84,13 +84,32 @@ check(
     'bin/steroid-run.cjs help text should advertise verify-feature [--deep].',
 );
 check(
+    runtimeSource.includes('normalize-prompt "<message>"'),
+    'bin/steroid-run.cjs help text should advertise normalize-prompt.',
+);
+check(
+    runtimeSource.includes('prompt-health "<message>"'),
+    'bin/steroid-run.cjs help text should advertise prompt-health.',
+);
+check(runtimeSource.includes('session-detect'), 'bin/steroid-run.cjs help text should advertise session-detect.');
+check(
     cliSource.includes('verify-feature <feature> [--deep]'),
     'bin/cli.js Maestro rules should advertise verify-feature [--deep].',
+);
+check(
+    cliSource.includes('## Prompt Intelligence'),
+    'bin/cli.js Maestro rules should include the Prompt Intelligence section.',
+);
+check(
+    cliSource.includes('prompt.md'),
+    'bin/cli.js Maestro rules should mention prompt.md when prompt receipts are written.',
 );
 check(
     architectureSource.includes('verify-feature <feature> [--deep]'),
     'ARCHITECTURE.md should document verify-feature [--deep].',
 );
+check(architectureSource.includes('prompt.md'), 'ARCHITECTURE.md should mention prompt.md.');
+check(readmeSource.includes('prompt.md'), 'README.md should mention prompt.md.');
 check(
     runtimeSource.includes('archive <feature>                 Archive completed feature (requires verify.json)'),
     'bin/steroid-run.cjs help text should mention archive requires verify.json.',
@@ -116,8 +135,10 @@ check(unitSource.includes('allowlist allows rm command'), 'Unit tests should ass
 
 check(readmeSource.includes('Optional Deep Verification'), 'README.md should describe optional deep verification.');
 check(readmeSource.includes('verify.json'), 'README.md should mention machine-readable verification receipts.');
+check(readmeSource.includes('Prompt Intelligence'), 'README.md should document Prompt Intelligence.');
 check(architectureSource.includes('review.json'), 'ARCHITECTURE.md should mention review.json.');
 check(architectureSource.includes('verify.json'), 'ARCHITECTURE.md should mention verify.json.');
+check(architectureSource.includes('Prompt Intelligence'), 'ARCHITECTURE.md should document Prompt Intelligence.');
 check(engineSkillSource.includes('verify.json'), 'skills/steroid-engine/SKILL.md should mention verify.json receipts.');
 check(verifySkillSource.includes('verify.json'), 'skills/steroid-verify/SKILL.md should mention verify.json receipts.');
 check(

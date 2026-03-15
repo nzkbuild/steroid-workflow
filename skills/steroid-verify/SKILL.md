@@ -76,12 +76,16 @@ Read these files to understand what was built:
 1. `.memory/changes/<feature>/spec.md` — The acceptance criteria (what SHOULD be true)
 2. `.memory/changes/<feature>/plan.md` — The task list (what was DONE)
 3. `.memory/changes/<feature>/context.md` — The project context (tech stack, test infra)
+4. `.memory/changes/<feature>/prompt.json` — The normalized user intent, if present
 
 Extract:
 - All acceptance scenarios (Given/When/Then) from spec.md
 - All completed tasks from plan.md
 - Test framework and run command from context.md
 - All success criteria (SC-001, SC-002, etc.) from spec.md
+- Recommended route, assumptions, and non-goals from prompt.json when available
+
+If the feature followed the fix pipeline and uses `diagnosis.md` instead of `plan.md`, read that targeted fix plan as the execution source instead of failing immediately.
 
 ### Step 1b: Success Criteria Verification (v5.0.2)
 

@@ -38,6 +38,12 @@ This skill is triggered when `node steroid-run.cjs detect-intent "<message>"` re
 
 It runs AFTER `steroid-scan` (context.md must exist) and BEFORE `steroid-engine`.
 
+If `.memory/changes/<feature>/prompt.json` exists, read it before diagnosis. Use it to preserve:
+- the user's exact problem framing
+- continuation or post-failure context
+- any explicit non-goals so the diagnosis does not widen into a rebuild
+- the recommended `diagnose-first` route if present
+
 ## The Four Phases
 
 ### Pre-Check
@@ -131,6 +137,8 @@ Write findings to `.memory/changes/<feature>/diagnosis.md`:
 
 - `<file path>` — <what needs to change>
 ```
+
+If `prompt.json` recorded assumptions or unresolved questions that affect reproduction, copy the relevant ones into the Problem Statement or Evidence section rather than silently discarding them.
 
 ## After Diagnosis
 

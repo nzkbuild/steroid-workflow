@@ -1,5 +1,30 @@
 # Changelog
 
+## [6.2.0] "Prompt Intelligence" - 2026-03-16
+
+### The Vision
+Steroid-Workflow was already strong at enforcing process after a task was understood. The next gap was the front of the pipeline: vague prompts, mixed requests, continuation work, and model-to-model variance still created drift before the structure had a chance to help. v6.2.0 adds a real prompt intelligence layer that turns messy human input into durable workflow context.
+
+### Added
+- **Prompt intelligence commands** — `normalize-prompt`, `prompt-health`, and `session-detect`
+- **Prompt receipts** — `normalize-prompt --feature <feature> --write` now writes both `prompt.json` and a readable `prompt.md`
+- **Prompt intelligence utility module** — shared tested logic in `src/utils/prompt-intelligence.cjs`
+- **Adaptive route intelligence** — prompt analysis can recommend `standard-build`, `diagnose-first`, `resume-mode`, `lite-change`, `research-heavy`, or `split-work`
+- **Route-aware next-step guidance** — `pipeline-status` and `gate` now surface recommended next steps and route drift warnings
+
+### Changed
+- **`detect-intent` upgrade** — still backward-compatible, but now produces richer route-aware `--verbose` output
+- **`pipeline-status` upgrade** — phase status now reflects the actual route, including fix-path and route-specific skipped phases
+- **Verification context** — `verify-feature` records prompt interpretation context and accepts `diagnosis.md` as the execution source for targeted fix flows
+- **Handoff reporting** — archive and report generation now include prompt interpretation details
+- **Skill handoffs** — vibe/specify/research/architect/diagnose/engine/verify instructions now treat prompt receipts as first-class context
+- **Installer guidance** — injected Maestro rules now teach fresh installs about the prompt intelligence commands and receipts
+
+### Improved
+- **Cross-model resilience** — prompt assumptions, non-goals, continuation context, and recommended routes now survive the workflow as explicit artifacts
+- **Prompt tolerance** — vague, non-technical, mixed, and continuation-style prompts now get structured rescue before the rest of the pipeline proceeds
+- **Test coverage** — new prompt-intelligence unit tests and expanded CLI tests cover route selection, route drift, prompt artifacts, and route-aware status output
+
 ## [6.1.1] "Trust Hardening Patch" - 2026-03-15
 
 ### Fixed

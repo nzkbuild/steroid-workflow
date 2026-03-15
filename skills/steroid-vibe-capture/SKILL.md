@@ -109,6 +109,23 @@ node steroid-run.cjs init-feature <slug>
 
 This is NOT optional. The command validates the slug format and creates `.memory/changes/<slug>/` with the correct structure. If the name is invalid, the command will block you with an error.
 
+### 5b. Prompt Intelligence Receipt (v6.2.0)
+
+Immediately after `init-feature`, persist the normalized prompt interpretation:
+
+```bash
+node steroid-run.cjs normalize-prompt "<original user prompt>" --feature <slug> --write
+```
+
+This writes `.memory/changes/<slug>/prompt.json` and `.memory/changes/<slug>/prompt.md`. Treat `prompt.json` as the machine-readable source of truth and `prompt.md` as the readable handoff brief for:
+- primary and secondary intents
+- ambiguity and complexity
+- continuation state
+- assumptions and non-goals
+- recommended route
+
+Read `prompt.json` before writing `vibe.md`. If it contains assumptions or unresolved questions, carry them forward explicitly instead of silently re-inventing them.
+
 ### 6. Schema Obedience
 
 Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
@@ -117,6 +134,13 @@ Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
 # User Vibe Profile
 - Feature: <slug>
 - Project Type: [Greenfield | Brownfield]
+- Raw User Prompt: [copy the user's request verbatim]
+- Normalized Summary: [copy from prompt.json normalizedSummary]
+- Primary Intent: [copy from prompt.json primaryIntent]
+- Secondary Intents: [comma-separated list or "None"]
+- Continuation Context: [copy from prompt.json continuationState]
+- Complexity / Risk: [e.g. standard / medium]
+- Recommended Route: [copy from prompt.json recommendedPipeline]
 - Target Aesthetic: [specific visual references, e.g., Apple Health, Dark Mode, Minimalist]
 - Core User Flow: [step-by-step description of the primary user journey]
 - Key Features:
@@ -128,7 +152,18 @@ Write the output to `.memory/changes/<slug>/vibe.md` using this exact format:
 - Hard Constraints & Directives:
   - [Any explicit tech demands, copy text, layout rules, or "do not do X" rules from the user]
   - [If none, write: "None — AI decides all implementation details"]
+
+## Assumptions
+- [Copy assumptions from prompt.json first, then add any additional defaults needed]
+
+## Non-Goals
+- [Copy non-goals from prompt.json first]
+
+## Unresolved Questions
+- [Copy unresolved questions from prompt.json if any remain]
 ```
+
+Never contradict `prompt.json` silently. If you need to refine it, do so in `vibe.md` explicitly.
 
 ### 6. Circuit Breaker Mandate
 

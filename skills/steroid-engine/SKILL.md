@@ -7,6 +7,8 @@ description: The autonomous execution orchestrator for Steroid-Workflow. This sk
 
 This skill autonomously executes the checklist in `.memory/changes/<feature>/plan.md`. It uses the Subagent-Driven Development model forked from `obra/superpowers` (see `src/forks/superpowers/subagent.md` and `src/forks/superpowers/tdd.md`) combined with the autonomous loop pattern from Ralph (see `src/forks/ralph/prompt.md`).
 
+If `.memory/changes/<feature>/prompt.json` exists, read it before the first task. Treat its assumptions, non-goals, continuation state, and recommended route as execution guardrails. They do not replace `plan.md` or `diagnosis.md`, but they explain why the current plan is shaped the way it is.
+
 ## The Circuit Breaker Mandate
 
 All terminal commands executed by this skill or any sub-agent it dispatches MUST be wrapped in the physical Node.js circuit breaker:
@@ -95,6 +97,12 @@ node steroid-run.cjs git-init
 ```
 
 If the build goes wrong, the user can recover with `git reset --hard`.
+
+Also inspect whether this feature is coming from:
+- `plan.md` for the normal build/refactor/migrate/document path
+- `diagnosis.md` for the targeted fix path
+
+If the feature came from a `split-work` route, complete one clearly scoped sub-problem or story at a time instead of mixing separate intents in the same execution burst.
 
 ## The Autonomous Execution Loop
 

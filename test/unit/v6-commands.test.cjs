@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Unit tests for v6.1.1 trust-hardening commands: fs-*, smoke-test, verify-feature, scan --force, allowlist.
+ * Unit tests for CLI command behavior, including trust hardening and v6.2.0 prompt-intelligence flows.
  * These tests use spawnSync to invoke steroid-run.cjs as a subprocess.
  */
 const { spawnSync } = require('child_process');
@@ -235,6 +235,109 @@ if (childProcessUnavailableReason) {
         if (receipt.stage2 !== 'PASS') throw new Error(`Stage 2 mismatch: ${receipt.stage2}`);
     });
 
+    test('normalize-prompt --write persists prompt.json and prompt.md for a feature', () => {
+        const feature = 'prompt-receipt';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+
+        const result = run(['normalize-prompt', 'make it feel more premium', '--feature', feature, '--write']);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const receiptPath = path.join(featureDir, 'prompt.json');
+        if (!fs.existsSync(receiptPath)) throw new Error('prompt.json was not written');
+
+        const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf-8'));
+        if (receipt.primaryIntent !== 'build') throw new Error(`Unexpected primaryIntent: ${receipt.primaryIntent}`);
+        if (receipt.source !== 'normalize-prompt') throw new Error(`Unexpected source: ${receipt.source}`);
+
+        const briefPath = path.join(featureDir, 'prompt.md');
+        if (!fs.existsSync(briefPath)) throw new Error('prompt.md was not written');
+
+        const brief = fs.readFileSync(briefPath, 'utf-8');
+        if (!brief.includes('# Prompt Brief: prompt-receipt')) throw new Error('prompt.md missing heading');
+        if (!brief.includes('Recommended Route: standard-build')) throw new Error('prompt.md missing route summary');
+    });
+
+    test('pipeline-status surfaces prompt receipt details when prompt.json exists', () => {
+        const feature = 'prompt-pipeline-status';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'context.md'), '# Context\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    primaryIntent: 'fix',
+                    recommendedPipeline: 'diagnose-first',
+                    continuationState: 'post-failure',
+                    complexity: 'standard',
+                    risk: 'medium',
+                    assumptions: ['Bug reproduced locally'],
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['pipeline-status', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('Prompt Intelligence')) throw new Error('Missing prompt intelligence section');
+        if (!output.includes('Route Guidance')) throw new Error('Missing route guidance section');
+        if (!output.includes('diagnose-first')) throw new Error('Missing recommended route in pipeline status');
+        if (!output.includes('post-failure')) throw new Error('Missing continuation state in pipeline status');
+        if (!output.includes('Next step: diagnose')) throw new Error(`Missing next-step guidance: ${output}`);
+        if (!output.includes('not used by diagnose-first'))
+            throw new Error(`Missing route-aware phase skip: ${output}`);
+    });
+
+    test('gate advises normalize-prompt before vibe when prompt receipt is missing', () => {
+        const feature = 'gate-route-advice';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'context.md'), '# Context\nLine 2\nLine 3\nLine 4\nLine 5\n');
+
+        const result = run(['gate', 'vibe', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('Suggested next step: normalize-prompt')) {
+            throw new Error(`Missing normalize-prompt advisory: ${output}`);
+        }
+    });
+
+    test('gate includes route guidance when a diagnose-first feature is blocked later in the pipeline', () => {
+        const feature = 'gate-fix-route-block';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    primaryIntent: 'fix',
+                    recommendedPipeline: 'diagnose-first',
+                    continuationState: 'post-failure',
+                    complexity: 'standard',
+                    risk: 'medium',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['gate', 'architect', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('Route guidance: diagnose-first')) {
+            throw new Error(`Missing diagnose-first route guidance: ${output}`);
+        }
+        if (!output.includes('Suggested next step: scan')) {
+            throw new Error(`Missing suggested next step: ${output}`);
+        }
+    });
+
     test('archive preserves prior files during same-stamp collisions', () => {
         const feature = 'archive-collision-proof';
         const featureDir = path.join(changesDir, feature);
@@ -306,6 +409,28 @@ test('source contains pipe and redirection guards', () => {
     const source = fs.readFileSync(steroidRun, 'utf-8');
     if (!source.includes("return '|'")) throw new Error('pipe guard not found in source');
     if (!source.includes("return '>'")) throw new Error('redirection guard not found in source');
+});
+
+test('source contains prompt intelligence commands', () => {
+    const source = fs.readFileSync(steroidRun, 'utf-8');
+    if (!source.includes('normalize-prompt')) throw new Error('normalize-prompt support not found in source');
+    if (!source.includes('prompt-health')) throw new Error('prompt-health support not found in source');
+    if (!source.includes('session-detect')) throw new Error('session-detect support not found in source');
+    if (!source.includes('prompt.json')) throw new Error('prompt.json support not found in source');
+    if (!source.includes('prompt.md')) throw new Error('prompt.md support not found in source');
+    if (!source.includes('Prompt Interpretation')) throw new Error('prompt interpretation report support not found');
+});
+
+test('source contains prompt-aware pipeline status and fix-path verification support', () => {
+    const source = fs.readFileSync(steroidRun, 'utf-8');
+    if (!source.includes('Prompt Intelligence')) throw new Error('pipeline-status prompt section not found');
+    if (!source.includes('Route Guidance')) throw new Error('pipeline-status route guidance not found');
+    if (!source.includes('not used by')) throw new Error('route-aware pipeline skip text not found');
+    if (!source.includes('Route guidance:')) throw new Error('gate route guidance not found');
+    if (!source.includes('No plan.md or diagnosis.md found')) {
+        throw new Error('fix-pipeline verification fallback not found');
+    }
+    if (!source.includes('Execution Source')) throw new Error('verify.md execution source field not found');
 });
 
 console.log(`  ${passed} passed, ${failed} failed`);

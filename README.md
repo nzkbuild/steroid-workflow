@@ -82,6 +82,18 @@ You don't need to tell the AI which pipeline to use — it detects your intent a
 | "Upgrade to React 19" | scan → research → architect → engine → verify |
 | "Document the API" | scan → specify → engine → verify |
 
+### Prompt Intelligence
+
+Before the workflow commits to a path, steroid-workflow can normalize messy user language into a structured brief:
+
+- `node steroid-run.cjs normalize-prompt "<message>"` — infer intent, ambiguity, complexity, assumptions, and recommended route
+- `node steroid-run.cjs prompt-health "<message>"` — score clarity, completeness, ambiguity, and risk
+- `node steroid-run.cjs session-detect` — detect whether this looks like new work, continuation, or post-failure recovery
+
+This helps with vague prompts, mixed prompts, non-technical phrasing, and continuation requests like "continue what we were doing yesterday."
+
+Once written, `.memory/changes/<feature>/prompt.json` becomes the machine-readable receipt and `.memory/changes/<feature>/prompt.md` becomes the readable handoff brief. The later phases can preserve assumptions, non-goals, continuation context, and recommended route instead of forcing every model to reconstruct them from scratch.
+
 ## What You Get
 
 ### Your AI Can't Skip Steps
@@ -105,6 +117,7 @@ Every project automatically includes:
 ### AI Safety Guardrails
 Protections specifically designed for non-technical users:
 - **Adaptive Discussion** — AI detects your technical level
+- **Prompt Intelligence** — vague, mixed, and non-technical prompts are normalized into explicit assumptions, non-goals, and recommended routes
 - **Prompt Preservation** — your exact requirements survive the entire pipeline
 - **Brownfield Detection** — won't scaffold over your existing project
 - **Anti-Deletion Guard** — can't silently remove working code
@@ -166,6 +179,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - Full command reference (22+ commands)
 - Gate map and enforcement layer details
 - Intent routing internals
+- Prompt intelligence and adaptive route selection
 - Memory system, review system, and analytics dashboard
 - Fork credits and sources
 

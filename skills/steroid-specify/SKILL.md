@@ -5,7 +5,7 @@ description: This skill should be used after steroid-vibe-capture has written .m
 
 # Steroid Specify (Specification Generator)
 
-This skill reads the user's vibe from `.memory/changes/<feature>/vibe.md` and produces a formal specification with testable acceptance criteria.
+This skill reads the user's vibe from `.memory/changes/<feature>/vibe.md` and, when available, `.memory/changes/<feature>/prompt.json`, then produces a formal specification with testable acceptance criteria.
 
 Forked from: `src/forks/spec-kit/templates/spec-template.md` (GitHub Spec Kit, MIT License)
 
@@ -25,7 +25,7 @@ If this command fails, STOP. The vibe capture phase is not complete.
 
 ### 2. No User Interaction
 
-Do not ask the user any questions. Read `.memory/changes/<feature>/vibe.md` and translate the vibe into a formal spec. Make all decisions silently.
+Do not ask the user any questions. Read `.memory/changes/<feature>/vibe.md` and translate the vibe into a formal spec. If `.memory/changes/<feature>/prompt.json` exists, use it to preserve prompt intelligence fields like assumptions, non-goals, complexity, and recommended route. Make all decisions silently.
 
 ### 3. Anti-Summarization Directive
 
@@ -103,6 +103,15 @@ Write the output to `.memory/changes/<feature>/spec.md` using this exact format:
 ## Hard Constraints (from vibe.md)
 - [Copy ALL hard constraints from vibe.md verbatim]
 - [These are non-negotiable requirements that override all other decisions]
+
+## Prompt Intelligence Notes
+- **Primary Intent**: [Copy from prompt.json or vibe.md]
+- **Complexity / Risk**: [Copy from prompt.json or vibe.md]
+- **Recommended Route**: [Copy from prompt.json or vibe.md]
+- **Assumptions Carried Forward**:
+  - [Copy assumptions from vibe.md / prompt.json that shape scope]
+- **Non-Goals Carried Forward**:
+  - [Copy non-goals from vibe.md / prompt.json verbatim]
 ```
 
 Each user story MUST be independently testable — if you implement just ONE of them, the user should have a working piece of value.
@@ -128,6 +137,16 @@ Read the `Hard Constraints & Directives` field from vibe.md. Copy every single c
 - Override them with your own preferences
 
 These constraints are the user's exact words and must survive to the Research and Architect phases unchanged.
+
+### 6c. Prompt Intelligence Pass-Through (v6.2.0)
+
+If `prompt.json` exists:
+- preserve the primary intent and recommended route as planning context
+- preserve the assumptions as explicit scope-shaping inputs
+- preserve the non-goals so they are not silently turned into scope
+- preserve unresolved questions as edge-case or scope-boundary guidance where relevant
+
+Do NOT silently drop prompt intelligence just because `vibe.md` looks complete.
 
 ### 7. Automatic System Handoff
 
