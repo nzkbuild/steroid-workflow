@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.2.1] "Workflow Drift Hotfix" - 2026-03-16
+
+### Fixed
+- **Route verification false positives** — dead-route verification now resolves Next.js App Router route groups and prefers built Next manifests when available, reducing false warnings from source-tree guessing
+- **Overstated handoff reporting** — report generation no longer claims acceptance scenarios were implemented based only on `spec.md` text; it now says those criteria were recorded and separates review evidence
+- **Checklist drift counting** — plan counting now ignores fenced markdown examples so sample checklists do not inflate `check-plan`, reports, or verification
+
+### Improved
+- **Shared report generation** — archive-time and manual handoff reports now use the same generator so wording and counts stay aligned
+- **Plan drift guidance** — `verify-feature` now makes plan-checklist drift explicit without adding new release-scope workflow commands
+
 ## [6.2.0] "Prompt Intelligence" - 2026-03-16
 
 ### The Vision

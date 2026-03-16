@@ -292,7 +292,7 @@ if (childProcessUnavailableReason) {
             throw new Error(`Missing route-aware phase skip: ${output}`);
     });
 
-    test('gate advises normalize-prompt before vibe when prompt receipt is missing', () => {
+    test('gate passes vibe when context exists even without prompt receipt', () => {
         const feature = 'gate-route-advice';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
@@ -302,8 +302,8 @@ if (childProcessUnavailableReason) {
         if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
 
         const output = result.stdout.toString();
-        if (!output.includes('Suggested next step: normalize-prompt')) {
-            throw new Error(`Missing normalize-prompt advisory: ${output}`);
+        if (!output.includes('Gate passed')) {
+            throw new Error(`Missing gate pass confirmation: ${output}`);
         }
     });
 
@@ -352,6 +352,129 @@ if (childProcessUnavailableReason) {
         if (!source.includes('-${file}') && !source.includes('archiveStamp')) {
             throw new Error('archive timestamp usage not found');
         }
+    });
+
+    test('check-plan ignores checklist examples inside fenced code blocks', () => {
+        const feature = 'plan-fenced-code';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'plan.md'),
+            [
+                '# Plan',
+                '',
+                '- [x] Real completed task',
+                '- [ ] Real remaining task',
+                '',
+                '```md',
+                '- [x] Example task that should be ignored',
+                '- [ ] Example unchecked task that should be ignored',
+                '```',
+                '',
+            ].join('\n'),
+        );
+
+        const result = run(['check-plan', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('Plan: 1/2 tasks complete (50%)')) {
+            throw new Error(`Unexpected checklist count: ${output}`);
+        }
+    });
+
+    test('report generate says criteria recorded instead of implemented from spec-only input', () => {
+        const feature = 'report-wording-fix';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'spec.md'),
+            '# Spec\n\nScenario: Founder sees dashboard\nGiven a founder\nWhen they sign in\nThen they see KPIs\n',
+        );
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Scaffold\n');
+
+        const result = run(['report', 'generate', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const report = fs.readFileSync(path.join(memoryDir, 'reports', `${feature}.md`), 'utf-8');
+        if (!report.includes('acceptance criteria recorded in spec.md')) {
+            throw new Error(`Missing revised report wording: ${report}`);
+        }
+        if (report.includes('acceptance scenarios implemented')) {
+            throw new Error(`Old overstated wording still present: ${report}`);
+        }
+    });
+
+    test('verify-feature treats route-group pages as live routes', () => {
+        const feature = 'route-groups-live';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const appDir = path.join(tmpBase, 'src', 'app');
+        fs.mkdirSync(path.join(appDir, '(app)', 'dashboard'), { recursive: true });
+        fs.mkdirSync(path.join(appDir, '(app)', 'blueprint'), { recursive: true });
+        fs.writeFileSync(
+            path.join(appDir, 'page.tsx'),
+            'export default function Home(){return <><a href="/dashboard">Dash</a><a href="/blueprint">Blueprint</a></>;}',
+        );
+        fs.writeFileSync(path.join(appDir, '(app)', 'dashboard', 'page.tsx'), 'export default function Page(){return null;}');
+        fs.writeFileSync(path.join(appDir, '(app)', 'blueprint', 'page.tsx'), 'export default function Page(){return null;}');
+        fs.writeFileSync(
+            path.join(knowledgeDir, 'tech-stack.json'),
+            JSON.stringify(
+                { language: 'TypeScript', framework: 'Next.js', packageManager: 'npm', _lastUpdated: new Date().toISOString() },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['verify-feature', feature]);
+        const output = result.stdout.toString();
+        if (!output.includes('Dead routes: PASS')) throw new Error(`Dead route check did not pass: ${output}`);
+        if (output.includes('/dashboard (in src\\app\\page.tsx)') || output.includes('/blueprint (in src\\app\\page.tsx)')) {
+            throw new Error(`Route groups still flagged as dead: ${output}`);
+        }
+    });
+
+    test('verify-feature prefers Next build manifests when available', () => {
+        const feature = 'manifest-routes-live';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const srcAppDir = path.join(tmpBase, 'src', 'app');
+        const nextDir = path.join(tmpBase, '.next');
+        fs.mkdirSync(srcAppDir, { recursive: true });
+        fs.mkdirSync(nextDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(srcAppDir, 'page.tsx'),
+            'export default function Home(){return <a href="/manifest-only">Manifest route</a>;}',
+        );
+        fs.writeFileSync(
+            path.join(nextDir, 'app-path-routes-manifest.json'),
+            JSON.stringify({ '/(app)/manifest-only/page': '/manifest-only' }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(knowledgeDir, 'tech-stack.json'),
+            JSON.stringify(
+                { language: 'TypeScript', framework: 'Next.js', packageManager: 'npm', _lastUpdated: new Date().toISOString() },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['verify-feature', feature]);
+        const output = result.stdout.toString();
+        if (!output.includes('Dead routes: PASS')) throw new Error(`Manifest route check did not pass: ${output}`);
+        if (output.includes('/manifest-only')) throw new Error(`Manifest-backed route was still flagged: ${output}`);
     });
 
     // ─── scan --force ───

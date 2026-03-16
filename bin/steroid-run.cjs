@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 6.2.0
+ * @version 6.2.1
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -330,6 +330,336 @@ function parseReviewMarkdown(content) {
     }
 
     return { stage1, stage2 };
+}
+
+/**
+ * Removes fenced code blocks before markdown checklist parsing so examples
+ * do not inflate task counts.
+ *
+ * @param {string} content
+ * @returns {string}
+ */
+function stripFencedCodeBlocks(content) {
+    return (content || '').replace(/```[\s\S]*?```/g, '');
+}
+
+/**
+ * Parses markdown checklist statistics from a document.
+ *
+ * @param {string} content
+ * @returns {{ total: number, done: number, remaining: number, percent: number, deferred: string[] }}
+ */
+function parseChecklistStats(content) {
+    const sanitized = stripFencedCodeBlocks(content);
+    const checklistLines = sanitized.match(/^- \[[ x]\].+$/gm) || [];
+    const doneLines = sanitized.match(/^- \[x\].+$/gm) || [];
+    const deferred = sanitized.match(/^- \[ \].+$/gm) || [];
+    const total = checklistLines.length;
+    const done = doneLines.length;
+    const remaining = total - done;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, remaining, percent, deferred };
+}
+
+/**
+ * Reads the active or latest archived artifact for a feature.
+ *
+ * @param {string} featureDir
+ * @param {string} name
+ * @returns {string|null}
+ */
+function readLatestFeatureArtifact(featureDir, name) {
+    const archiveDir = path.join(featureDir, 'archive');
+    if (fs.existsSync(archiveDir)) {
+        const archiveFiles = fs
+            .readdirSync(archiveDir)
+            .filter((fileName) => fileName.endsWith(name))
+            .sort();
+        if (archiveFiles.length > 0) {
+            return fs.readFileSync(path.join(archiveDir, archiveFiles[archiveFiles.length - 1]), 'utf-8');
+        }
+    }
+    const activePath = path.join(featureDir, name);
+    if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
+    return null;
+}
+
+/**
+ * Normalizes a Next.js App Router segment into a public URL segment.
+ *
+ * @param {string} segment
+ * @returns {string|null}
+ */
+function normalizeAppRouteSegment(segment) {
+    if (!segment) return null;
+    if (segment.startsWith('(') && segment.endsWith(')')) return null;
+    if (segment.startsWith('@')) return null;
+    return segment;
+}
+
+/**
+ * Normalizes a public route for comparisons.
+ *
+ * @param {string} route
+ * @param {string} basePath
+ * @returns {string|null}
+ */
+function normalizePublicRoute(route, basePath = '') {
+    if (!route || typeof route !== 'string') return null;
+    let normalized = route.trim();
+    if (!normalized) return null;
+    if (!normalized.startsWith('/')) normalized = `/${normalized}`;
+    if (normalized !== '/' && normalized.endsWith('/')) normalized = normalized.replace(/\/+$/, '');
+    if (basePath && basePath !== '/' && !normalized.startsWith(`${basePath}/`) && normalized !== basePath) {
+        normalized = normalized === '/' ? basePath : `${basePath}${normalized}`;
+    }
+    if (['/_app', '/_document', '/_error'].includes(normalized)) return null;
+    return normalized || '/';
+}
+
+/**
+ * Collects public routes from a Next.js App Router directory, accounting for route groups.
+ *
+ * @param {string} appDir
+ * @returns {Set<string>}
+ */
+function collectNextAppRoutes(appDir) {
+    const routes = new Set();
+    if (!fs.existsSync(appDir)) return routes;
+
+    const walk = (dir, segments) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                const publicSegment = normalizeAppRouteSegment(entry.name);
+                walk(fullPath, publicSegment ? [...segments, publicSegment] : segments);
+                continue;
+            }
+
+            if (!entry.isFile()) continue;
+            if (!/^page\.(tsx|jsx|ts|js)$/.test(entry.name)) continue;
+
+            const route = segments.length === 0 ? '/' : `/${segments.join('/')}`;
+            routes.add(route);
+        }
+    };
+
+    walk(appDir, []);
+    return routes;
+}
+
+/**
+ * Collects public routes from Next.js build artifacts when available.
+ *
+ * @param {string} projectDir
+ * @returns {Set<string>}
+ */
+function collectNextRoutesFromBuildArtifacts(projectDir) {
+    const routes = new Set();
+    const nextDir = path.join(projectDir, '.next');
+    if (!fs.existsSync(nextDir)) return routes;
+
+    const manifests = [
+        path.join(nextDir, 'app-path-routes-manifest.json'),
+        path.join(nextDir, 'routes-manifest.json'),
+        path.join(nextDir, 'server', 'pages-manifest.json'),
+    ];
+
+    for (const manifestPath of manifests) {
+        const manifest = readJsonFile(manifestPath);
+        if (!manifest) continue;
+
+        if (manifestPath.endsWith('app-path-routes-manifest.json')) {
+            for (const route of Object.values(manifest)) {
+                const normalized = normalizePublicRoute(route);
+                if (normalized) routes.add(normalized);
+            }
+            continue;
+        }
+
+        if (manifestPath.endsWith('routes-manifest.json')) {
+            const basePath = manifest.basePath || '';
+            for (const route of [...(manifest.staticRoutes || []), ...(manifest.dynamicRoutes || [])]) {
+                const normalized = normalizePublicRoute(route.page, basePath);
+                if (normalized) routes.add(normalized);
+            }
+            continue;
+        }
+
+        if (manifestPath.endsWith('pages-manifest.json')) {
+            for (const route of Object.keys(manifest)) {
+                const normalized = normalizePublicRoute(route);
+                if (normalized) routes.add(normalized);
+            }
+        }
+    }
+
+    return routes;
+}
+
+/**
+ * Finds dead route references by comparing hrefs against collected public routes.
+ *
+ * @param {string} projectDir
+ * @param {string} srcDir
+ * @param {{ preferBuildArtifacts?: boolean }} options
+ * @returns {{ route: string, files: string[] }[]}
+ */
+function findDeadRoutes(projectDir, srcDir, options = {}) {
+    const appDir = path.join(srcDir, 'app');
+    const knownRoutes = options.preferBuildArtifacts ? collectNextRoutesFromBuildArtifacts(projectDir) : new Set();
+    if (knownRoutes.size === 0 && fs.existsSync(appDir)) {
+        for (const route of collectNextAppRoutes(appDir)) knownRoutes.add(route);
+    }
+    if (knownRoutes.size === 0) return [];
+
+    const refs = new Map();
+    const hrefPattern = /href=["'](\/[^"']*)["']/g;
+
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(fullPath);
+                continue;
+            }
+
+            if (!/\.(tsx|jsx|ts|js)$/.test(entry.name)) continue;
+            const fileContent = fs.readFileSync(fullPath, 'utf-8');
+            let match;
+            while ((match = hrefPattern.exec(fileContent)) !== null) {
+                const route = match[1];
+                if (!route || route === '/') continue;
+                if (route.includes('[') || route.startsWith('/#')) continue;
+                if (knownRoutes.has(route)) continue;
+
+                const fileList = refs.get(route) || new Set();
+                fileList.add(path.relative(targetDir, fullPath));
+                refs.set(route, fileList);
+            }
+        }
+    };
+
+    walk(srcDir);
+    return Array.from(refs.entries()).map(([route, files]) => ({
+        route,
+        files: Array.from(files).sort(),
+    }));
+}
+
+/**
+ * Builds a human-readable handoff report from feature artifacts.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @param {{ error_count?: number, error_history?: string[] }} state
+ * @param {{ archived?: boolean }} options
+ * @returns {string}
+ */
+function generateHandoffReport(feature, featureDir, state, options = {}) {
+    const specContent = readLatestFeatureArtifact(featureDir, 'spec.md');
+    const promptReceiptContent = readLatestFeatureArtifact(featureDir, 'prompt.json');
+    const verifyContent = readLatestFeatureArtifact(featureDir, 'verify.md');
+    const planContent = readLatestFeatureArtifact(featureDir, 'plan.md');
+    const reviewContent = readLatestFeatureArtifact(featureDir, 'review.md');
+    const checklist = planContent ? parseChecklistStats(planContent) : null;
+    const archived = !!options.archived;
+
+    let report = `# Handoff Report: ${feature}\n\n`;
+    report += `**Completed:** ${new Date().toISOString()}\n`;
+    if (archived) report += `**Status:** Archived\n`;
+    report += `**Generated by:** steroid-workflow v${SW_VERSION}\n\n`;
+
+    report += `## What Was Built\n\n`;
+    if (specContent) {
+        const criteria = specContent.match(/(?:Given|When|Then|Scenario).+/gi) || [];
+        if (criteria.length > 0) {
+            report += `${criteria.length} acceptance criteria recorded in spec.md:\n\n`;
+            for (const c of criteria.slice(0, 10)) report += `- ${c.trim()}\n`;
+            if (criteria.length > 10) report += `- _(and ${criteria.length - 10} more)_\n`;
+        } else {
+            report += '_See spec.md for full acceptance criteria._\n';
+        }
+    } else {
+        report += '_No spec.md found._\n';
+    }
+
+    if (reviewContent) {
+        const review = parseReviewMarkdown(reviewContent);
+        report += `\nImplementation evidence review:\n\n`;
+        report += `- Stage 1 (Spec): ${review.stage1}\n`;
+        report += `- Stage 2 (Quality): ${review.stage2}\n`;
+    }
+
+    report += `\n## What Was Tested\n\n`;
+    if (verifyContent) {
+        const statusMatch = verifyContent.match(/\*\*Status:\*\* (PASS|FAIL|CONDITIONAL)/);
+        const scoreMatch = verifyContent.match(/\*\*Spec Score:\*\* (.+)/);
+        report += `**Status:** ${statusMatch ? statusMatch[1] : 'Unknown'}\n`;
+        if (scoreMatch) report += `**Score:** ${scoreMatch[1]}\n`;
+        const testMatch = verifyContent.match(/\*\*Result:\*\* (.+)/);
+        if (testMatch) report += `**Tests:** ${testMatch[1]}\n`;
+    } else {
+        report += '_No verify.md found._\n';
+    }
+
+    report += `\n## Prompt Interpretation\n\n`;
+    if (promptReceiptContent) {
+        try {
+            const promptReceipt = JSON.parse(promptReceiptContent);
+            report += `- Primary Intent: ${promptReceipt.primaryIntent || 'Unknown'}\n`;
+            if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
+                report += `- Secondary Intents: ${promptReceipt.secondaryIntents.join(', ')}\n`;
+            }
+            report += `- Continuation State: ${promptReceipt.continuationState || 'Unknown'}\n`;
+            report += `- Complexity: ${promptReceipt.complexity || 'Unknown'}\n`;
+            report += `- Ambiguity: ${promptReceipt.ambiguity || 'Unknown'}\n`;
+            report += `- Recommended Route: ${promptReceipt.recommendedPipeline || 'Unknown'}\n`;
+        } catch {
+            report += '_prompt.json found but could not be parsed._\n';
+        }
+    } else {
+        report += '_No prompt receipt captured._\n';
+    }
+
+    report += `\n## Review Status\n\n`;
+    if (reviewContent) {
+        const review = parseReviewMarkdown(reviewContent);
+        report += `- Spec Review: ${review.stage1}\n`;
+        report += `- Quality Review: ${review.stage2}\n`;
+    } else {
+        report += '_No two-stage review performed._\n';
+    }
+
+    report += `\n## Tasks Completed\n\n`;
+    if (checklist) {
+        report += `${checklist.done}/${checklist.total} tasks completed (${checklist.percent}%)\n`;
+    } else {
+        report += '_No plan.md found._\n';
+    }
+
+    report += `\n## Known Limitations\n\n`;
+    if (checklist) {
+        if (checklist.deferred.length > 0) {
+            report += `${checklist.deferred.length} items were not completed:\n\n`;
+            for (const d of checklist.deferred.slice(0, 5)) report += `${d}\n`;
+            if (checklist.deferred.length > 5) report += `- _(and ${checklist.deferred.length - 5} more)_\n`;
+        } else {
+            report += 'All planned tasks were completed.\n';
+        }
+    } else {
+        report += '_Unknown — no plan.md available._\n';
+    }
+
+    report += `\n## Build Health\n\n`;
+    report += `- Circuit breaker errors during build: ${state.error_count || 0}\n`;
+    if (state.error_history && state.error_history.length > 0) {
+        report += '- Errors encountered:\n';
+        for (const err of state.error_history.slice(-5)) report += `  - ${err}\n`;
+    }
+
+    report += `\n---\n\n_Generated by steroid-workflow v${SW_VERSION} handoff system_\n`;
+    return report;
 }
 
 /**
@@ -1108,7 +1438,7 @@ function formatPromptMarkdown(feature, analysis, sessionState) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.2.0';
+let SW_VERSION = '6.2.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -2629,16 +2959,14 @@ if (args[0] === 'check-plan') {
     }
 
     const content = fs.readFileSync(planFile, 'utf-8');
-    const total = (content.match(/- \[[ x/]\]/g) || []).length;
-    const done = (content.match(/- \[x\]/g) || []).length;
-    const remaining = total - done;
-    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    const { total, done, remaining, percent } = parseChecklistStats(content);
 
     console.log(`[steroid-run] 📊 Plan: ${done}/${total} tasks complete (${percent}%)`);
 
     // v4.0: If plan has priorities, show breakdown
-    const p1 = (content.match(/- \[[ x/]\] (?:\[P\] )?P1:/g) || []).length;
-    const p1Done = (content.match(/- \[x\] (?:\[P\] )?P1:/g) || []).length;
+    const sanitized = stripFencedCodeBlocks(content);
+    const p1 = (sanitized.match(/^- \[[ x]\] (?:\[P\] )?P1:/gm) || []).length;
+    const p1Done = (sanitized.match(/^- \[x\] (?:\[P\] )?P1:/gm) || []).length;
     if (p1 > 0) {
         console.log(`[steroid-run]    P1: ${p1Done}/${p1} | P2/P3: ${done - p1Done}/${total - p1}`);
         if (p1Done < p1) {
@@ -2857,82 +3185,9 @@ if (args[0] === 'archive') {
     fs.writeFileSync(featuresFile, JSON.stringify(featuresData, null, 2));
     console.log(`[steroid-run]    Metrics: feature "${feature}" recorded in features.json`);
 
-    // v5.0: Auto-generate handoff report on archive
+    // v5.0+: Auto-generate handoff report on archive
     if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-    const findArchiveFile = (name) => {
-        if (fs.existsSync(archiveDir)) {
-            const archivedFiles = fs
-                .readdirSync(archiveDir)
-                .filter((fileName) => fileName.endsWith(name))
-                .sort();
-            if (archivedFiles.length > 0) {
-                return fs.readFileSync(path.join(archiveDir, archivedFiles[archivedFiles.length - 1]), 'utf-8');
-            }
-        }
-        const activePath = path.join(featureDir, name);
-        if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
-        return null;
-    };
-    const specContent = findArchiveFile('spec.md');
-    const promptReceiptContent = findArchiveFile('prompt.json');
-    const verifyContent = findArchiveFile('verify.md');
-    const reviewContent = findArchiveFile('review.md');
-
-    let report = `# Handoff Report: ${feature}\n\n`;
-    report += `**Completed:** ${new Date().toISOString()}\n`;
-    report += `**Status:** Archived\n`;
-    report += `**Generated by:** steroid-workflow v${SW_VERSION}\n\n`;
-
-    report += `## What Was Built\n\n`;
-    if (specContent) {
-        const criteria = specContent.match(/(?:Given|When|Then|Scenario).+/gi) || [];
-        report += criteria.length > 0 ? `${criteria.length} acceptance scenarios implemented.\n` : '_See spec.md._\n';
-    } else {
-        report += '_No spec.md found._\n';
-    }
-
-    report += `\n## What Was Tested\n\n`;
-    if (verifyContent) {
-        const statusMatch2 = verifyContent.match(/\*\*Status:\*\* (PASS|FAIL|CONDITIONAL)/);
-        report += `**Verification:** ${statusMatch2 ? statusMatch2[1] : 'Unknown'}\n`;
-    } else {
-        report += '_Not formally verified._\n';
-    }
-
-    report += `\n## Prompt Interpretation\n\n`;
-    if (promptReceiptContent) {
-        try {
-            const promptReceipt = JSON.parse(promptReceiptContent);
-            report += `- Primary Intent: ${promptReceipt.primaryIntent || 'Unknown'}\n`;
-            if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
-                report += `- Secondary Intents: ${promptReceipt.secondaryIntents.join(', ')}\n`;
-            }
-            report += `- Continuation State: ${promptReceipt.continuationState || 'Unknown'}\n`;
-            report += `- Complexity: ${promptReceipt.complexity || 'Unknown'}\n`;
-            report += `- Ambiguity: ${promptReceipt.ambiguity || 'Unknown'}\n`;
-            report += `- Recommended Route: ${promptReceipt.recommendedPipeline || 'Unknown'}\n`;
-        } catch {
-            report += '_prompt.json found but could not be parsed._\n';
-        }
-    } else {
-        report += '_No prompt receipt captured._\n';
-    }
-
-    report += `\n## Review Status\n\n`;
-    if (reviewContent) {
-        const s1 = reviewContent.match(/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/);
-        const s2 = reviewContent.match(/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/);
-        report += `- Spec Review: ${s1 ? s1[1] : 'Not Run'}\n`;
-        report += `- Quality Review: ${s2 ? s2[1] : 'Not Run'}\n`;
-    } else {
-        report += '_No review performed._\n';
-    }
-
-    report += `\n## Build Health\n\n`;
-    report += `- Errors during build: ${state.error_count}\n`;
-
-    report += `\n---\n_Generated by steroid-workflow v${SW_VERSION}_\n`;
-
+    const report = generateHandoffReport(feature, featureDir, state, { archived: true });
     const reportFilePath = path.join(reportsDir, `${feature}.md`);
     fs.writeFileSync(reportFilePath, report);
     console.log(`[steroid-run]    Report: .memory/reports/${feature}.md`);
@@ -3479,13 +3734,17 @@ if (args[0] === 'verify-feature') {
     // ── Step 1: Execution source completeness ──
     const executionContent = fs.readFileSync(executionFile, 'utf-8');
     if (executionLabel === 'plan.md') {
-        const total = (executionContent.match(/- \[[ x/]\]/g) || []).length;
-        const done = (executionContent.match(/- \[x\]/g) || []).length;
+        const { total, done } = parseChecklistStats(executionContent);
         if (done < total) {
             results.push({
                 step: 'Plan completeness',
                 status: 'FAIL',
                 detail: `${done}/${total} tasks complete in ${executionLabel}`,
+            });
+            results.push({
+                step: 'Plan reconciliation',
+                status: 'WARN',
+                detail: 'Plan completeness reflects checklist state only; if implementation is ahead of plan.md, update the checklist before archiving.',
             });
             hasFailure = true;
         } else {
@@ -3660,28 +3919,9 @@ if (args[0] === 'verify-feature') {
             walkDir(srcDir);
 
             // Find all route links (href="/...")
-            const deadRoutes = [];
-            const hrefPattern = /href=["'](\/[^"']+)["']/g;
-            for (const file of allFiles) {
-                const fileContent = fs.readFileSync(file, 'utf-8');
-                let match;
-                while ((match = hrefPattern.exec(fileContent)) !== null) {
-                    const route = match[1];
-                    // Check if a page file exists for this route (Next.js App Router)
-                    const appDir = path.join(srcDir, 'app');
-                    if (fs.existsSync(appDir)) {
-                        const routeDir = path.join(appDir, route.replace(/^\//, ''));
-                        const pageExists = ['page.tsx', 'page.jsx', 'page.ts', 'page.js'].some((p) =>
-                            fs.existsSync(path.join(routeDir, p)),
-                        );
-                        if (!pageExists) {
-                            deadRoutes.push({ route, file: path.relative(targetDir, file) });
-                        }
-                    }
-                }
-            }
+            const deadRoutes = findDeadRoutes(targetDir, srcDir, { preferBuildArtifacts: true });
             if (deadRoutes.length > 0) {
-                const routeList = deadRoutes.map((r) => `${r.route} (in ${r.file})`).join(', ');
+                const routeList = deadRoutes.map((r) => `${r.route} (in ${r.files.join(', ')})`).join(', ');
                 results.push({
                     step: 'Dead routes',
                     status: 'WARN',
@@ -4185,116 +4425,7 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
         }
 
         const featureDir = path.join(changesDir, feature);
-        const archiveDir = path.join(featureDir, 'archive');
-
-        const findFile = (name) => {
-            if (fs.existsSync(archiveDir)) {
-                const archiveFiles = fs.readdirSync(archiveDir).filter((f) => f.endsWith(name));
-                if (archiveFiles.length > 0)
-                    return fs.readFileSync(path.join(archiveDir, archiveFiles[archiveFiles.length - 1]), 'utf-8');
-            }
-            const activePath = path.join(featureDir, name);
-            if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
-            return null;
-        };
-
-        const specContent = findFile('spec.md');
-        const promptReceiptContent = findFile('prompt.json');
-        const verifyContent = findFile('verify.md');
-        const planContent = findFile('plan.md');
-        const reviewContent = findFile('review.md');
-
-        let report = `# Handoff Report: ${feature}\n\n`;
-        report += `**Completed:** ${new Date().toISOString()}\n`;
-        report += `**Generated by:** steroid-workflow v${SW_VERSION}\n\n`;
-
-        report += `## What Was Built\n\n`;
-        if (specContent) {
-            const criteria = specContent.match(/(?:Given|When|Then|Scenario).+/gi) || [];
-            if (criteria.length > 0) {
-                report += `${criteria.length} acceptance scenarios implemented:\n\n`;
-                for (const c of criteria.slice(0, 10)) report += `- ${c.trim()}\n`;
-                if (criteria.length > 10) report += `- _(and ${criteria.length - 10} more)_\n`;
-            } else {
-                report += '_See spec.md for full acceptance criteria._\n';
-            }
-        } else {
-            report += '_No spec.md found._\n';
-        }
-
-        report += `\n## What Was Tested\n\n`;
-        if (verifyContent) {
-            const statusMatch = verifyContent.match(/\*\*Status:\*\* (PASS|FAIL|CONDITIONAL)/);
-            const scoreMatch = verifyContent.match(/\*\*Spec Score:\*\* (.+)/);
-            report += `**Status:** ${statusMatch ? statusMatch[1] : 'Unknown'}\n`;
-            if (scoreMatch) report += `**Score:** ${scoreMatch[1]}\n`;
-            const testMatch = verifyContent.match(/\*\*Result:\*\* (.+)/);
-            if (testMatch) report += `**Tests:** ${testMatch[1]}\n`;
-        } else {
-            report += '_No verify.md found._\n';
-        }
-
-        report += `\n## Prompt Interpretation\n\n`;
-        if (promptReceiptContent) {
-            try {
-                const promptReceipt = JSON.parse(promptReceiptContent);
-                report += `- Primary Intent: ${promptReceipt.primaryIntent || 'Unknown'}\n`;
-                if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
-                    report += `- Secondary Intents: ${promptReceipt.secondaryIntents.join(', ')}\n`;
-                }
-                report += `- Continuation State: ${promptReceipt.continuationState || 'Unknown'}\n`;
-                report += `- Complexity: ${promptReceipt.complexity || 'Unknown'}\n`;
-                report += `- Ambiguity: ${promptReceipt.ambiguity || 'Unknown'}\n`;
-                report += `- Recommended Route: ${promptReceipt.recommendedPipeline || 'Unknown'}\n`;
-            } catch {
-                report += '_prompt.json found but could not be parsed._\n';
-            }
-        } else {
-            report += '_No prompt receipt captured._\n';
-        }
-
-        report += `\n## Review Status\n\n`;
-        if (reviewContent) {
-            const s1 = reviewContent.match(/Stage 1 \(Spec\): (PASS|FAIL|PENDING)/);
-            const s2 = reviewContent.match(/Stage 2 \(Quality\): (PASS|FAIL|PENDING)/);
-            report += `- Spec Review: ${s1 ? s1[1] : 'Not Run'}\n`;
-            report += `- Quality Review: ${s2 ? s2[1] : 'Not Run'}\n`;
-        } else {
-            report += '_No two-stage review performed._\n';
-        }
-
-        report += `\n## Tasks Completed\n\n`;
-        if (planContent) {
-            const total = (planContent.match(/- \[[ x/]\]/g) || []).length;
-            const done = (planContent.match(/- \[x\]/g) || []).length;
-            report += `${done}/${total} tasks completed (${total > 0 ? Math.round((done / total) * 100) : 0}%)\n`;
-        } else {
-            report += '_No plan.md found._\n';
-        }
-
-        report += `\n## Known Limitations\n\n`;
-        if (planContent) {
-            const deferred = planContent.match(/- \[ \].+/g) || [];
-            if (deferred.length > 0) {
-                report += `${deferred.length} items were not completed:\n\n`;
-                for (const d of deferred.slice(0, 5)) report += `${d}\n`;
-                if (deferred.length > 5) report += `- _(and ${deferred.length - 5} more)_\n`;
-            } else {
-                report += 'All planned tasks were completed.\n';
-            }
-        } else {
-            report += '_Unknown — no plan.md available._\n';
-        }
-
-        report += `\n## Build Health\n\n`;
-        report += `- Circuit breaker errors during build: ${state.error_count}\n`;
-        if (state.error_history && state.error_history.length > 0) {
-            report += '- Errors encountered:\n';
-            for (const err of state.error_history.slice(-5)) report += `  - ${err}\n`;
-        }
-
-        report += `\n---\n\n_Generated by steroid-workflow v${SW_VERSION} handoff system_\n`;
-
+        const report = generateHandoffReport(feature, featureDir, state);
         const reportFile = path.join(reportsDir, `${feature}.md`);
         fs.writeFileSync(reportFile, report);
         console.log(`[steroid-run] 📄 Handoff report generated: .memory/reports/${feature}.md`);
