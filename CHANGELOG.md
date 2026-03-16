@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.2.2] "Shell-Safe Hotfix" - 2026-03-17
+
+### Fixed
+- **Windows and hardened-shell file inspection** — added `fs-cat`, `fs-find`, and `fs-grep` so Steroid-owned workflows no longer depend on `Get-Content`, `cat`, `type`, `find`, `grep`, pipes, or redirection for routine inspection
+- **Monorepo subdirectory execution drift** — added `run --cwd=<path>` so skills can execute safely inside subprojects without blocked `cd ... && ...` command patterns
+- **Skill command mismatch** — `steroid-scan`, `steroid-engine`, and `steroid-verify` examples now align with the command guard instead of teaching shell syntax that the breaker rejects
+
+### Improved
+- **CLI and architecture guidance** — help text and `ARCHITECTURE.md` now document the shell-free FS commands and guarded subdirectory execution path
+- **Regression coverage** — unit tests now cover `fs-cat`, `fs-find`, `fs-grep`, and `run --cwd` so future guard hardening is less likely to strand the skills again
+
 ## [6.2.1] "Workflow Drift Hotfix" - 2026-03-16
 
 ### Fixed

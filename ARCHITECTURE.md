@@ -41,10 +41,23 @@ All AI terminal commands are routed through this CLI wrapper.
 | Command | Purpose |
 |---------|---------|
 | `node steroid-run.cjs '<command>'` | Execute with error tracking (5 errors → graduated recovery → hard stop) |
+| `node steroid-run.cjs run --cwd=<path> '<command>'` | Execute safely inside a subdirectory without `cd && ...` |
 | `node steroid-run.cjs verify <file> --min-lines=<n>` | Block code summarization |
 | `node steroid-run.cjs reset` | Reset error counter + clear recovery state |
 | `node steroid-run.cjs status` | Show circuit breaker state + recovery level |
 | `node steroid-run.cjs recover` | Smart recovery guidance based on error level (v4.0) |
+
+### Shell-Free FS
+| Command | Purpose |
+|---------|---------|
+| `node steroid-run.cjs fs-cat <file...> [--head=<n>] [--optional]` | Read text files without shell builtins |
+| `node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]` | Find files without shell globbing |
+| `node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]` | Search files without `grep`/`findstr` |
+| `node steroid-run.cjs fs-ls [path]` | Show a condensed directory tree |
+| `node steroid-run.cjs fs-mkdir <path>` | Create directories recursively |
+| `node steroid-run.cjs fs-cp <src> <dest>` | Copy file or directory |
+| `node steroid-run.cjs fs-mv <src> <dest>` | Move or rename file/directory |
+| `node steroid-run.cjs fs-rm <path>` | Remove file or directory safely |
 
 ### Pipeline Enforcement
 | Command | Purpose | Origin |

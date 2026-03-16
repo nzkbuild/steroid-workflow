@@ -207,10 +207,10 @@ If plan.md contains tasks targeting different sub-directories (monorepo, separat
 
 1. Note the target directory for each task in progress.md
 2. Run `node steroid-run.cjs` commands from the project ROOT, not sub-directories
-3. When installing packages in sub-projects, specify the path:
+3. When installing packages in sub-projects, use the guarded cwd wrapper instead of `cd ... && ...`:
    ```bash
-   node steroid-run.cjs 'cd apps/web && npm install <package>'
-   node steroid-run.cjs 'cd apps/api && pip install <package>'
+   node steroid-run.cjs run --cwd=apps/web 'npm install <package>'
+   node steroid-run.cjs run --cwd=apps/api 'pip install <package>'
    ```
 4. Run verify commands against each sub-project separately
 5. Commit from root — steroid tracks the entire repo, not sub-directories

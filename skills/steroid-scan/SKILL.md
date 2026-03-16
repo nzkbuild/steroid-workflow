@@ -17,6 +17,8 @@ All terminal commands executed by this skill MUST be wrapped in the physical Nod
 node steroid-run.cjs '<command>'
 ```
 
+For file inspection on hardened or Windows environments, prefer shell-free subcommands like `node steroid-run.cjs fs-cat ...`, `node steroid-run.cjs fs-find ...`, `node steroid-run.cjs fs-grep ...`, and `node steroid-run.cjs fs-ls ...`. Do not fall back to `Get-Content`, `cat`, `type`, `find`, `grep`, pipes, or redirection just to inspect code.
+
 Direct terminal commands are strictly forbidden. See `skills/steroid-engine/SKILL.md` for the full mandate.
 
 ## When To Run
@@ -33,31 +35,31 @@ Read the project's package manifest to identify language, framework, and key dep
 
 ```bash
 # Node.js projects
-node steroid-run.cjs 'cat package.json 2>/dev/null | head -80'
+node steroid-run.cjs fs-cat package.json --head=80 --optional
 
 # Python projects  
-node steroid-run.cjs 'cat requirements.txt 2>/dev/null || cat pyproject.toml 2>/dev/null | head -50'
+node steroid-run.cjs fs-cat requirements.txt pyproject.toml --head=50 --optional
 
 # Go projects
-node steroid-run.cjs 'cat go.mod 2>/dev/null | head -30'
+node steroid-run.cjs fs-cat go.mod --head=30 --optional
 
 # Rust projects
-node steroid-run.cjs 'cat Cargo.toml 2>/dev/null | head -30'
+node steroid-run.cjs fs-cat Cargo.toml --head=30 --optional
 
 # Java/Kotlin projects (v5.4.0)
-node steroid-run.cjs 'cat pom.xml 2>/dev/null | head -40 || cat build.gradle 2>/dev/null | head -40'
+node steroid-run.cjs fs-cat pom.xml build.gradle --head=40 --optional
 
 # Ruby projects (v5.4.0)
-node steroid-run.cjs 'cat Gemfile 2>/dev/null | head -30'
+node steroid-run.cjs fs-cat Gemfile --head=30 --optional
 
 # PHP projects (v5.4.0)
-node steroid-run.cjs 'cat composer.json 2>/dev/null | head -40'
+node steroid-run.cjs fs-cat composer.json --head=40 --optional
 
 # .NET/C# projects (v5.4.0)
-node steroid-run.cjs 'ls *.csproj *.fsproj 2>/dev/null | head -5'
+node steroid-run.cjs fs-find . --name=*.csproj --name=*.fsproj --type=file --max-depth=2 --limit=5
 
 # Flutter/Dart projects (v5.4.0)
-node steroid-run.cjs 'cat pubspec.yaml 2>/dev/null | head -30'
+node steroid-run.cjs fs-cat pubspec.yaml --head=30 --optional
 ```
 
 Check ALL of the above — a project may use multiple languages (e.g., Node.js frontend + Python backend).
@@ -73,7 +75,7 @@ Extract:
 Build a condensed file tree (max 2 levels deep, exclude noise directories).
 
 ```bash
-node steroid-run.cjs 'find . -maxdepth 2 -type d -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/.next/*" -not -path "*/dist/*" -not -path "*/__pycache__/*" | sort'
+node steroid-run.cjs fs-ls .
 ```
 
 Identify:
@@ -90,10 +92,10 @@ Check for project-level AI instructions and learnings.
 
 ```bash
 # Check for existing AI instructions
-node steroid-run.cjs 'cat AGENTS.md 2>/dev/null || cat CLAUDE.md 2>/dev/null || cat GEMINI.md 2>/dev/null | head -100'
+node steroid-run.cjs fs-cat AGENTS.md CLAUDE.md GEMINI.md --head=100 --optional
 
 # Check for existing progress/learnings
-node steroid-run.cjs 'cat .memory/progress.md 2>/dev/null | head -50'
+node steroid-run.cjs fs-cat .memory/progress.md --head=50 --optional
 ```
 
 Extract:
@@ -107,13 +109,14 @@ Extract:
 
 ```bash
 # Detect test framework config
-node steroid-run.cjs 'ls jest.config.* vitest.config.* pytest.ini .mocharc.* karma.conf.* 2>/dev/null'
+node steroid-run.cjs detect-tests
+node steroid-run.cjs fs-find . --name=jest.config.* --name=vitest.config.* --name=pytest.ini --name=.mocharc.* --name=karma.conf.* --type=file --max-depth=2 --limit=20
 
 # Count existing tests
-node steroid-run.cjs 'find . -name "*.test.*" -o -name "*.spec.*" -o -name "test_*" 2>/dev/null | grep -v node_modules | wc -l'
+node steroid-run.cjs fs-find . --name=*.test.* --name=*.spec.* --name=test_* --type=file --count
 
 # Detect test run command
-node steroid-run.cjs 'cat package.json 2>/dev/null | grep -A2 "\"test\""'
+node steroid-run.cjs fs-cat package.json --head=120 --optional
 ```
 
 Determine:
@@ -128,7 +131,7 @@ Based on the user's stated intent (from the feature slug or initial description)
 
 ```bash
 # Search for files related to the feature area
-node steroid-run.cjs 'grep -rl "<keyword>" src/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" 2>/dev/null | head -15'
+node steroid-run.cjs fs-grep '<keyword>' src --include=*.ts --include=*.tsx --include=*.js --include=*.jsx --include=*.py --files-with-matches --limit=15
 ```
 
 ### Step 6: Write context.md

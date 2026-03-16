@@ -140,6 +140,82 @@ if (childProcessUnavailableReason) {
         if (!fs.existsSync(path.join(tmpBase, 'move-dest.txt'))) throw new Error('Dest not created');
     });
 
+    // ─── fs-cat ───
+    test('fs-cat prints file contents', () => {
+        fs.writeFileSync(path.join(tmpBase, 'readme.txt'), 'line-1\nline-2\nline-3\n');
+        const result = run(['fs-cat', 'readme.txt']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('line-1') || !output.includes('line-3')) throw new Error('Missing file contents');
+    });
+
+    test('fs-cat respects --head limit', () => {
+        fs.writeFileSync(path.join(tmpBase, 'head.txt'), 'a\nb\nc\nd\n');
+        const result = run(['fs-cat', 'head.txt', '--head=2']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('a') || !output.includes('b')) throw new Error('Missing expected lines');
+        if (output.includes('\nc\n')) throw new Error('Printed too many lines');
+    });
+
+    test('fs-cat falls back to the first existing candidate', () => {
+        fs.writeFileSync(path.join(tmpBase, 'fallback.txt'), 'chosen');
+        const result = run(['fs-cat', 'missing.txt', 'fallback.txt', '--optional']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('chosen')) throw new Error('Did not use fallback file');
+    });
+
+    test('fs-cat --optional exits 0 when no candidate exists', () => {
+        const result = run(['fs-cat', 'nope-a.txt', 'nope-b.txt', '--optional']);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('No matching file found')) throw new Error('Missing skip message');
+    });
+
+    // ─── fs-find ───
+    test('fs-find locates files by glob', () => {
+        fs.mkdirSync(path.join(tmpBase, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(tmpBase, 'src', 'alpha.test.ts'), 'test');
+        const result = run(['fs-find', 'src', '--name=*.test.*', '--type=file']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('src\\alpha.test.ts') && !output.includes('src/alpha.test.ts'))
+            throw new Error('Did not find test file');
+    });
+
+    test('fs-find --count reports match total', () => {
+        fs.mkdirSync(path.join(tmpBase, 'tests'), { recursive: true });
+        fs.writeFileSync(path.join(tmpBase, 'tests', 'a.spec.ts'), 'a');
+        fs.writeFileSync(path.join(tmpBase, 'tests', 'b.spec.ts'), 'b');
+        const result = run(['fs-find', 'tests', '--name=*.spec.*', '--type=file', '--count']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('2')) throw new Error(`Unexpected count output: ${output}`);
+    });
+
+    // ─── fs-grep ───
+    test('fs-grep prints matching lines with numbers', () => {
+        fs.mkdirSync(path.join(tmpBase, 'grep-src'), { recursive: true });
+        fs.writeFileSync(path.join(tmpBase, 'grep-src', 'file.ts'), 'const a = 1;\n// TODO: fix\n');
+        const result = run(['fs-grep', 'TODO|FIXME', 'grep-src', '--include=*.ts']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('file.ts:2:')) throw new Error('Missing match output');
+    });
+
+    test('fs-grep --files-with-matches lists files once', () => {
+        fs.mkdirSync(path.join(tmpBase, 'grep-files'), { recursive: true });
+        fs.writeFileSync(path.join(tmpBase, 'grep-files', 'one.ts'), 'match here\nmatch again\n');
+        const result = run(['fs-grep', 'match', 'grep-files', '--include=*.ts', '--files-with-matches']);
+        if (result.status !== 0) throw new Error(`Exit code ${result.status}`);
+        const lines = result.stdout
+            .toString()
+            .split(/\r?\n/)
+            .filter((line) => line.includes('one.ts'));
+        if (lines.length !== 1) throw new Error(`Expected one file listing, got ${lines.length}`);
+    });
+
     // ─── fs-ls ───
     test('fs-ls lists directory', () => {
         const result = run(['fs-ls', '.']);
@@ -168,6 +244,21 @@ if (childProcessUnavailableReason) {
         if (result.status !== 1) throw new Error(`Expected exit 1 for blocked command, got ${result.status}`);
         const output = result.stderr.toString();
         if (!output.includes('BLOCKED')) throw new Error('Missing BLOCKED message');
+    });
+
+    test('run --cwd executes command inside subdirectory', () => {
+        fs.mkdirSync(path.join(tmpBase, 'packages', 'web'), { recursive: true });
+        const result = run(['run', '--cwd=packages/web', 'node -e "console.log(process.cwd())"']);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+        const output = result.stdout.toString().replace(/\r/g, '');
+        if (!output.includes(path.join('packages', 'web'))) throw new Error(`Unexpected cwd output: ${output}`);
+    });
+
+    test('run --cwd refuses paths outside the project root', () => {
+        const result = run(['run', '--cwd=..', 'node -e "console.log(process.cwd())"']);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('must stay inside')) throw new Error('Missing safety message');
     });
 
     test('allowlist allows rm command (v6.0.0 expansion)', () => {

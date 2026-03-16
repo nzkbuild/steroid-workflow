@@ -31,6 +31,8 @@ All terminal commands executed by this skill MUST be wrapped in the physical Nod
 node steroid-run.cjs '<command>'
 ```
 
+For file inspection and code searches, prefer shell-free helpers like `node steroid-run.cjs fs-cat ...`, `node steroid-run.cjs fs-find ...`, and `node steroid-run.cjs fs-grep ...`. Avoid `cat`, `type`, `find`, `grep`, pipes, and redirection for routine inspection because they are brittle across hardened and Windows environments.
+
 ## Phase Gate (Physical Enforcement)
 
 Before doing anything, run the gate check:
@@ -140,13 +142,13 @@ Review all files created or modified during the feature. For each file, check:
 
 ```bash
 # TODO/FIXME/placeholder comments
-node steroid-run.cjs 'grep -rn "TODO\|FIXME\|HACK\|PLACEHOLDER" <file>'
+node steroid-run.cjs fs-grep 'TODO|FIXME|HACK|PLACEHOLDER' <file>
 
 # Empty implementations
-node steroid-run.cjs 'grep -rn "return null\|return {}\|return \[\]\|=> {}" <file>'
+node steroid-run.cjs fs-grep 'return null|return \{\}|return \[\]|=> \{\}' <file>
 
 # Console.log-only handlers
-node steroid-run.cjs 'grep -rn "console\.log" <file>'
+node steroid-run.cjs fs-grep 'console\.log' <file>
 ```
 
 Categorize issues by severity:
@@ -161,7 +163,7 @@ AI models frequently produce code with invisible defects that non-technical user
 **1. Dead Code & Phantom Dependencies** — via `knip` (MIT, 2M+ downloads)
 
 ```bash
-node steroid-run.cjs 'npx knip --no-exit-code --reporter compact 2>&1 | head -50'
+node steroid-run.cjs 'npx knip --no-exit-code --reporter compact'
 ```
 
 `knip` detects: unused files, unused exports, unused dependencies, AND missing dependencies (packages imported but not in `package.json`). It handles dynamic imports, TypeScript path aliases, and framework-specific patterns that grep cannot.
@@ -172,7 +174,7 @@ If `knip` reports unused dependencies → ⚠️ **Important** (bloated bundle).
 **2. Circular Dependencies** — via `madge` (MIT)
 
 ```bash
-node steroid-run.cjs 'npx madge --circular src/ 2>&1 | head -30'
+node steroid-run.cjs 'npx madge --circular src/'
 ```
 
 Circular imports (A → B → C → A) cause `undefined` values at runtime. AI-generated code creates these constantly because the AI doesn't see the global dependency graph. If `madge` finds any → 🛑 **Critical**.
@@ -180,24 +182,24 @@ Circular imports (A → B → C → A) cause `undefined` values at runtime. AI-g
 **3. Hardcoded Secrets** — via `gitleaks` (MIT, 100+ patterns)
 
 ```bash
-node steroid-run.cjs 'npx @ziul285/gitleaks detect --no-git --source . 2>&1 | head -30'
+node steroid-run.cjs 'npx @ziul285/gitleaks detect --no-git --source .'
 ```
 
 Covers AWS, Stripe, Twilio, Firebase, Supabase, SendGrid, GitHub tokens, and 90+ other services. If any secrets found → 🛑 **Critical** (security breach risk).
 
 If `gitleaks` is unavailable (Go binary not supported on platform), fall back to:
 ```bash
-node steroid-run.cjs 'grep -rnE "(sk-|pk_live_|ghp_|AKIA|rk_live_|Bearer |password\s*=\s*\")" src/ --include="*.{js,ts,jsx,tsx,py}" | head -20'
+node steroid-run.cjs fs-grep '(sk-|pk_live_|ghp_|AKIA|rk_live_|Bearer |password\s*=\s*\")' src --include=*.js --include=*.ts --include=*.jsx --include=*.tsx --include=*.py --limit=20
 ```
 
 **4. Placeholder Content & Deprecated APIs** (grep — no good MIT tool exists)
 
 ```bash
 # Placeholder URLs and content
-node steroid-run.cjs 'grep -rnE "(example\.com|lorem ipsum|placeholder|https?://api\.example)" src/ --include="*.{js,ts,jsx,tsx}" | head -20'
+node steroid-run.cjs fs-grep '(example\.com|lorem ipsum|placeholder|https?://api\.example)' src --include=*.js --include=*.ts --include=*.jsx --include=*.tsx --limit=20
 
 # Deprecated React patterns (if React project)
-node steroid-run.cjs 'grep -rnE "(componentWillMount|componentWillReceiveProps|findDOMNode)" src/ --include="*.{js,ts,jsx,tsx}" | head -20'
+node steroid-run.cjs fs-grep '(componentWillMount|componentWillReceiveProps|findDOMNode)' src --include=*.js --include=*.ts --include=*.jsx --include=*.tsx --limit=20
 ```
 
 If placeholders found → ⚠️ **Important**. If deprecated APIs found → ⚠️ **Important**.
@@ -229,10 +231,10 @@ If NO test framework detected, note this as a gap but don't fail verification.
 
 ```bash
 # TypeScript projects
-node steroid-run.cjs 'npx tsc --noEmit 2>&1 | tail -20'
+node steroid-run.cjs 'npx tsc --noEmit'
 
 # ESLint projects
-node steroid-run.cjs 'npx eslint src/ --max-warnings=0 2>&1 | tail -20'
+node steroid-run.cjs 'npx eslint src/ --max-warnings=0'
 ```
 
 Only run if the tools are detected in `context.md` / `package.json`.
@@ -266,7 +268,7 @@ Before writing the final verdict, check these physical items:
 5. **Progress updated** — `.memory/progress.md` Codebase Patterns is not "Unknown"
 6. **Version** — `package.json` has a valid semver `version` field (v5.2.0)
 7. **README exists** — Project has a `README.md` with install + run instructions (v5.2.0)
-8. **License audit** (v5.3.0) — Run `node steroid-run.cjs 'npx license-checker --summary 2>/dev/null || echo No license-checker'`. Flag GPL/AGPL (viral — may require open-sourcing), unlicensed, or deprecated packages. For non-technical users: "All dependencies use permissive licenses ✅" or "⚠️ Found GPL dependency"
+8. **License audit** (v5.3.0) — If `license-checker` is installed, run `node steroid-run.cjs 'npx license-checker --summary'`. If it is unavailable, record the check as SKIP instead of chaining a shell fallback. Flag GPL/AGPL (viral — may require open-sourcing), unlicensed, or deprecated packages. For non-technical users: "All dependencies use permissive licenses ✅" or "⚠️ Found GPL dependency"
 
 Report each check in verify.md under `## Infrastructure`.
 

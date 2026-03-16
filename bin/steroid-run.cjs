@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 6.2.1
+ * @version 6.2.2
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -382,6 +382,70 @@ function readLatestFeatureArtifact(featureDir, name) {
     const activePath = path.join(featureDir, name);
     if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
     return null;
+}
+
+/**
+ * Converts a simple glob pattern into a RegExp.
+ * Supports `*` and `?`, normalizing path separators first.
+ *
+ * @param {string} pattern
+ * @returns {RegExp}
+ */
+function globToRegExp(pattern) {
+    const normalized = (pattern || '').replace(/\\/g, '/');
+    const escaped = normalized.replace(/[|\\{}()[\]^$+?.]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+    return new RegExp(`^${escaped}$`);
+}
+
+/**
+ * Returns true when a path stays within the current project root.
+ *
+ * @param {string} resolvedPath
+ * @returns {boolean}
+ */
+function isWithinTargetDir(resolvedPath) {
+    const rel = path.relative(targetDir, resolvedPath);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
+ * Walks files/directories recursively and invokes a visitor for each entry.
+ *
+ * @param {string} startPath
+ * @param {{ maxDepth?: number, skipRoot?: boolean }} options
+ * @param {(entry: { absolutePath: string, relativePath: string, name: string, depth: number, isFile: boolean, isDirectory: boolean }) => boolean|void} visitor
+ * @param {number} depth
+ * @returns {boolean} true when traversal should stop early
+ */
+function walkPathEntries(startPath, options, visitor, depth = 0) {
+    if (!fs.existsSync(startPath)) return false;
+
+    const stat = fs.statSync(startPath);
+    const entry = {
+        absolutePath: startPath,
+        relativePath: path.relative(targetDir, startPath) || '.',
+        name: path.basename(startPath),
+        depth,
+        isFile: stat.isFile(),
+        isDirectory: stat.isDirectory(),
+    };
+
+    if (!(options.skipRoot && depth === 0)) {
+        const shouldStop = visitor(entry);
+        if (shouldStop === true) return true;
+    }
+
+    if (!stat.isDirectory()) return false;
+    if (depth >= (options.maxDepth ?? Number.POSITIVE_INFINITY)) return false;
+
+    const children = fs.readdirSync(startPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const child of children) {
+        const childPath = path.join(startPath, child.name);
+        if (walkPathEntries(childPath, options, visitor, depth + 1)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -1438,7 +1502,7 @@ function formatPromptMarkdown(feature, analysis, sessionState) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.2.1';
+let SW_VERSION = '6.2.2';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -1467,9 +1531,23 @@ steroid-run — The physical pipeline enforcer for AI-driven development.
 Usage:
   Circuit Breaker:
     node steroid-run.cjs '<command>'                       Execute a command with error tracking
+    node steroid-run.cjs run --cwd=<path> '<command>'      Execute in a subdirectory with error tracking
     node steroid-run.cjs verify <file> --min-lines=<n>     Verify file meets minimum line count
     node steroid-run.cjs reset                             Reset the error counter to 0
     node steroid-run.cjs status                            Show current circuit breaker state
+
+  Shell-Free FS:
+    node steroid-run.cjs fs-cat <file...> [--head=<n>] [--optional]
+                                                          Print the first matching text file safely
+    node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]
+                                                          Find files/directories without shell globbing
+    node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]
+                                                          Search text safely without grep/findstr
+    node steroid-run.cjs fs-ls [path]                      Show a condensed directory tree
+    node steroid-run.cjs fs-mkdir <path>                   Create directories recursively
+    node steroid-run.cjs fs-cp <src> <dest>                Copy file or directory
+    node steroid-run.cjs fs-mv <src> <dest>                Move or rename file/directory
+    node steroid-run.cjs fs-rm <path>                      Remove file or directory safely
 
   Pipeline Enforcement:
     node steroid-run.cjs init-feature <slug>               Create feature folder structure
@@ -2558,6 +2636,255 @@ if (args[0] === 'fs-mv') {
         }
     }
     console.log(`[steroid-run] ✅ Moved: ${src} → ${dest}`);
+    process.exit(0);
+}
+
+/** CMD: fs-cat — Print the first matching text file, shell-free (v6.3.0) */
+if (args[0] === 'fs-cat') {
+    let headCount = null;
+    let optional = false;
+    const candidatePaths = [];
+
+    for (const arg of args.slice(1)) {
+        if (arg === '--optional') {
+            optional = true;
+        } else if (arg.startsWith('--head=')) {
+            const parsed = Number.parseInt(arg.slice('--head='.length), 10);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+                console.error('[steroid-run] Usage: node steroid-run.cjs fs-cat <file...> [--head=<n>] [--optional]');
+                process.exit(1);
+            }
+            headCount = parsed;
+        } else if (arg.startsWith('--')) {
+            console.error(`[steroid-run] Unknown option for fs-cat: ${arg}`);
+            process.exit(1);
+        } else {
+            candidatePaths.push(arg);
+        }
+    }
+
+    if (candidatePaths.length === 0) {
+        console.error('[steroid-run] Usage: node steroid-run.cjs fs-cat <file...> [--head=<n>] [--optional]');
+        process.exit(1);
+    }
+
+    let chosenPath = null;
+    let resolvedPath = null;
+    for (const candidate of candidatePaths) {
+        const resolved = path.resolve(targetDir, candidate);
+        if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+            chosenPath = candidate;
+            resolvedPath = resolved;
+            break;
+        }
+    }
+
+    if (!resolvedPath) {
+        if (optional) {
+            console.log(`[steroid-run] ⏭️  No matching file found: ${candidatePaths.join(', ')}`);
+            process.exit(0);
+        }
+        console.error(`[steroid-run] ❌ File not found: ${candidatePaths.join(', ')}`);
+        process.exit(1);
+    }
+
+    const relativePath = path.relative(targetDir, resolvedPath) || chosenPath;
+    const contents = fs.readFileSync(resolvedPath, 'utf-8');
+    const display =
+        headCount === null ? contents : contents.split(/\r?\n/).slice(0, headCount).join('\n');
+
+    console.log(`[steroid-run] 📄 ${relativePath}`);
+    if (display.length > 0) {
+        console.log(display);
+    }
+    process.exit(0);
+}
+
+/** CMD: fs-find — Find files/directories without shell globbing (v6.3.0) */
+if (args[0] === 'fs-find') {
+    const startPaths = [];
+    const namePatterns = [];
+    let type = 'any';
+    let maxDepth = Number.POSITIVE_INFINITY;
+    let limit = Number.POSITIVE_INFINITY;
+    let countOnly = false;
+
+    for (const arg of args.slice(1)) {
+        if (arg.startsWith('--name=')) {
+            namePatterns.push(globToRegExp(arg.slice('--name='.length)));
+        } else if (arg.startsWith('--type=')) {
+            type = arg.slice('--type='.length);
+            if (!['any', 'file', 'dir'].includes(type)) {
+                console.error('[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]');
+                process.exit(1);
+            }
+        } else if (arg.startsWith('--max-depth=')) {
+            const parsed = Number.parseInt(arg.slice('--max-depth='.length), 10);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                console.error('[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]');
+                process.exit(1);
+            }
+            maxDepth = parsed;
+        } else if (arg.startsWith('--limit=')) {
+            const parsed = Number.parseInt(arg.slice('--limit='.length), 10);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+                console.error('[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]');
+                process.exit(1);
+            }
+            limit = parsed;
+        } else if (arg === '--count') {
+            countOnly = true;
+        } else if (arg.startsWith('--')) {
+            console.error(`[steroid-run] Unknown option for fs-find: ${arg}`);
+            process.exit(1);
+        } else {
+            startPaths.push(arg);
+        }
+    }
+
+    const roots = startPaths.length > 0 ? startPaths : ['.'];
+    const results = [];
+
+    for (const root of roots) {
+        const resolvedRoot = path.resolve(targetDir, root);
+        if (!isWithinTargetDir(resolvedRoot) || !fs.existsSync(resolvedRoot)) continue;
+
+        const stop = walkPathEntries(resolvedRoot, { maxDepth, skipRoot: false }, (entry) => {
+            if (results.length >= limit) return true;
+            const typeMatch =
+                type === 'any' || (type === 'file' && entry.isFile) || (type === 'dir' && entry.isDirectory);
+            const nameMatch = namePatterns.length === 0 || namePatterns.some((pattern) => pattern.test(entry.name));
+
+            if (typeMatch && nameMatch) {
+                results.push(entry.relativePath);
+                if (results.length >= limit) return true;
+            }
+            return false;
+        });
+        if (stop && results.length >= limit) break;
+    }
+
+    if (countOnly) {
+        console.log(`[steroid-run] 🔎 ${results.length}`);
+    } else if (results.length === 0) {
+        console.log('[steroid-run] ⏭️  No matches found.');
+    } else {
+        console.log(`[steroid-run] 🔎 Found ${results.length} match(es)`);
+        for (const result of results) console.log(result);
+    }
+    process.exit(0);
+}
+
+/** CMD: fs-grep — Search text safely without grep/findstr (v6.3.0) */
+if (args[0] === 'fs-grep') {
+    let patternText = null;
+    const searchPaths = [];
+    const includePatterns = [];
+    let filesWithMatches = false;
+    let ignoreCase = false;
+    let fixed = false;
+    let limit = Number.POSITIVE_INFINITY;
+
+    for (const arg of args.slice(1)) {
+        if (arg.startsWith('--include=')) {
+            includePatterns.push(globToRegExp(arg.slice('--include='.length)));
+        } else if (arg === '--files-with-matches') {
+            filesWithMatches = true;
+        } else if (arg === '--ignore-case') {
+            ignoreCase = true;
+        } else if (arg === '--fixed') {
+            fixed = true;
+        } else if (arg.startsWith('--limit=')) {
+            const parsed = Number.parseInt(arg.slice('--limit='.length), 10);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+                console.error('[steroid-run] Usage: node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]');
+                process.exit(1);
+            }
+            limit = parsed;
+        } else if (arg.startsWith('--')) {
+            console.error(`[steroid-run] Unknown option for fs-grep: ${arg}`);
+            process.exit(1);
+        } else if (patternText === null) {
+            patternText = arg;
+        } else {
+            searchPaths.push(arg);
+        }
+    }
+
+    if (!patternText) {
+        console.error('[steroid-run] Usage: node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]');
+        process.exit(1);
+    }
+
+    const regexSource = fixed ? patternText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : patternText;
+    const pattern = new RegExp(regexSource, ignoreCase ? 'i' : '');
+    const roots = searchPaths.length > 0 ? searchPaths : ['.'];
+    const results = [];
+    const seenFiles = new Set();
+
+    const searchFile = (filePath) => {
+        if (results.length >= limit) return true;
+
+        const relativePath = path.relative(targetDir, filePath) || path.basename(filePath);
+        const normalizedRelative = relativePath.replace(/\\/g, '/');
+        const basename = path.basename(filePath);
+        const includeMatch =
+            includePatterns.length === 0 ||
+            includePatterns.some((glob) => glob.test(basename) || glob.test(normalizedRelative));
+        if (!includeMatch) return false;
+
+        let contents = '';
+        try {
+            contents = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            return false;
+        }
+
+        const lines = contents.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            pattern.lastIndex = 0;
+            if (!pattern.test(line)) continue;
+
+            if (filesWithMatches) {
+                if (!seenFiles.has(relativePath)) {
+                    results.push(relativePath);
+                    seenFiles.add(relativePath);
+                }
+                break;
+            }
+
+            results.push(`${relativePath}:${i + 1}: ${line}`);
+            if (results.length >= limit) return true;
+        }
+        return results.length >= limit;
+    };
+
+    for (const root of roots) {
+        const resolvedRoot = path.resolve(targetDir, root);
+        if (!isWithinTargetDir(resolvedRoot) || !fs.existsSync(resolvedRoot)) continue;
+
+        if (fs.statSync(resolvedRoot).isFile()) {
+            if (searchFile(resolvedRoot)) break;
+            continue;
+        }
+
+        const stop = walkPathEntries(resolvedRoot, { maxDepth: Number.POSITIVE_INFINITY, skipRoot: true }, (entry) => {
+            if (results.length >= limit) return true;
+            if (entry.isFile) {
+                return searchFile(entry.absolutePath);
+            }
+            return false;
+        });
+        if (stop && results.length >= limit) break;
+    }
+
+    if (results.length === 0) {
+        console.log('[steroid-run] ⏭️  No matches found.');
+    } else {
+        console.log(`[steroid-run] 🔎 Found ${results.length} match(es)`);
+        for (const result of results) console.log(result);
+    }
     process.exit(0);
 }
 
@@ -4604,7 +4931,42 @@ if (args[0] === 'verify') {
 }
 
 // --- Execution Mode ---
-const commandStr = args.join(' ');
+let executionCwd = targetDir;
+let executionArgs = args;
+
+if (args[0] === 'run') {
+    let cwdProvided = false;
+    executionArgs = [];
+
+    for (const arg of args.slice(1)) {
+        if (arg.startsWith('--cwd=')) {
+            const requestedCwd = arg.slice('--cwd='.length);
+            if (!requestedCwd) {
+                console.error('[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> \'<command>\'');
+                process.exit(1);
+            }
+            executionCwd = path.resolve(targetDir, requestedCwd);
+            cwdProvided = true;
+        } else {
+            executionArgs.push(arg);
+        }
+    }
+
+    if (!cwdProvided || executionArgs.length === 0) {
+        console.error('[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> \'<command>\'');
+        process.exit(1);
+    }
+    if (!isWithinTargetDir(executionCwd)) {
+        console.error('[steroid-run] 🚫 SAFETY: --cwd must stay inside the current project root.');
+        process.exit(1);
+    }
+    if (!fs.existsSync(executionCwd) || !fs.statSync(executionCwd).isDirectory()) {
+        console.error(`[steroid-run] ❌ Working directory does not exist: ${path.relative(targetDir, executionCwd)}`);
+        process.exit(1);
+    }
+}
+
+const commandStr = executionArgs.join(' ');
 const normalizedCommandStr = stripWrappingQuotes(commandStr.trim());
 
 // --- Scaffold Safety Guard (v5.6.0) ---
@@ -4640,7 +5002,8 @@ for (const pattern of SCAFFOLD_PATTERNS) {
     }
 }
 
-console.log(`[steroid-run] Executing: ${commandStr}`);
+const executionLabel = path.relative(targetDir, executionCwd) || '.';
+console.log(`[steroid-run] Executing${executionLabel === '.' ? '' : ` in ${executionLabel}`}: ${commandStr}`);
 
 // --- Command Allowlist Guard (v6.0.0) ---
 // Only known development commands are allowed through the circuit breaker.
@@ -4761,6 +5124,7 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
         return dp[m][n];
     };
     const KNOWN_CMDS = [
+        'run',
         'reset',
         'recover',
         'status',
@@ -4786,6 +5150,14 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
         'report',
         'dashboard',
         'verify',
+        'fs-cat',
+        'fs-find',
+        'fs-grep',
+        'fs-ls',
+        'fs-mkdir',
+        'fs-cp',
+        'fs-mv',
+        'fs-rm',
     ];
     let bestMatch = null,
         bestDist = Infinity;
@@ -4804,6 +5176,7 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
 }
 
 const child = spawnSync(commandStr, {
+    cwd: executionCwd,
     shell: true,
     stdio: 'inherit',
 });
@@ -4811,7 +5184,7 @@ const child = spawnSync(commandStr, {
 // --- State Machine Update ---
 if (child.status !== 0) {
     state.error_count += 1;
-    state.last_error = `Command failed: "${commandStr}" (exit code ${child.status})`;
+    state.last_error = `Command failed in "${executionLabel}": "${commandStr}" (exit code ${child.status})`;
     if (!state.error_history) state.error_history = [];
     state.error_history.push(`[${new Date().toISOString()}] ${state.last_error}`);
     if (!state.recovery_actions) state.recovery_actions = [];
