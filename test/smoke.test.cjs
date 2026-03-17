@@ -134,6 +134,16 @@ test('normalize-prompt exits 0', () => {
     const out = run('normalize-prompt "make it feel more premium"');
     if (!out.includes('Prompt Intelligence')) throw new Error(`Got: ${out.trim()}`);
 });
+test('design-route exits 0 for UI work', () => {
+    const out = run('design-route "redesign the react dashboard ui"');
+    if (!out.includes('Design Route')) throw new Error(`Got: ${out.trim()}`);
+    if (!out.includes('Wrapper skill')) throw new Error(`Got: ${out.trim()}`);
+});
+test('design-prep exits 0 for UI work', () => {
+    const out = run('design-prep "redesign the react dashboard ui"');
+    if (!out.includes('Design Prep')) throw new Error(`Got: ${out.trim()}`);
+    if (!out.includes('Wrapper skill')) throw new Error(`Got: ${out.trim()}`);
+});
 test('prompt-health exits 0', () => {
     const out = run('prompt-health "fix the weird login issue"');
     if (!out.includes('Prompt Health')) throw new Error(`Got: ${out.trim()}`);

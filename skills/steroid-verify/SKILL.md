@@ -8,6 +8,7 @@ description: The verification skill for Steroid-Workflow. This skill runs after 
 This skill runs **after** the engine completes all tasks in `plan.md`. It proves the AI's code actually works before the feature can be archived. Without verification, the pipeline is just a promise — this skill makes it proof.
 
 Adapted from:
+
 - **GSD Verifier** (see `src/forks/gsd/agents/gsd-verifier.md`) — Goal-backward verification, 3-level artifact checks, anti-pattern scanning
 - **Superpowers Spec Compliance Review** (see `src/forks/superpowers/spec-reviewer-prompt.md`) — Independent requirement verification
 - **Superpowers Code Quality Review** (see `src/forks/superpowers/code-quality-reviewer-prompt.md`) — Structural quality checks
@@ -36,20 +37,31 @@ For file inspection and code searches, prefer shell-free helpers like `node ster
 ## Phase Gate (Physical Enforcement)
 
 Before doing anything, run the gate check:
+
 ```
 node steroid-run.cjs gate verify <feature>
 ```
+
 If this command fails, STOP. The engine phase is not complete.
 
 Then run the feature verification pre-check:
+
 ```
 node steroid-run.cjs verify-feature <feature>
 ```
-This is the core verification gate. It confirms review status, task completion, and runtime checks.
 
-If you want optional deep scans for code smells and license auditing, run:
+This is the core verification gate. It confirms review status, task completion, runtime checks, runs the internalized AccessLint audit when local HTML targets exist, and refreshes `ui-review.md` / `ui-review.json` whenever the latest verification evidence changes the frontend review picture. The receipt records freshness metadata so later handoff surfaces can show who refreshed the frontend verdict and which evidence triggered it.
+
+If you want optional deep scans for runtime UI behavior, code smells, and license auditing, run:
+
 ```bash
 node steroid-run.cjs verify-feature <feature> --deep
+```
+
+If you already have a deployed preview, pass it explicitly:
+
+```bash
+node steroid-run.cjs verify-feature <feature> --deep --url https://preview.example.com
 ```
 
 ## Two-Stage Review Gate (v5.0)
@@ -59,6 +71,15 @@ Before running the verification process, ensure the two-stage review is complete
 ```bash
 node steroid-run.cjs review status <feature>
 ```
+
+If frontend evidence changed and you want to refresh the consolidated UI verdict without rerunning the full verification command, use:
+
+```bash
+node steroid-run.cjs review ui <feature>
+```
+
+`archive <feature>` and `report generate <feature>` will also auto-refresh stale UI review receipts before they archive or hand off a UI-intensive feature.
+If the refreshed `ui-review.json` is `CONDITIONAL`, Steroid now distinguishes cautionary frontend issues from blocking frontend issues. Blocking `CONDITIONAL` cases require an explicit `node steroid-run.cjs archive <feature> --force-ui` override.
 
 If both stages show PASS, proceed to verification. If not:
 
@@ -79,13 +100,26 @@ Read these files to understand what was built:
 2. `.memory/changes/<feature>/plan.md` — The task list (what was DONE)
 3. `.memory/changes/<feature>/context.md` — The project context (tech stack, test infra)
 4. `.memory/changes/<feature>/prompt.json` — The normalized user intent, if present
+5. `.memory/changes/<feature>/design-routing.json` — The internal frontend routing receipt, if present
+6. `.memory/changes/<feature>/accessibility.json` — The latest AccessLint receipt, if present
+7. `.memory/changes/<feature>/ui-audit.json` — The latest Playwright-backed browser audit receipt, if present
+8. `.memory/changes/<feature>/preview-url.txt` — An explicit preview target if the browser audit was pointed at one
+9. `.memory/changes/<feature>/ui-review.md` — The consolidated frontend review summary, if present
+10. `.memory/changes/<feature>/ui-review.json` — The machine-readable frontend review receipt, if present
 
 Extract:
+
 - All acceptance scenarios (Given/When/Then) from spec.md
 - All completed tasks from plan.md
 - Test framework and run command from context.md
 - All success criteria (SC-001, SC-002, etc.) from spec.md
 - Recommended route, assumptions, and non-goals from prompt.json when available
+- Imported frontend systems selected for the feature from design-routing.json when available
+- AccessLint findings from accessibility.json when available
+- Browser-runtime findings from ui-audit.json when available
+- Preview target hints from preview-url.txt, environment variables, or `.env*` files when deep browser audit is requested
+- The final frontend review verdict from ui-review.md when present
+- The machine-readable frontend review verdict from ui-review.json when present
 
 If the feature followed the fix pipeline and uses `diagnosis.md` instead of `plan.md`, read that targeted fix plan as the execution source instead of failing immediately.
 
@@ -101,9 +135,9 @@ Report in verify.md:
 ```markdown
 ## Success Criteria
 
-| SC | Criterion | Status | Method |
-|----|-----------|--------|--------|
-| SC-001 | Lighthouse 95+ | ⚠️ Manual | Requires browser testing |
+| SC     | Criterion           | Status      | Method                   |
+| ------ | ------------------- | ----------- | ------------------------ |
+| SC-001 | Lighthouse 95+      | ⚠️ Manual   | Requires browser testing |
 | SC-002 | Theme toggle <100ms | ✅ Verified | Measured via code review |
 ```
 
@@ -120,10 +154,10 @@ For EACH acceptance criterion in spec.md:
 1. **Find the code** that implements it (grep for related functions, components, routes)
 2. **Read the actual code** — not just the file name, the implementation
 3. **Determine status:**
-   - ✅ **IMPLEMENTED** — Code exists AND handles the described scenario
-   - ⚠️ **PARTIAL** — Code exists but missing edge cases or error handling
-   - ❌ **MISSING** — No code found that addresses this criterion
-   - 🔄 **EXTRA** — Code does something NOT in the spec (flag for review)
+    - ✅ **IMPLEMENTED** — Code exists AND handles the described scenario
+    - ⚠️ **PARTIAL** — Code exists but missing edge cases or error handling
+    - ❌ **MISSING** — No code found that addresses this criterion
+    - 🔄 **EXTRA** — Code does something NOT in the spec (flag for review)
 
 **Critical mindset** (from GSD Verifier): "Do NOT trust SUMMARY.md claims. SUMMARYs document what the AI SAID it did. You verify what ACTUALLY exists in the code. These often differ."
 
@@ -152,6 +186,7 @@ node steroid-run.cjs fs-grep 'console\.log' <file>
 ```
 
 Categorize issues by severity:
+
 - 🛑 **Critical** — Prevents feature from working (missing implementation, broken import)
 - ⚠️ **Important** — Works but fragile (no error handling, hardcoded values)
 - ℹ️ **Minor** — Cosmetic or style issues (naming, unused imports)
@@ -188,6 +223,7 @@ node steroid-run.cjs 'npx @ziul285/gitleaks detect --no-git --source .'
 Covers AWS, Stripe, Twilio, Firebase, Supabase, SendGrid, GitHub tokens, and 90+ other services. If any secrets found → 🛑 **Critical** (security breach risk).
 
 If `gitleaks` is unavailable (Go binary not supported on platform), fall back to:
+
 ```bash
 node steroid-run.cjs fs-grep '(sk-|pk_live_|ghp_|AKIA|rk_live_|Bearer |password\s*=\s*\")' src --include=*.js --include=*.ts --include=*.jsx --include=*.tsx --include=*.py --limit=20
 ```
@@ -215,6 +251,7 @@ node steroid-run.cjs '<test-command>'
 ```
 
 Record:
+
 - Whether tests pass or fail
 - Number of tests run
 - Any test failures with file + line
@@ -222,6 +259,7 @@ Record:
 If NO test framework detected, note this as a gap but don't fail verification.
 
 **Test Enforcement (v5.0.2):** If spec.md has acceptance criteria AND the test count is 0:
+
 - Verdict MUST be **CONDITIONAL**, not PASS
 - Add warning: "⚠️ No tests found. TDD mandate not followed."
 - List which acceptance criteria lack test coverage
@@ -243,15 +281,15 @@ Only run if the tools are detected in `context.md` / `package.json`.
 
 Read the tech stack from context.md and use the appropriate commands:
 
-| Language | Build | Lint | Type Check | Test |
-|----------|-------|------|------------|------|
-| JS/TS | `npm run build` | `npx eslint src/` | `npx tsc --noEmit` | `npm test` |
-| Python | `python -m py_compile *.py` | `flake8` or `ruff check .` | `mypy .` | `pytest` |
-| Rust | `cargo build` | `cargo clippy` | (built-in) | `cargo test` |
-| Go | `go build ./...` | `golangci-lint run` | (built-in) | `go test ./...` |
-| Java | `mvn compile` or `gradle build` | `checkstyle` | (compiler) | `mvn test` or `gradle test` |
-| Ruby | (none) | `rubocop` | (none) | `rspec` or `rake test` |
-| PHP | (none) | `phpcs` or `phpstan` | (none) | `phpunit` |
+| Language | Build                           | Lint                       | Type Check         | Test                        |
+| -------- | ------------------------------- | -------------------------- | ------------------ | --------------------------- |
+| JS/TS    | `npm run build`                 | `npx eslint src/`          | `npx tsc --noEmit` | `npm test`                  |
+| Python   | `python -m py_compile *.py`     | `flake8` or `ruff check .` | `mypy .`           | `pytest`                    |
+| Rust     | `cargo build`                   | `cargo clippy`             | (built-in)         | `cargo test`                |
+| Go       | `go build ./...`                | `golangci-lint run`        | (built-in)         | `go test ./...`             |
+| Java     | `mvn compile` or `gradle build` | `checkstyle`               | (compiler)         | `mvn test` or `gradle test` |
+| Ruby     | (none)                          | `rubocop`                  | (none)             | `rspec` or `rake test`      |
+| PHP      | (none)                          | `phpcs` or `phpstan`       | (none)             | `phpunit`                   |
 
 Wrap ALL commands in: `node steroid-run.cjs '<command>'`
 
@@ -293,21 +331,22 @@ Write results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<fea
 
 ## Spec Compliance
 
-| # | Criterion | Status | Evidence |
-|---|-----------|--------|----------|
-| 1 | <from spec.md> | ✅ IMPLEMENTED | <file:line — what it does> |
-| 2 | <from spec.md> | ❌ MISSING | <what's not there> |
+| #   | Criterion      | Status         | Evidence                   |
+| --- | -------------- | -------------- | -------------------------- |
+| 1   | <from spec.md> | ✅ IMPLEMENTED | <file:line — what it does> |
+| 2   | <from spec.md> | ❌ MISSING     | <what's not there>         |
 
 ## Code Quality
 
 ### Issues Found
 
-| File | Line | Severity | Issue |
-|------|------|----------|-------|
-| <path> | <line> | 🛑 Critical | <description> |
+| File   | Line   | Severity     | Issue         |
+| ------ | ------ | ------------ | ------------- |
+| <path> | <line> | 🛑 Critical  | <description> |
 | <path> | <line> | ⚠️ Important | <description> |
 
 ### Strengths
+
 - <positive observations>
 
 ## Test Results
@@ -324,8 +363,8 @@ Write results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<fea
 
 ## Anti-Patterns
 
-| File | Line | Pattern | Impact |
-|------|------|---------|--------|
+| File   | Line   | Pattern           | Impact            |
+| ------ | ------ | ----------------- | ----------------- |
 | <path> | <line> | <TODO/stub/empty> | <what it affects> |
 
 ## Overall Assessment
@@ -341,15 +380,18 @@ _Verifier: steroid-verify_
 ## After Verification
 
 ### If PASS:
+
 1. Output: "✅ Verification passed. Feature ready to archive."
 2. The archive command will now succeed (gate requires `verify.json` with PASS)
 
 ### If FAIL:
+
 1. Output: "❌ Verification failed. <count> issues must be resolved."
 2. List the Critical/Missing items
 3. The engine must re-run to fix these items before re-verification
 
 ### If CONDITIONAL:
+
 1. Output: "⚠️ Verification conditional. Feature works but has <count> Important issues."
 2. Ask the user: "Archive now or fix first?"
 
@@ -358,6 +400,7 @@ _Verifier: steroid-verify_
 The human at the keyboard is a non-technical System Builder. Do NOT dump raw test output, grep results, or lint errors to the main chat.
 
 Instead:
+
 - Summarize: "Found 2 issues in the login component that need fixing."
 - Show the verify.md summary, not the raw evidence
 

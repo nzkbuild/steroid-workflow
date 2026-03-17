@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.3.0-beta.1] "Frontend Internalization Beta" - 2026-03-18
+
+### Added
+- **Internalized frontend systems** — Steroid now ships imported UI/UX rule packs and runtime integrations directly inside the package instead of relying on external assistant-only installs
+- **Design intelligence pipeline** — new `design-route`, `design-system`, and `design-prep` commands create `design-routing.json` and `design-system.md` as first-class UI artifacts
+- **Frontend review receipts** — verification can now write `ui-review.md` and `ui-review.json` so frontend quality becomes machine-readable and visible to pipeline status, reports, and dashboard flows
+- **Dedicated UI review command** — `review ui <feature>` refreshes frontend review receipts from current evidence without rerunning the entire verification flow
+
+### Changed
+- **UI gating** — research, architect, and engine now enforce the design-system path for UI-intensive work instead of letting frontend implementation freehand its direction
+- **Archive/report behavior** — stale frontend receipts are auto-refreshed before release decisions, and blocking frontend issues can now stop archive unless explicitly overridden with `--force-ui`
+- **Preview discovery** — deep UI verification now looks for preview targets across flags, env vars, project receipts, package metadata, and local HTML targets
+
+### Improved
+- **Accessibility verification** — AccessLint is now integrated as an internal runtime and writes `accessibility.json` when auditable HTML targets exist
+- **Optional browser audit** — deep verification can layer Playwright-backed UI evidence into `ui-audit.json`
+- **Regression coverage** — tests and consistency checks now cover the internalized frontend routing, receipt generation, archive policy, and review refresh behavior
+
 ## [6.2.2] "Shell-Safe Hotfix" - 2026-03-17
 
 ### Fixed

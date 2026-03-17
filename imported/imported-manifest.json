@@ -1,0 +1,139 @@
+{
+    "version": 1,
+    "policy": {
+        "intent": "Internalized source snapshots for Steroid frontend and accessibility workflows",
+        "editing": "Preserve imported source as close to upstream as possible and prefer wrapper-level compatibility glue over logic rewrites"
+    },
+    "sources": [
+        {
+            "id": "ui-ux-pro-max",
+            "role": "design-system-generation",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+            "sourceCommit": "07f4ef3ac2568c25a3b0c8ef5165a86abc3e56e4",
+            "sourcePath": "src/ui-ux-pro-max",
+            "localPath": "imported/ui-ux-pro-max",
+            "copied": ["data/", "scripts/", "templates/", "LICENSE", "UPSTREAM-README.md"],
+            "compatibilityNotes": [
+                "Steroid should call scripts/search.py directly instead of relying on the upstream installer."
+            ]
+        },
+        {
+            "id": "anthropic-frontend-design",
+            "role": "premium-web-direction",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/anthropics/claude-code",
+            "sourceCommit": "079dc856c6c990de5be28e288939293905c154c1",
+            "sourcePath": "plugins/frontend-design/skills/frontend-design",
+            "localPath": "imported/anthropic-frontend-design",
+            "copied": ["SKILL.md", "LICENSE.md", "UPSTREAM-README.md"],
+            "compatibilityNotes": [
+                "Wrapper skills should load this as a design-direction source, not as a separate user-facing install."
+            ]
+        },
+        {
+            "id": "vercel-web-design-guidelines",
+            "role": "web-ui-review-shell",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/vercel-labs/agent-skills",
+            "sourceCommit": "5847a7c7e79bab3e400cf47800b83449d7aea2d4",
+            "sourcePath": "skills/web-design-guidelines",
+            "localPath": "imported/vercel-web-design-guidelines",
+            "copied": ["SKILL.md", "UPSTREAM-README.md"],
+            "compatibilityNotes": [
+                "The upstream shell expects a live fetch; Steroid must point it at the local web-interface-guidelines snapshot."
+            ]
+        },
+        {
+            "id": "vercel-web-interface-guidelines",
+            "role": "web-ui-review-rules",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/vercel-labs/web-interface-guidelines",
+            "sourceCommit": "3f6b1449dee158479deb8019f6372ff85e663406",
+            "sourcePath": ".",
+            "localPath": "imported/vercel-web-interface-guidelines",
+            "copied": ["command.md", "AGENTS.md", "LICENSE", "UPSTREAM-README.md"],
+            "compatibilityNotes": [
+                "Steroid should load command.md locally so UI audits never depend on runtime network fetches."
+            ]
+        },
+        {
+            "id": "vercel-react-best-practices",
+            "role": "react-implementation-rules",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/vercel-labs/agent-skills",
+            "sourceCommit": "5847a7c7e79bab3e400cf47800b83449d7aea2d4",
+            "sourcePath": "skills/react-best-practices",
+            "localPath": "imported/vercel-react-best-practices",
+            "copied": ["SKILL.md", "AGENTS.md", "metadata.json", "README.md", "rules/"],
+            "compatibilityNotes": []
+        },
+        {
+            "id": "vercel-composition-patterns",
+            "role": "component-architecture-rules",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/vercel-labs/agent-skills",
+            "sourceCommit": "5847a7c7e79bab3e400cf47800b83449d7aea2d4",
+            "sourcePath": "skills/composition-patterns",
+            "localPath": "imported/vercel-composition-patterns",
+            "copied": ["SKILL.md", "AGENTS.md", "metadata.json", "README.md", "rules/"],
+            "compatibilityNotes": []
+        },
+        {
+            "id": "bencium-ux-designer",
+            "role": "anti-generic-ux-direction",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/bencium/bencium-claude-code-design-skill",
+            "sourceCommit": "91c8f20b1baa84183937602cfa053ea7933e0028",
+            "sourcePath": "bencium-controlled-ux-designer/skills/bencium-controlled-ux-designer",
+            "localPath": "imported/bencium-ux-designer",
+            "copied": [
+                "SKILL.md",
+                "DESIGN-SYSTEM-TEMPLATE.md",
+                "MOTION-SPEC.md",
+                "RESPONSIVE-DESIGN.md",
+                "ACCESSIBILITY.md",
+                "UPSTREAM-README.md",
+                "UPSTREAM-MARKETPLACE-README.md"
+            ],
+            "compatibilityNotes": [
+                "Steroid wrappers should mediate the upstream always-ask-first protocol when running in autonomous mode."
+            ]
+        },
+        {
+            "id": "vercel-react-native-skills",
+            "role": "react-native-implementation-rules",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/vercel-labs/agent-skills",
+            "sourceCommit": "5847a7c7e79bab3e400cf47800b83449d7aea2d4",
+            "sourcePath": "skills/react-native-skills",
+            "localPath": "imported/vercel-react-native-skills",
+            "copied": ["SKILL.md", "AGENTS.md", "metadata.json", "README.md", "rules/"],
+            "compatibilityNotes": []
+        },
+        {
+            "id": "accesslint-core",
+            "role": "accessibility-verification-engine",
+            "license": "MIT",
+            "sourceRepo": "https://github.com/AccessLint/core",
+            "sourceCommit": "73b8e4270050adc48b436bf0246a8f58922d3aee",
+            "sourcePath": ".",
+            "localPath": "integrations/accesslint",
+            "copied": [
+                "LICENSE",
+                "run-audit.cjs",
+                "node_modules/@accesslint/core/",
+                "node_modules/happy-dom/",
+                "node_modules/entities/",
+                "node_modules/whatwg-mimetype/",
+                "node_modules/ws/",
+                "upstream-package.json",
+                "UPSTREAM-README.md"
+            ],
+            "compatibilityNotes": [
+                "Steroid integrates the published runtime package during verify instead of exposing this as a user-facing skill.",
+                "The local runner uses happy-dom to provide a Document for AccessLint without requiring user-side installs."
+            ]
+        }
+    ]
+}

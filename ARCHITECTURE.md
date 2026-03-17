@@ -19,14 +19,17 @@ The installer injects Maestro rules (the AI's operating instructions) into confi
 ### Layer 2: Effort Directive
 
 Every injected config starts with:
+
 ```
 SPECIAL INSTRUCTION: Think silently if needed. EFFORT LEVEL 2.00
 ```
+
 This forces the AI to use deep processing mode, reducing the chance it skims past the steroid rules.
 
 ### Layer 3: Git Pre-Commit Hook
 
 A shell script at `.git/hooks/pre-commit` that:
+
 1. Detects if source code files (`.js`, `.ts`, `.py`, etc.) are being committed
 2. If yes, checks that `.memory/changes/*/plan.md` exists
 3. If no plan exists, **blocks the commit** with a message telling the AI to use the pipeline
@@ -38,98 +41,112 @@ This is the only enforcement that works regardless of AI model, IDE, or prompt q
 All AI terminal commands are routed through this CLI wrapper.
 
 ### Circuit Breaker
-| Command | Purpose |
-|---------|---------|
-| `node steroid-run.cjs '<command>'` | Execute with error tracking (5 errors → graduated recovery → hard stop) |
-| `node steroid-run.cjs run --cwd=<path> '<command>'` | Execute safely inside a subdirectory without `cd && ...` |
-| `node steroid-run.cjs verify <file> --min-lines=<n>` | Block code summarization |
-| `node steroid-run.cjs reset` | Reset error counter + clear recovery state |
-| `node steroid-run.cjs status` | Show circuit breaker state + recovery level |
-| `node steroid-run.cjs recover` | Smart recovery guidance based on error level (v4.0) |
+
+| Command                                              | Purpose                                                                 |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `node steroid-run.cjs '<command>'`                   | Execute with error tracking (5 errors → graduated recovery → hard stop) |
+| `node steroid-run.cjs run --cwd=<path> '<command>'`  | Execute safely inside a subdirectory without `cd && ...`                |
+| `node steroid-run.cjs verify <file> --min-lines=<n>` | Block code summarization                                                |
+| `node steroid-run.cjs reset`                         | Reset error counter + clear recovery state                              |
+| `node steroid-run.cjs status`                        | Show circuit breaker state + recovery level                             |
+| `node steroid-run.cjs recover`                       | Smart recovery guidance based on error level (v4.0)                     |
 
 ### Shell-Free FS
-| Command | Purpose |
-|---------|---------|
-| `node steroid-run.cjs fs-cat <file...> [--head=<n>] [--optional]` | Read text files without shell builtins |
-| `node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]` | Find files without shell globbing |
-| `node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]` | Search files without `grep`/`findstr` |
-| `node steroid-run.cjs fs-ls [path]` | Show a condensed directory tree |
-| `node steroid-run.cjs fs-mkdir <path>` | Create directories recursively |
-| `node steroid-run.cjs fs-cp <src> <dest>` | Copy file or directory |
-| `node steroid-run.cjs fs-mv <src> <dest>` | Move or rename file/directory |
-| `node steroid-run.cjs fs-rm <path>` | Remove file or directory safely |
+
+| Command                                                                                                                              | Purpose                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------- |
+| `node steroid-run.cjs fs-cat <file...> [--head=<n>] [--optional]`                                                                    | Read text files without shell builtins          |
+| `node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file                                                                 | dir] [--max-depth=<n>] [--limit=<n>] [--count]` | Find files without shell globbing |
+| `node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]` | Search files without `grep`/`findstr`           |
+| `node steroid-run.cjs fs-ls [path]`                                                                                                  | Show a condensed directory tree                 |
+| `node steroid-run.cjs fs-mkdir <path>`                                                                                               | Create directories recursively                  |
+| `node steroid-run.cjs fs-cp <src> <dest>`                                                                                            | Copy file or directory                          |
+| `node steroid-run.cjs fs-mv <src> <dest>`                                                                                            | Move or rename file/directory                   |
+| `node steroid-run.cjs fs-rm <path>`                                                                                                  | Remove file or directory safely                 |
 
 ### Pipeline Enforcement
-| Command | Purpose | Origin |
-|---------|---------|--------|
-| `init-feature <slug>` | Create feature folder (validates kebab-case) | OpenSpec |
-| `scan <feature>` | Bootstrap codebase context (writes context.md) | GSD/Ralph |
-| `gate <phase> <feature>` | Check phase prerequisites | New |
-| `commit <message>` | Atomic commit in `feat(steroid):` format | Ralph/GSD |
-| `log <feature> <message>` | Append to progress log | Ralph |
-| `check-plan <feature>` | Count remaining tasks | New |
-| `verify-feature <feature> [--deep]` | Core verification gate; `--deep` adds optional scanners | GSD |
-| `archive <feature>` | Date-stamped feature archival (requires `verify.json` PASS/CONDITIONAL) | Ralph |
+
+| Command                                               | Purpose                                                                                                                                                                                                          | Origin    |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `init-feature <slug>`                                 | Create feature folder (validates kebab-case)                                                                                                                                                                     | OpenSpec  |
+| `scan <feature>`                                      | Bootstrap codebase context (writes context.md)                                                                                                                                                                   | GSD/Ralph |
+| `gate <phase> <feature>`                              | Check phase prerequisites                                                                                                                                                                                        | New       |
+| `commit <message>`                                    | Atomic commit in `feat(steroid):` format                                                                                                                                                                         | Ralph/GSD |
+| `log <feature> <message>`                             | Append to progress log                                                                                                                                                                                           | Ralph     |
+| `check-plan <feature>`                                | Count remaining tasks                                                                                                                                                                                            | New       |
+| `verify-feature <feature> [--deep] [--url <preview>]` | Core verification gate; `--deep` adds optional scanners and browser audit, and verification refreshes UI review receipts from current evidence                                                                   | GSD       |
+| `review ui <feature>`                                 | Refresh frontend review receipts from current UI evidence                                                                                                                                                        | Steroid   |
+| `archive <feature>`                                   | Date-stamped feature archival (requires `verify.json` PASS/CONDITIONAL`; refreshes stale UI review receipts, blocks on `ui-review.json` FAIL, and can require `--force-ui` for blocking `CONDITIONAL` frontend risk) | Ralph     |
 
 ### Intelligence (v3.0)
-| Command | Purpose | Origin |
-|---------|---------|--------|
-| `detect-intent "<message>"` | Classify user intent (build/fix/refactor/migrate/document) | New |
-| `normalize-prompt "<message>"` | Normalize a raw user prompt into a structured brief | New |
-| `prompt-health "<message>"` | Score prompt clarity, ambiguity, and risk | New |
-| `session-detect` | Detect continuation/recovery/project session state | New |
-| `detect-tests` | Detect test framework in current project | GSD |
+
+| Command                        | Purpose                                                    | Origin |
+| ------------------------------ | ---------------------------------------------------------- | ------ |
+| `detect-intent "<message>"`    | Classify user intent (build/fix/refactor/migrate/document) | New    |
+| `normalize-prompt "<message>"` | Normalize a raw user prompt into a structured brief        | New    |
+| `design-prep "<message>"`      | Generate design-routing + design-system together           | New    |
+| `design-route "<message>"`     | Route UI work to Steroid's internalized frontend systems   | New    |
+| `design-system "<message>"`    | Generate a design-system artifact from imported UI systems | New    |
+| `prompt-health "<message>"`    | Score prompt clarity, ambiguity, and risk                  | New    |
+| `session-detect`               | Detect continuation/recovery/project session state         | New    |
+| `detect-tests`                 | Detect test framework in current project                   | GSD    |
 
 ### Progress & Diagnostics
-| Command | Purpose |
-|---------|---------|
-| `progress` | Show execution learnings log |
-| `progress --patterns` | Show only codebase patterns |
-| `audit` | Verify all enforcement layers (8 skills, 7 gates, 4 knowledge stores) |
+
+| Command               | Purpose                                                               |
+| --------------------- | --------------------------------------------------------------------- |
+| `progress`            | Show execution learnings log                                          |
+| `progress --patterns` | Show only codebase patterns                                           |
+| `audit`               | Verify all enforcement layers (8 skills, 7 gates, 4 knowledge stores) |
 
 ### Knowledge & Memory (v4.0)
-| Command | Purpose | Origin |
-|---------|---------|--------|
-| `memory show <store>` | Display a knowledge store (tech-stack, patterns, decisions, gotchas) | MemoryCore |
-| `memory show-all` | Display all knowledge stores | MemoryCore |
-| `memory write <store> <json>` | Write/merge data into a store | MemoryCore/Ralph |
-| `memory stats` | Show entry counts and metrics | MemoryCore |
+
+| Command                       | Purpose                                                              | Origin           |
+| ----------------------------- | -------------------------------------------------------------------- | ---------------- |
+| `memory show <store>`         | Display a knowledge store (tech-stack, patterns, decisions, gotchas) | MemoryCore       |
+| `memory show-all`             | Display all knowledge stores                                         | MemoryCore       |
+| `memory write <store> <json>` | Write/merge data into a store                                        | MemoryCore/Ralph |
+| `memory stats`                | Show entry counts and metrics                                        | MemoryCore       |
 
 ### Stories & Recovery (v4.0)
-| Command | Purpose | Origin |
-|---------|---------|--------|
-| `stories <feature>` | List prioritized stories (P1/P2/P3) | spec-kit |
+
+| Command                  | Purpose                                    | Origin         |
+| ------------------------ | ------------------------------------------ | -------------- |
+| `stories <feature>`      | List prioritized stories (P1/P2/P3)        | spec-kit       |
 | `stories <feature> next` | Show next story (P1 foundational blocking) | spec-kit/Ralph |
-| `recover` | Smart recovery guidance (5 levels) | superpowers |
+| `recover`                | Smart recovery guidance (5 levels)         | superpowers    |
 
 ## The 8-Skill Pipeline (v3.0)
 
 ### Build Intent (Full Pipeline)
-| # | Skill | Input | Output |
-|---|-------|-------|--------|
-| 0 | `steroid-scan` | Project codebase | `.memory/changes/<feature>/context.md` |
-| 1 | `steroid-vibe-capture` | User's natural language | `.memory/changes/<feature>/vibe.md` |
-| 2 | `steroid-specify` | `vibe.md` | `.memory/changes/<feature>/spec.md` |
-| 3 | `steroid-research` | `spec.md` | `.memory/changes/<feature>/research.md` |
-| 4 | `steroid-architect` | `spec.md` + `research.md` | `.memory/changes/<feature>/plan.md` |
-| 5 | `steroid-engine` | `plan.md` | Working code (TDD loop) |
-| 6 | `steroid-verify` | Completed code | `.memory/changes/<feature>/verify.md` |
-| 7 | `steroid-diagnose` | Bug/error report | `.memory/changes/<feature>/diagnosis.md` |
+
+| #   | Skill                  | Input                     | Output                                   |
+| --- | ---------------------- | ------------------------- | ---------------------------------------- |
+| 0   | `steroid-scan`         | Project codebase          | `.memory/changes/<feature>/context.md`   |
+| 1   | `steroid-vibe-capture` | User's natural language   | `.memory/changes/<feature>/vibe.md`      |
+| 2   | `steroid-specify`      | `vibe.md`                 | `.memory/changes/<feature>/spec.md`      |
+| 3   | `steroid-research`     | `spec.md`                 | `.memory/changes/<feature>/research.md`  |
+| 4   | `steroid-architect`    | `spec.md` + `research.md` | `.memory/changes/<feature>/plan.md`      |
+| 5   | `steroid-engine`       | `plan.md`                 | Working code (TDD loop)                  |
+| 6   | `steroid-verify`       | Completed code            | `.memory/changes/<feature>/verify.md`    |
+| 7   | `steroid-diagnose`     | Bug/error report          | `.memory/changes/<feature>/diagnosis.md` |
 
 ### Intent Routing (v3.0)
-| Intent | Pipeline |
-|--------|---------|
-| **build** | scan → vibe → specify → research → architect → engine → verify |
-| **fix** | scan → diagnose → engine (targeted) → verify |
-| **refactor** | scan → specify → architect → engine → verify |
-| **migrate** | scan → research → architect → engine → verify |
-| **document** | scan → specify → engine → verify |
+
+| Intent       | Pipeline                                                       |
+| ------------ | -------------------------------------------------------------- |
+| **build**    | scan → vibe → specify → research → architect → engine → verify |
+| **fix**      | scan → diagnose → engine (targeted) → verify                   |
+| **refactor** | scan → specify → architect → engine → verify                   |
+| **migrate**  | scan → research → architect → engine → verify                  |
+| **document** | scan → specify → engine → verify                               |
 
 ### Prompt Intelligence (v6.2.0)
 
 Before vibe capture locks the feature direction, steroid-workflow can create a machine-readable prompt interpretation receipt at `.memory/changes/<feature>/prompt.json` and a human-readable companion at `.memory/changes/<feature>/prompt.md`.
 
 The receipt records:
+
 - primary and secondary intents
 - continuation state
 - ambiguity, complexity, and risk
@@ -139,27 +156,31 @@ The receipt records:
 
 That receipt is not just an intake helper. It is meant to travel through vibe, spec, research, architect, diagnose, engine, verify, archive, and handoff reporting so later phases do not silently forget early assumptions.
 
+For UI-intensive work, the prompt layer can be followed by `.memory/changes/<feature>/design-routing.json` and `.memory/changes/<feature>/design-system.md` so research, architecture, engine, and verify can all see the same imported frontend-system decisions. `gate research` now auto-prepares those artifacts when possible, and `gate architect` / `gate engine` hard-block UI-intensive work until they exist. When local HTML targets exist, `verify-feature` can also write `.memory/changes/<feature>/accessibility.json` from the internalized AccessLint runtime, `verify-feature --deep` can write `.memory/changes/<feature>/ui-audit.json` from the internal browser audit when a preview URL or auditable HTML target is available, and UI verification writes `.memory/changes/<feature>/ui-review.md` plus `.memory/changes/<feature>/ui-review.json` to summarize the combined frontend evidence. The UI review receipt now carries freshness metadata so `pipeline-status`, handoff reports, and dashboard output can show who refreshed the verdict and when the newest frontend evidence landed. `archive <feature>` and `report generate <feature>` refresh stale UI review receipts before making decisions so newer frontend evidence is not ignored, and archive now distinguishes cautionary `CONDITIONAL` frontend reviews from blocking `CONDITIONAL` cases that require `--force-ui` to proceed. Preview target resolution prefers `--url`, then deploy env vars, common `.env*` files, project preview receipts, feature preview receipts, `package.json` preview metadata, and finally local HTML files.
+
 ### Approved Adaptive Routes
-| Route | Use Case |
-|-------|----------|
-| `standard-build` | Normal feature work |
-| `diagnose-first` | Bugs, regressions, symptom-driven fixes |
-| `resume-mode` | Continue unfinished work from recent session state |
-| `lite-change` | Trivial, low-risk edits |
-| `research-heavy` | Migrations and high-risk changes |
-| `split-work` | Multi-intent prompts that should be decomposed |
+
+| Route            | Use Case                                           |
+| ---------------- | -------------------------------------------------- |
+| `standard-build` | Normal feature work                                |
+| `diagnose-first` | Bugs, regressions, symptom-driven fixes            |
+| `resume-mode`    | Continue unfinished work from recent session state |
+| `lite-change`    | Trivial, low-risk edits                            |
+| `research-heavy` | Migrations and high-risk changes                   |
+| `split-work`     | Multi-intent prompts that should be decomposed     |
 
 ### Gate Map (v3.1)
-| Phase | Requires | Alt Path | Min Lines |
-|-------|----------|----------|-----------|
-| `vibe` | `context.md` | — | 5 |
-| `specify` | `vibe.md` | — | 5 |
-| `research` | `spec.md` | — | 10 |
-| `architect` | `research.md` | — | 10 |
-| `diagnose` | `context.md` | — | 5 |
-| `engine` | `plan.md` | `diagnosis.md` | 10 |
-| `verify` | `plan.md` | `diagnosis.md` | 10 |
-| `archive` | `verify.json` (PASS/CONDITIONAL) | `--force` flag | — |
+
+| Phase       | Requires                         | Alt Path       | Min Lines |
+| ----------- | -------------------------------- | -------------- | --------- |
+| `vibe`      | `context.md`                     | —              | 5         |
+| `specify`   | `vibe.md`                        | —              | 5         |
+| `research`  | `spec.md`                        | —              | 10        |
+| `architect` | `research.md`                    | —              | 10        |
+| `diagnose`  | `context.md`                     | —              | 5         |
+| `engine`    | `plan.md`                        | `diagnosis.md` | 10        |
+| `verify`    | `plan.md`                        | `diagnosis.md` | 10        |
+| `archive`   | `verify.json` (PASS/CONDITIONAL) | `--force` flag | —         |
 
 ## Project Structure
 
@@ -209,10 +230,12 @@ your-project/
 All integrated forks are MIT licensed:
 
 ### Core Forks (integrated into skills)
+
 - **[obra/superpowers](https://github.com/obra/superpowers)** — TDD, subagent-driven development, systematic debugging, verification-before-completion, code review
 - **[Kiyoraka/Project-AI-MemoryCore](https://github.com/Kiyoraka/Project-AI-MemoryCore)** — Continuous state-tracking via markdown/JSON
 
 ### Ecosystem Forks (code ported into `steroid-run.cjs`)
+
 - **[snarktank/ralph](https://github.com/snarktank/ralph)** — Autonomous loop: progress tracking, archive pattern, AGENTS.md system
 - **[gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done)** — Verifier, codebase mapper, debugger, phase researcher, planner, executor, roadmapper
 - **[Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)** — Per-change folders: kebab-case validation

@@ -1,6 +1,6 @@
 {
   "name": "steroid-workflow",
-  "version": "6.2.2",
+  "version": "6.3.0-beta.1",
   "description": "AI agency-in-a-box for non-technical vibe coders. 8-skill pipeline with two-stage review, handoff reports, analytics dashboard, structured memory, smart recovery, prioritized stories, codebase scanning, spec-driven development, tech research, TDD, circuit breakers, verification, intent routing, and anti-summarization guards.",
   "bin": {
     "steroid-workflow": "bin/cli.js"
@@ -8,6 +8,8 @@
   "main": "bin/cli.js",
   "files": [
     "bin/",
+    "imported/",
+    "integrations/",
     "skills/",
     "src/forks/",
     "memory-template/",
@@ -58,5 +60,9 @@
   "devDependencies": {
     "eslint": "^8.57.0",
     "prettier": "^3.2.0"
+  },
+  "dependencies": {
+    "@accesslint/core": "^0.8.8",
+    "happy-dom": "^20.8.4"
   }
 }

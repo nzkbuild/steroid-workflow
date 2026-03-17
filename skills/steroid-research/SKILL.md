@@ -18,10 +18,13 @@ Activate immediately after `@steroid-specify` completes. Do not wait for user in
 ### 1. Phase Gate (Physical Enforcement)
 
 Before doing anything, run the gate check:
+
 ```
 node steroid-run.cjs gate research <feature>
 ```
+
 If this command fails, STOP. The specification phase is not complete.
+For UI-intensive work, this gate now auto-bootstraps `design-routing.json` and `design-system.md` when enough prompt/spec/vibe context exists.
 
 ### 2. No User Interaction
 
@@ -45,14 +48,29 @@ Direct terminal execution is strictly forbidden.
 ### 3b. Constraint Obedience (v5.5.0)
 
 Read the `## Hard Constraints` section from spec.md. If the user explicitly requested a specific technology, version, or approach (e.g., "must use Framer Motion", "do NOT use a database"), the research MUST:
+
 - Center around that constraint, not recommend alternatives
 - Explain how to best use the constrained technology, not argue against it
 - Only flag constraints that are technically impossible (e.g., "use React for an iOS native app")
 
 If `prompt.json` exists, also preserve:
+
 - `recommendedPipeline` as route context for how heavy the research should be
 - `complexity` and `risk` as signals for how cautious the investigation should be
 - `nonGoals` so you do not accidentally expand scope with optional tooling
+
+**Design prep primitive:** If you need to refresh both UI artifacts manually in one shot, run:
+`node steroid-run.cjs design-prep "<normalized prompt or user request>" --feature <feature> --write`
+
+**Design routing receipt:** For UI-intensive work, the research gate now tries to auto-create this. If you need only the routing receipt, run:
+`node steroid-run.cjs design-route "<normalized prompt or user request>" --feature <feature> --write`
+
+If `design-routing.json` exists afterward, treat it as the routing receipt for which internalized frontend systems Steroid should use during research.
+
+**Design system artifact:** For UI-intensive work, the research gate now tries to auto-create this too. If you need only the design system artifact, run:
+`node steroid-run.cjs design-system --feature <feature> --write`
+
+`design-system.md` is not optional polish. It is the binding artifact that Architect and Engine now expect for UI-intensive work.
 
 ### 3c. Brownfield Context Check (v5.5.0)
 
@@ -70,35 +88,47 @@ If `prompt.json` says `continuationState` is `resume` or `mid-feature`, prefer i
 For each user story in the spec, identify:
 
 **Standard Stack** — What libraries/frameworks are the proven choice for this type of feature?
+
 - Include specific version numbers
 - Prefer stable, well-maintained packages over trendy new ones
 - For a non-technical user's project, prefer zero-config or minimal-config tools
 
 **Architecture Patterns** — What's the recommended project structure and design approach?
+
 - File organization that scales
 - State management approach
 - Data flow patterns
 
 **Don't Hand-Roll** — What problems look simple but have battle-tested solutions?
+
 - Date/time handling → use a library
 - Form validation → use a library
 - Charting → use a library
 - Never build what npm already solved
 
 **Common Pitfalls** — What do beginners get wrong with this tech?
+
 - Gotchas that cause hours of debugging
 - Configuration traps
 - Dependency conflicts
+
+**Design Intelligence** — for any UI-intensive feature
+
+- If the spec includes landing pages, dashboards, marketing sites, app shells, forms, navigation, component libraries, onboarding, responsive layout, visual refreshes, or accessibility-driven UI work, treat design-system research as mandatory, not optional polish
+- Use Steroid's internal design routing layer first. Read `.memory/changes/<feature>/design-routing.json` when it exists so research loads only the right imported frontend packs instead of pulling everything at once
+- Read `.memory/changes/<feature>/design-system.md` when it exists and align research.md to it instead of creating a competing design direction
+- Produce one concrete design recommendation covering the surface, pattern, style direction, color system, typography, spacing, radii, shadows, interaction states, motion rules, responsive breakpoints, accessibility constraints, and anti-patterns to avoid
+- If a required imported pack is unavailable, synthesize the same section manually from vibe.md, spec.md, verified UX guidance, and product context. Never skip the section just because the repo has no design docs
 
 ### 5. Confidence Levels
 
 Every recommendation MUST include a confidence level:
 
-| Level | Meaning | Based On |
-|-------|---------|----------|
-| **HIGH** | Verified against official docs or package registry | Official documentation, npm/PyPI page |
-| **MEDIUM** | Multiple credible sources agree | Blog posts, Stack Overflow, community consensus |
-| **LOW** | Based on training data only, unverified | Flag for validation |
+| Level      | Meaning                                            | Based On                                        |
+| ---------- | -------------------------------------------------- | ----------------------------------------------- |
+| **HIGH**   | Verified against official docs or package registry | Official documentation, npm/PyPI page           |
+| **MEDIUM** | Multiple credible sources agree                    | Blog posts, Stack Overflow, community consensus |
+| **LOW**    | Based on training data only, unverified            | Flag for validation                             |
 
 Never present LOW confidence findings as authoritative.
 
@@ -106,7 +136,7 @@ Never present LOW confidence findings as authoritative.
 
 Write the output to `.memory/changes/<feature>/research.md` using this exact format:
 
-```markdown
+````markdown
 # Research: <Feature Name>
 
 **Researched**: <date>
@@ -120,18 +150,22 @@ Write the output to `.memory/changes/<feature>/research.md` using this exact for
 ## Standard Stack
 
 ### Core
-| Library | Version | Purpose | Confidence |
-|---------|---------|---------|------------|
-| [name] | [ver] | [what it does] | [HIGH/MEDIUM/LOW] |
+
+| Library | Version | Purpose        | Confidence        |
+| ------- | ------- | -------------- | ----------------- |
+| [name]  | [ver]   | [what it does] | [HIGH/MEDIUM/LOW] |
 
 ### Installation
+
 ```bash
 npm install [packages]
 ```
+````
 
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 src/
 ├── [folder]/        # [purpose]
@@ -140,34 +174,50 @@ src/
 ```
 
 ### Key Patterns
+
 - **[Pattern Name]**: [description and when to use it]
 
 ### Complex Architecture (v5.4.0 — investigate if applicable)
 
 If context.md or the user's request involves any of these, research them specifically:
 
-| Pattern | When to Investigate | What to Research |
-|---------|-------------------|-----------------|
-| Monorepo | Multiple packages/apps in one repo | Workspace tool (turborepo/nx/pnpm workspaces), shared deps |
-| Docker | Deployment isolation or services | Dockerfile patterns, docker-compose for dev, multi-stage builds |
-| Microservices | Multiple backends communicating | API gateway, service communication (REST/gRPC/message queue) |
-| Multi-language | Python + JS, Go + React, etc. | Project structure, build orchestration, shared types |
-| Database | Persistent data needed | ORM choice, migration strategy, seed data, connection pooling |
-| Auth | User accounts or protected routes | Provider (Clerk/Auth.js/Supabase Auth/JWT), token storage |
-| Real-time | Live updates or collaboration | WebSocket vs SSE vs polling, state sync |
-| CI/CD | Auto-deploy needed | GitHub Actions, Vercel, Railway, Docker registry |
+| Pattern        | When to Investigate                | What to Research                                                |
+| -------------- | ---------------------------------- | --------------------------------------------------------------- |
+| Monorepo       | Multiple packages/apps in one repo | Workspace tool (turborepo/nx/pnpm workspaces), shared deps      |
+| Docker         | Deployment isolation or services   | Dockerfile patterns, docker-compose for dev, multi-stage builds |
+| Microservices  | Multiple backends communicating    | API gateway, service communication (REST/gRPC/message queue)    |
+| Multi-language | Python + JS, Go + React, etc.      | Project structure, build orchestration, shared types            |
+| Database       | Persistent data needed             | ORM choice, migration strategy, seed data, connection pooling   |
+| Auth           | User accounts or protected routes  | Provider (Clerk/Auth.js/Supabase Auth/JWT), token storage       |
+| Real-time      | Live updates or collaboration      | WebSocket vs SSE vs polling, state sync                         |
+| CI/CD          | Auto-deploy needed                 | GitHub Actions, Vercel, Railway, Docker registry                |
 
 If none of these patterns apply, skip this section.
 
+## Design Intelligence (mandatory for UI-intensive work)
+
+If the feature is UI-intensive, this section is REQUIRED. If the feature is backend-only, omit it.
+
+- **Surface**: [landing page / dashboard / app shell / settings / onboarding / component library / etc.]
+- **Pattern**: [recommended page or app pattern]
+- **Style Direction**: [specific visual direction tied to product type]
+- **Color Tokens**: [primary / secondary / accent / surface / text / border]
+- **Typography**: [font pairing or explicit system stack and scale]
+- **Layout Rules**: [breakpoints, spacing rhythm, container widths, grid logic]
+- **Interaction & Motion**: [hover/focus/pressed/loading rules, animation constraints]
+- **Accessibility Constraints**: [contrast, focus, keyboard/touch targets, reduced motion]
+- **Anti-Patterns To Avoid**: [specific things this project must not ship]
+
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| [problem] | [custom solution] | [library] | [edge cases it handles] |
+| Problem   | Don't Build       | Use Instead | Why                     |
+| --------- | ----------------- | ----------- | ----------------------- |
+| [problem] | [custom solution] | [library]   | [edge cases it handles] |
 
 ## Common Pitfalls
 
 ### Pitfall 1: [Name]
+
 **What goes wrong**: [description]
 **How to avoid**: [prevention strategy]
 
@@ -187,13 +237,13 @@ For static sites with no user input: "No server-side security concerns. Ensure n
 
 Assess whether the feature being built triggers any regulatory or industry standards:
 
-| Domain | Standard | When It Applies |
-|--------|----------|----------------|
-| User data / EU users | GDPR | Any app collecting personal data |
-| Health data | HIPAA | Health tracking, medical records |
-| Payments | PCI DSS | Processing credit cards |
-| Accessibility | WCAG 2.1 AA | All web apps (non-negotiable baseline) |
-| Security | OWASP Top 10 | Any app with user input or authentication |
+| Domain               | Standard     | When It Applies                           |
+| -------------------- | ------------ | ----------------------------------------- |
+| User data / EU users | GDPR         | Any app collecting personal data          |
+| Health data          | HIPAA        | Health tracking, medical records          |
+| Payments             | PCI DSS      | Processing credit cards                   |
+| Accessibility        | WCAG 2.1 AA  | All web apps (non-negotiable baseline)    |
+| Security             | OWASP Top 10 | Any app with user input or authentication |
 
 If applicable, add a `## Compliance Requirements` section to research.md documenting which standards apply and what the Architect must include in the plan. If none apply, write: "No regulatory requirements detected for this feature."
 
@@ -211,6 +261,7 @@ For simple static sites: "Deploy `dist/` to Vercel or Netlify. Zero config neede
 ## Open Questions
 
 - [Anything unresolved that the Architect should be aware of]
+
 ```
 
 ### 7. Anti-Summarization Directive
@@ -234,6 +285,7 @@ Input (from spec.md): Habit tracker with daily checklist, streak tracking, weekl
 
 Output (.memory/changes/habit-tracker/research.md):
 ```
+
 # Research: Habit Tracker
 
 **Researched**: 2026-03-11
@@ -249,17 +301,19 @@ The biggest risk is date/time handling for streak calculations. Using date-fns p
 ## Standard Stack
 
 ### Core
-| Library | Version | Purpose | Confidence |
-|---------|---------|---------|------------|
-| React | 18.3 | UI framework | HIGH |
-| Vite | 5.4 | Build tool, zero-config | HIGH |
-| TypeScript | 5.6 | Type safety | HIGH |
-| Tailwind CSS | 3.4 | Utility-first styling | HIGH |
-| Chart.js | 4.4 | Bar chart for weekly overview | HIGH |
-| react-chartjs-2 | 5.2 | React wrapper for Chart.js | HIGH |
-| date-fns | 3.6 | Date manipulation (streak calc) | HIGH |
+
+| Library         | Version | Purpose                         | Confidence |
+| --------------- | ------- | ------------------------------- | ---------- |
+| React           | 18.3    | UI framework                    | HIGH       |
+| Vite            | 5.4     | Build tool, zero-config         | HIGH       |
+| TypeScript      | 5.6     | Type safety                     | HIGH       |
+| Tailwind CSS    | 3.4     | Utility-first styling           | HIGH       |
+| Chart.js        | 4.4     | Bar chart for weekly overview   | HIGH       |
+| react-chartjs-2 | 5.2     | React wrapper for Chart.js      | HIGH       |
+| date-fns        | 3.6     | Date manipulation (streak calc) | HIGH       |
 
 ### Installation
+
 ```bash
 npm create vite@latest .steroid-scaffold-tmp -- --template react-ts
 # Then merge into project root (see steroid-engine scaffold safety rules)
@@ -269,6 +323,7 @@ npm install tailwindcss chart.js react-chartjs-2 date-fns
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 src/
 ├── components/      # HabitCard, HabitList, StreakCounter, WeeklyChart, AddHabitModal
@@ -280,34 +335,39 @@ src/
 ```
 
 ### Key Patterns
+
 - **Custom Hooks for State**: useHabits() encapsulates all localStorage read/write logic. Components never touch localStorage directly.
 - **Immutable State Updates**: Always create new arrays/objects when updating habits. Never mutate state directly.
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Date math | Custom day-difference calc | date-fns differenceInCalendarDays | Timezone bugs, DST, leap years |
-| Bar charts | Canvas/SVG from scratch | Chart.js + react-chartjs-2 | Responsive, accessible, animated |
-| CSS utilities | Custom utility classes | Tailwind CSS | Apple Health aesthetic achievable with rounded-xl, shadow-sm, bg-emerald-500 |
+| Problem       | Don't Build                | Use Instead                       | Why                                                                          |
+| ------------- | -------------------------- | --------------------------------- | ---------------------------------------------------------------------------- |
+| Date math     | Custom day-difference calc | date-fns differenceInCalendarDays | Timezone bugs, DST, leap years                                               |
+| Bar charts    | Canvas/SVG from scratch    | Chart.js + react-chartjs-2        | Responsive, accessible, animated                                             |
+| CSS utilities | Custom utility classes     | Tailwind CSS                      | Apple Health aesthetic achievable with rounded-xl, shadow-sm, bg-emerald-500 |
 
 ## Common Pitfalls
 
 ### Pitfall 1: Midnight Rollover
+
 **What goes wrong**: Streak breaks or doubles when user completes a habit near midnight
 **How to avoid**: Use date-fns startOfDay() to normalize all timestamps. Compare calendar days, not timestamps.
 
 ### Pitfall 2: localStorage Quota
+
 **What goes wrong**: Silent failures when storage is full (~5MB limit)
 **How to avoid**: Wrap localStorage.setItem in try/catch. Show graceful error if full.
 
 ### Pitfall 3: Chart.js Tree Shaking
+
 **What goes wrong**: Bundle bloat from importing all of Chart.js
 **How to avoid**: Import only needed components: `import { Bar } from 'react-chartjs-2'` and register only used elements.
 
 ## Open Questions
 
 - None. This is a well-understood problem space with stable tools.
+
 ```
 </good>
 
@@ -322,3 +382,4 @@ To understand the full, unmodified logic behind this skill's research methodolog
 
 - `src/forks/gsd/agents/gsd-phase-researcher.md` - The complete GSD research agent (556 lines)
 - `src/forks/gsd/agents/gsd-research-synthesizer.md` - The GSD research synthesis agent
+```

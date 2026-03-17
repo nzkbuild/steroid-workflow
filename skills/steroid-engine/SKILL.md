@@ -33,20 +33,21 @@ NEVER overwrite the project's `.gitignore`. The installer appends steroid entrie
 
 These files MUST NOT be replaced entirely. Always read first, then modify:
 
-| File | Rule |
-|------|------|
-| `.gitignore` | APPEND only. Never replace. |
-| `package.json` | Add/update fields. Never rewrite from scratch. |
-| `tsconfig.json` | Modify options. Never replace. |
-| `.env` / `.env.local` | NEVER touch. Contains secrets. |
-| `next.config.*` / `vite.config.*` | Read before modifying. |
-| Any file in `.memory/` | Read-only during engine phase. |
+| File                              | Rule                                           |
+| --------------------------------- | ---------------------------------------------- |
+| `.gitignore`                      | APPEND only. Never replace.                    |
+| `package.json`                    | Add/update fields. Never rewrite from scratch. |
+| `tsconfig.json`                   | Modify options. Never replace.                 |
+| `.env` / `.env.local`             | NEVER touch. Contains secrets.                 |
+| `next.config.*` / `vite.config.*` | Read before modifying.                         |
+| Any file in `.memory/`            | Read-only during engine phase.                 |
 
 If you must create one of these files for a fresh project, ensure existing content (if any) is preserved.
 
 ### Anti-Deletion Guard (v5.5.0)
 
 When modifying an existing file, you MUST preserve all existing:
+
 - Exported functions and components
 - UI elements and layouts
 - Route definitions
@@ -66,7 +67,8 @@ NEVER run scaffold commands (`npm create`, `npx create-*`, `npm init`, `yarn cre
 
 The circuit breaker will physically block these commands. If you attempt `node steroid-run.cjs 'npm create vite . ...'`, the circuit breaker will refuse execution and suggest the safe alternative.
 
-**Safe pattern (v6.0.0 — uses shell-free fs-* subcommands):**
+**Safe pattern (v6.0.0 — uses shell-free fs-\* subcommands):**
+
 1. Scaffold into a temp subdirectory:
    `node steroid-run.cjs 'npx create-next-app@latest .steroid-scaffold-tmp --typescript ...'`
 2. Copy scaffolded files into root:
@@ -83,9 +85,11 @@ The circuit breaker will physically block these commands. If you attempt `node s
 ## Phase Gate (Physical Enforcement)
 
 Before doing anything, run the gate check:
+
 ```
 node steroid-run.cjs gate engine <feature>
 ```
+
 If this command fails, STOP. The architecture phase is not complete.
 
 ## Pre-Execution Setup
@@ -99,10 +103,25 @@ node steroid-run.cjs git-init
 If the build goes wrong, the user can recover with `git reset --hard`.
 
 Also inspect whether this feature is coming from:
+
 - `plan.md` for the normal build/refactor/migrate/document path
 - `diagnosis.md` for the targeted fix path
 
 If the feature came from a `split-work` route, complete one clearly scoped sub-problem or story at a time instead of mixing separate intents in the same execution burst.
+
+## Frontend Design Discipline
+
+If `research.md` or `plan.md` indicates UI-intensive work:
+
+- Read the `## Design Intelligence` section from `research.md` before the first UI task and treat it as binding execution context
+- Read `.memory/changes/<feature>/design-routing.json` when present so you know which internalized frontend systems Steroid selected for this feature
+- Read `.memory/changes/<feature>/design-system.md` before the first UI task and treat it as the concrete design source of truth
+- Use Steroid's internal imported frontend systems as implementation constraints, not as an excuse to invent a second design direction from scratch
+- Implement semantic tokens, layout hierarchy, responsive behavior, and interaction states before decorative polish
+- Never default to generic AI-looking design: random gradients, placeholder glass cards, inconsistent radii or shadows, noisy purple-on-dark heroes, or motion without purpose
+- Do not mark a frontend task complete until hover/focus/active/disabled/loading/empty/error states and accessibility constraints are implemented
+
+For UI-intensive work, the physical gate now blocks engine if `design-routing.json` or `design-system.md` is missing.
 
 ## The Autonomous Execution Loop
 
@@ -162,10 +181,10 @@ Before starting any task, read `.memory/progress.md` — especially the **Codeba
 After completing the FIRST task in plan.md (typically project init/scaffold):
 
 1. Update the **Codebase Patterns** section in `.memory/progress.md` with actual values:
-   - Language (from file extensions and package.json)
-   - Framework (from package.json dependencies)
-   - Package Manager (npm/yarn/pnpm — from lockfile)
-   - Test framework (from devDependencies — jest/vitest/mocha/etc)
+    - Language (from file extensions and package.json)
+    - Framework (from package.json dependencies)
+    - Package Manager (npm/yarn/pnpm — from lockfile)
+    - Test framework (from devDependencies — jest/vitest/mocha/etc)
 2. This ensures remaining tasks have accurate context instead of "Unknown".
 
 ### Post-Scaffold Rescan (v6.0.0 — PHYSICAL GATE)
@@ -197,6 +216,7 @@ node steroid-run.cjs 'git remote -v'
 ```
 
 If no remote is configured:
+
 1. Note in progress.md: "Remote: None — local only"
 2. Skip `.github/workflows/ci.yml` creation (it's useless without a remote)
 3. The commit command will show a plain-English guide for setting up GitHub
@@ -208,10 +228,10 @@ If plan.md contains tasks targeting different sub-directories (monorepo, separat
 1. Note the target directory for each task in progress.md
 2. Run `node steroid-run.cjs` commands from the project ROOT, not sub-directories
 3. When installing packages in sub-projects, use the guarded cwd wrapper instead of `cd ... && ...`:
-   ```bash
-   node steroid-run.cjs run --cwd=apps/web 'npm install <package>'
-   node steroid-run.cjs run --cwd=apps/api 'pip install <package>'
-   ```
+    ```bash
+    node steroid-run.cjs run --cwd=apps/web 'npm install <package>'
+    node steroid-run.cjs run --cwd=apps/api 'pip install <package>'
+    ```
 4. Run verify commands against each sub-project separately
 5. Commit from root — steroid tracks the entire repo, not sub-directories
 
@@ -224,6 +244,7 @@ node steroid-run.cjs 'npm ls <package> --depth=0'
 ```
 
 If major version differs from research.md (e.g., research says Tailwind 3.4+ but v4 installed):
+
 1. Note the mismatch in progress.md Codebase Patterns
 2. Adapt your approach to the INSTALLED version, not the researched one
 3. Check for breaking API changes (e.g., Tailwind v4 uses `@theme` instead of `@tailwind`)
@@ -244,6 +265,7 @@ After completing every 5th task in plan.md, output a checkpoint:
 "🔨 [X/Y] tasks complete. [remaining] tasks left. Continue or split into a new session?"
 
 This gives the user a natural breakpoint to:
+
 - Split into a new conversation (context preserved via progress.md + plan.md)
 - Prioritize remaining tasks if time/tokens are limited
 - Stop early if the MVP is already sufficient
@@ -251,11 +273,13 @@ This gives the user a natural breakpoint to:
 ### Heartbeat Check (v6.0.0)
 
 After completing every 3rd task, run:
+
 ```
 node steroid-run.cjs smoke-test
 ```
 
 If the smoke test FAILS:
+
 1. STOP all forward progress
 2. Fix the build/compile error
 3. Re-run `node steroid-run.cjs smoke-test`
@@ -266,12 +290,14 @@ This prevents dependency drift, missing imports, and cascading build failures. T
 **Phase 1: Implementation (TDD)**
 
 **Commenting Standards (v5.3.0):** When implementing code, follow these rules:
+
 - Each file gets a one-line module header comment explaining its purpose
 - Public functions used by other files get JSDoc with `@param` and `@returns`
 - Complex logic gets a comment explaining WHY, not WHAT
 - No obvious comments (don't write `// increment counter` above `counter++`)
 
 Dispatch a fresh Implementer sub-agent. Provide it with:
+
 - The full text of the current task from `plan.md`
 - The raw TDD methodology from `src/forks/superpowers/tdd.md`
 - The `steroid-run` mandate (all commands via `node steroid-run.cjs`)
@@ -286,6 +312,7 @@ The Implementer sub-agent follows the Red-Green-Refactor cycle from the forked T
 Reference the full TDD rules in `src/forks/superpowers/tdd.md`. The Implementer MUST follow The Iron Law: no production code without a failing test first.
 
 **True TDD Guard (v6.0.0):** The following are strictly forbidden:
+
 - Writing production code before the test exists
 - Writing trivial tests like `expect(true).toBe(true)` or `expect(1).toBe(1)`
 - Writing tests that can never fail (e.g., testing a hardcoded return value)
@@ -298,6 +325,7 @@ If the plan includes "Write test:" items, the engine MUST install a test framewo
 If the plan includes N test items and `verify-feature` later finds 0 test files, verification FAILS regardless of build status. This is a hard gate.
 
 **Anti-Loop Directive (v5.5.0):** If you encounter the same error 3 times in a row (`Error 3/5` from the circuit breaker):
+
 1. STOP attempting code changes immediately
 2. Re-read the error message, the failing file, and research.md
 3. Write a brief summary in progress.md explaining why your previous approach was wrong
@@ -308,6 +336,7 @@ Guessing the same fix repeatedly is forbidden. Fresh perspective is mandatory.
 **Phase 2: Spec Compliance Review**
 
 Dispatch a SEPARATE, fresh Reviewer sub-agent using the prompt template from `src/forks/superpowers/spec-reviewer-prompt.md`. Give it:
+
 - The original task specification from `plan.md`
 - The acceptance criteria from `.memory/changes/<feature>/spec.md` (if referenced)
 - The code that was committed by the Implementer
@@ -323,18 +352,20 @@ Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-qual
 1. Run: `node steroid-run.cjs verify <primary-file> --min-lines=<expected>`
 2. If passing, mark the task as `[x]` in `plan.md`
 3. Commit atomically using the physical commit command:
-   ```
-   node steroid-run.cjs commit "<task-description>"
-   ```
+    ```
+    node steroid-run.cjs commit "<task-description>"
+    ```
 4. Log the task completion using the physical log command:
-   ```
-   node steroid-run.cjs log <feature> "<what was implemented — one sentence>"
-   ```
+
+    ```
+    node steroid-run.cjs log <feature> "<what was implemented — one sentence>"
+    ```
 
 5. If you discover reusable patterns, add them to the **Codebase Patterns** section at the TOP of `progress.md`:
 
 ```markdown
 ## Codebase Patterns
+
 - Example: Use `date-fns startOfDay()` for all date comparisons
 - Example: Tailwind class `rounded-xl shadow-sm` for Apple Health card style
 - Example: Always wrap localStorage.setItem in try/catch
@@ -345,12 +376,14 @@ Only add patterns that are **general and reusable**, not task-specific details.
 **Knowledge Persistence (v6.0.0 — MANDATORY):**
 
 After every 5th completed task, run ALL of the following:
+
 ```
 node steroid-run.cjs memory write gotchas '{"<issue>": "<what you learned>"}'
 node steroid-run.cjs memory write patterns '{"<pattern>": "<how to use it>"}'
 ```
 
 If you encounter a version mismatch (plan says X, installed Y):
+
 ```
 node steroid-run.cjs memory write gotchas '{"version-drift": "<what differed and why>"}'
 ```
@@ -361,6 +394,7 @@ Failure to write knowledge is a verifiable gap — `verify-feature` checks that 
 
 ```markdown
 ## Learnings (Session <date>)
+
 - <specific technical insight, e.g., "Tailwind v4 removed @apply — use CSS variables instead">
 - <gotcha encountered, e.g., "Next.js 15 requires 'use client' for any component using useState">
 - <tool/version quirk, e.g., "This project uses pnpm — npm install will create a conflicting lockfile">
@@ -371,9 +405,11 @@ This is NOT optional. Even if the task went smoothly, document at least one lear
 **Step 5: Check Completion & Loop**
 
 After completing a task, physically check if all tasks are done:
+
 ```
 node steroid-run.cjs check-plan <feature>
 ```
+
 - If exit code 0 (all complete) → proceed to Completion
 - If exit code 1 (tasks remaining) → wipe sub-agent contexts, loop back to Step 0 with the next `[ ]` task
 
@@ -403,13 +439,13 @@ When `node steroid-run.cjs check-plan <feature>` exits with code 0 (all tasks co
 2. **Hand off to the `steroid-verify` skill** (see `skills/steroid-verify/SKILL.md`).
    The verify skill performs the core verification gate, can run optional deep scans, and writes results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<feature>/verify.json`.
 3. If verification **PASSES**:
-   - Archive the feature: `node steroid-run.cjs archive <feature>` (this now requires a passing `verify.json` receipt)
-   - Output: "🎉 The technical blueprint is fully implemented and verified!"
-   - Signal completion: `<promise>COMPLETE</promise>`
+    - Archive the feature: `node steroid-run.cjs archive <feature>` (this now requires a passing `verify.json` receipt)
+    - Output: "🎉 The technical blueprint is fully implemented and verified!"
+    - Signal completion: `<promise>COMPLETE</promise>`
 4. If verification **FAILS**:
-   - Output: "⚠️ Verification found issues. Fixing..."
-   - Loop back to Step 0 to fix the flagged items
-   - Re-verify after fixes
+    - Output: "⚠️ Verification found issues. Fixing..."
+    - Loop back to Step 0 to fix the flagged items
+    - Re-verify after fixes
 
 ## The Silence Directive
 

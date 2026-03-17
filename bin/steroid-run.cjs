@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 6.2.2
+ * @version 6.3.0-beta.1
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -61,9 +61,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { pathToFileURL } = require('url');
 
 /** @type {string} Current working directory (user's project root) */
 const targetDir = process.cwd();
+/** @type {string} Package root (used as a local-development fallback for imported assets) */
+const packageRootDir = path.resolve(__dirname, '..');
+/** @type {string} Root directory that actually contains imported Steroid assets */
+const runtimeAssetsRootDir = fs.existsSync(path.join(targetDir, 'imported', 'imported-manifest.json'))
+    ? targetDir
+    : packageRootDir;
 /** @type {string} Path to circuit breaker state file */
 const stateFile = path.join(targetDir, '.memory', 'execution_state.json');
 /** @type {string} Root of steroid memory directory */
@@ -78,6 +85,10 @@ const knowledgeDir = path.join(memoryDir, 'knowledge');
 const metricsDir = path.join(memoryDir, 'metrics');
 /** @type {string} Directory for handoff reports */
 const reportsDir = path.join(memoryDir, 'reports');
+/** @type {string} Directory containing imported internalized source snapshots */
+const importedDir = path.join(runtimeAssetsRootDir, 'imported');
+/** @type {string} Directory containing internal runtime integrations */
+const integrationsDir = path.join(runtimeAssetsRootDir, 'integrations');
 
 // ═══════════════════════════════════════════════════════════════════
 // § UTILITY FUNCTIONS
@@ -212,6 +223,1171 @@ function tokenizeCommand(input) {
 
     if (current) tokens.push(current);
     return tokens;
+}
+
+/**
+ * Reads the imported source manifest if present.
+ *
+ * @returns {{sources?: Array<Record<string, any>>}}
+ */
+function readImportedManifest() {
+    const manifestFile = path.join(importedDir, 'imported-manifest.json');
+    if (!fs.existsSync(manifestFile)) return { sources: [] };
+    return JSON.parse(fs.readFileSync(manifestFile, 'utf-8'));
+}
+
+/**
+ * Resolves an imported source entry by id.
+ *
+ * @param {string} id
+ * @returns {Record<string, any>|null}
+ */
+function getImportedSource(id) {
+    const manifest = readImportedManifest();
+    return (manifest.sources || []).find((source) => source.id === id) || null;
+}
+
+/**
+ * Resolves an imported source path relative to the current project.
+ *
+ * @param {string} id
+ * @returns {string|null}
+ */
+function resolveImportedSourcePath(id) {
+    const source = getImportedSource(id);
+    if (!source) return null;
+    return path.join(runtimeAssetsRootDir, source.localPath);
+}
+
+function includesAny(haystack, needles) {
+    return needles.some((needle) => haystack.includes(needle));
+}
+
+function detectUiTask(input) {
+    const text = String(input || '').toLowerCase();
+    return includesAny(text, [
+        'design',
+        'redesign',
+        'ui',
+        'ux',
+        'frontend',
+        'landing page',
+        'dashboard',
+        'page',
+        'screen',
+        'component',
+        'layout',
+        'responsive',
+        'styling',
+        'theme',
+        'onboarding',
+        'navigation',
+        'accessibility',
+        'a11y',
+        'refactor the ui',
+    ]);
+}
+
+function detectAuditMode(input) {
+    const text = String(input || '').toLowerCase();
+    return includesAny(text, ['audit', 'review', 'check', 'inspect', 'accessibility', 'a11y', 'compliance']);
+}
+
+function detectDesignStack(input) {
+    const text = String(input || '').toLowerCase();
+    if (includesAny(text, ['react native', 'expo', 'ios', 'android', 'mobile app', 'native app'])) {
+        return 'react-native';
+    }
+    if (includesAny(text, ['react', 'next.js', 'nextjs', 'server component', 'client component'])) {
+        return 'react';
+    }
+    return 'web';
+}
+
+/**
+ * Routes UI work to Steroid's internalized design systems.
+ *
+ * @param {string} prompt
+ * @param {{stack?: string, auditOnly?: boolean}} [options]
+ * @returns {{domain: string, wrapperSkill: string|null, importedSourceIds: string[], importedSourcePaths: string[], auditOnly: boolean, stack: string}}
+ */
+function routeDesignSystems(prompt, options = {}) {
+    const combined = `${prompt || ''} ${options.stack || ''}`.trim().toLowerCase();
+    const isUiTask = detectUiTask(combined);
+    const isAudit = Boolean(options.auditOnly) || detectAuditMode(combined);
+    const stack = detectDesignStack(combined);
+
+    if (!isUiTask && !isAudit) {
+        return {
+            domain: 'none',
+            wrapperSkill: null,
+            importedSourceIds: [],
+            importedSourcePaths: [],
+            auditOnly: false,
+            stack,
+        };
+    }
+
+    const importedSourceIds = ['ui-ux-pro-max', 'bencium-ux-designer'];
+    let wrapperSkill = 'steroid-design-orchestrator';
+
+    if (stack === 'react-native') {
+        importedSourceIds.push('vercel-react-native-skills');
+        wrapperSkill = 'steroid-rn-implementation';
+    } else {
+        importedSourceIds.push('anthropic-frontend-design');
+        importedSourceIds.push('vercel-web-design-guidelines');
+        importedSourceIds.push('vercel-web-interface-guidelines');
+        if (stack === 'react') {
+            importedSourceIds.push('vercel-react-best-practices');
+            importedSourceIds.push('vercel-composition-patterns');
+            wrapperSkill = 'steroid-react-implementation';
+        }
+    }
+
+    if (isAudit) {
+        wrapperSkill = 'steroid-web-design-review';
+        if (!importedSourceIds.includes('accesslint-core')) importedSourceIds.push('accesslint-core');
+    }
+
+    const uniqueSourceIds = importedSourceIds.filter(
+        (id, index) => importedSourceIds.indexOf(id) === index && getImportedSource(id),
+    );
+
+    return {
+        domain: stack,
+        wrapperSkill,
+        importedSourceIds: uniqueSourceIds,
+        importedSourcePaths: uniqueSourceIds.map((id) => resolveImportedSourcePath(id)).filter(Boolean),
+        auditOnly: isAudit,
+        stack,
+    };
+}
+
+function hasText(value) {
+    return typeof value === 'string' && value.trim().length > 0;
+}
+
+function resolveFeaturePromptForDesign(featureDir) {
+    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    if (hasText(designReceipt?.prompt)) {
+        return designReceipt.prompt.trim();
+    }
+
+    const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
+    const candidates = [
+        promptReceipt?.normalizedSummary,
+        promptReceipt?.pipelineHint,
+        readFeatureArtifactText(featureDir, 'vibe.md'),
+        readFeatureArtifactText(featureDir, 'spec.md'),
+    ]
+        .filter(hasText)
+        .map((value) => normalizePromptWhitespace(value))
+        .filter(Boolean);
+
+    if (candidates.length === 0) {
+        return '';
+    }
+
+    return candidates.join(' | ').slice(0, 1200).trim();
+}
+
+function resolvePythonRunner() {
+    const candidates = [
+        { command: 'python', args: [] },
+        { command: 'python3', args: [] },
+        { command: 'py', args: ['-3'] },
+    ];
+
+    for (const candidate of candidates) {
+        const probe = spawnSync(candidate.command, [...candidate.args, '--version'], {
+            cwd: targetDir,
+            stdio: 'pipe',
+            encoding: 'utf-8',
+            timeout: 5000,
+        });
+        if (!probe.error && probe.status === 0) {
+            return candidate;
+        }
+    }
+
+    return null;
+}
+
+function generateDesignSystemMarkdown(query, options = {}) {
+    const importedRoot = resolveImportedSourcePath('ui-ux-pro-max');
+    if (!importedRoot) {
+        return {
+            ok: false,
+            error: 'ui-ux-pro-max is not installed in this Steroid project. Re-run `steroid-workflow init`.',
+        };
+    }
+
+    const searchScript = path.join(importedRoot, 'scripts', 'search.py');
+    if (!fs.existsSync(searchScript)) {
+        return {
+            ok: false,
+            error: `Missing imported design-system generator: ${path.relative(targetDir, searchScript)}`,
+        };
+    }
+
+    const python = resolvePythonRunner();
+    if (!python) {
+        return {
+            ok: false,
+            error: 'Python is required to run the imported ui-ux-pro-max generator, but no python executable was found.',
+        };
+    }
+
+    const commandArgs = [...python.args, searchScript, query, '--design-system', '--format', 'markdown'];
+    if (hasText(options.projectName)) {
+        commandArgs.push('--project-name', options.projectName.trim());
+    }
+
+    const result = spawnSync(python.command, commandArgs, {
+        cwd: targetDir,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+        timeout: 120000,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    });
+
+    if (result.error) {
+        return {
+            ok: false,
+            error: `Failed to run imported design-system generator: ${result.error.message}`,
+        };
+    }
+
+    if (result.status !== 0) {
+        return {
+            ok: false,
+            error:
+                result.stderr?.trim() ||
+                result.stdout?.trim() ||
+                `Imported design-system generator exited with code ${result.status}.`,
+        };
+    }
+
+    const content = String(result.stdout || '').trim();
+    if (!content) {
+        return {
+            ok: false,
+            error: 'Imported design-system generator returned empty output.',
+        };
+    }
+
+    return {
+        ok: true,
+        content,
+        scriptPath: searchScript,
+        pythonCommand: [python.command, ...python.args].join(' '),
+    };
+}
+
+function resolveAccessLintRunnerPath() {
+    return path.join(integrationsDir, 'accesslint', 'run-audit.cjs');
+}
+
+function resolveBrowserAuditRunnerPath() {
+    return path.join(integrationsDir, 'browser-audit', 'run-playwright-audit.cjs');
+}
+
+function readFeatureArtifactText(featureDir, fileName) {
+    const artifactPath = path.join(featureDir, fileName);
+    if (!fs.existsSync(artifactPath)) return '';
+    try {
+        return fs.readFileSync(artifactPath, 'utf-8');
+    } catch {
+        return '';
+    }
+}
+
+function detectUiFeatureForGate(featureDir, promptReceipt = null) {
+    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    if (designReceipt && designReceipt.domain !== 'none' && !designReceipt.auditOnly) {
+        return true;
+    }
+
+    const combined = [
+        promptReceipt?.normalizedSummary,
+        promptReceipt?.pipelineHint,
+        readFeatureArtifactText(featureDir, 'vibe.md'),
+        readFeatureArtifactText(featureDir, 'spec.md'),
+        readFeatureArtifactText(featureDir, 'research.md'),
+        readFeatureArtifactText(featureDir, 'plan.md'),
+    ]
+        .filter(Boolean)
+        .join('\n')
+        .toLowerCase();
+
+    return detectUiTask(combined);
+}
+
+function getMissingDesignArtifactsForPhase(featureDir, phase, promptReceipt = null) {
+    if (!['architect', 'engine'].includes(phase)) {
+        return [];
+    }
+
+    if (!detectUiFeatureForGate(featureDir, promptReceipt)) {
+        return [];
+    }
+
+    const missing = [];
+    if (!fs.existsSync(path.join(featureDir, 'design-routing.json'))) {
+        missing.push('design-routing.json');
+    }
+    if (!fs.existsSync(path.join(featureDir, 'design-system.md'))) {
+        missing.push('design-system.md');
+    }
+    return missing;
+}
+
+function collectAccessibilityAuditTargets() {
+    const targets = [];
+    const seen = new Set();
+    const roots = ['out', 'dist', 'build', 'public', '.next/server/app', '.next/server/pages', 'src'];
+    const exactFiles = ['index.html'];
+
+    const pushFile = (filePath) => {
+        const absolutePath = path.resolve(filePath);
+        if (!fs.existsSync(absolutePath)) return;
+        if (!/\.html?$/i.test(absolutePath)) return;
+        if (seen.has(absolutePath)) return;
+        seen.add(absolutePath);
+        targets.push(absolutePath);
+    };
+
+    const walkDir = (dirPath) => {
+        for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+            if (entry.name.startsWith('.git') || entry.name === 'node_modules') continue;
+            const fullPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                walkDir(fullPath);
+            } else if (entry.isFile()) {
+                pushFile(fullPath);
+            }
+        }
+    };
+
+    for (const relativeRoot of roots) {
+        const rootPath = path.join(targetDir, relativeRoot);
+        if (fs.existsSync(rootPath) && fs.statSync(rootPath).isDirectory()) {
+            walkDir(rootPath);
+        }
+    }
+
+    for (const relativeFile of exactFiles) {
+        pushFile(path.join(targetDir, relativeFile));
+    }
+
+    return targets.slice(0, 25);
+}
+
+function summarizeAccessibilityImpact(impact) {
+    if (impact === 'critical' || impact === 'serious') return 'FAIL';
+    if (impact === 'moderate' || impact === 'minor') return 'WARN';
+    return 'PASS';
+}
+
+function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function normalizePreviewUrlCandidate(value) {
+    const trimmed = String(value || '')
+        .trim()
+        .replace(/^['"]|['"]$/g, '');
+    if (!trimmed) return '';
+    if (isHttpUrl(trimmed)) return trimmed;
+    if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(trimmed)) {
+        return `https://${trimmed.replace(/^\/+/, '')}`;
+    }
+    return '';
+}
+
+function getPreviewUrlEnvKeys() {
+    return [
+        'STEROID_VERIFY_URL',
+        'PLAYWRIGHT_BASE_URL',
+        'SITE_URL',
+        'APP_URL',
+        'NEXT_PUBLIC_SITE_URL',
+        'NEXT_PUBLIC_APP_URL',
+        'NEXT_PUBLIC_VERCEL_URL',
+        'VITE_SITE_URL',
+        'VITE_APP_URL',
+        'PUBLIC_SITE_URL',
+        'PUBLIC_APP_URL',
+        'VERCEL_URL',
+        'VERCEL_BRANCH_URL',
+        'URL',
+        'DEPLOY_PRIME_URL',
+        'CF_PAGES_URL',
+        'RENDER_EXTERNAL_URL',
+        'RAILWAY_PUBLIC_DOMAIN',
+    ];
+}
+
+function resolvePreviewUrlFromEnvFiles() {
+    const candidateFiles = [
+        '.env.local',
+        '.env',
+        '.env.development.local',
+        '.env.development',
+        '.env.preview.local',
+        '.env.preview',
+        '.env.production.local',
+        '.env.production',
+    ];
+    const candidateKeys = getPreviewUrlEnvKeys();
+
+    for (const relativeFile of candidateFiles) {
+        const filePath = path.join(targetDir, relativeFile);
+        if (!fs.existsSync(filePath)) continue;
+
+        const content = fs.readFileSync(filePath, 'utf-8');
+        for (const rawLine of content.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith('#') || !line.includes('=')) continue;
+            const eqIndex = line.indexOf('=');
+            const key = line.slice(0, eqIndex).trim();
+            if (!candidateKeys.includes(key)) continue;
+
+            const value = normalizePreviewUrlCandidate(line.slice(eqIndex + 1));
+            if (value) {
+                return {
+                    target: value,
+                    source: `${relativeFile}:${key}`,
+                    mode: 'url',
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
+function resolvePreviewUrlFromProjectFiles() {
+    const textCandidates = ['preview-url.txt', 'deploy-url.txt', '.memory/preview-url.txt'];
+    for (const relativeFile of textCandidates) {
+        const normalized = normalizePreviewUrlCandidate(readFeatureArtifactText(targetDir, relativeFile));
+        if (normalized) {
+            return {
+                target: normalized,
+                source: relativeFile,
+                mode: 'url',
+            };
+        }
+    }
+
+    const jsonCandidates = ['preview-url.json', 'deploy-url.json', '.memory/preview-url.json'];
+    const candidateKeys = ['url', 'previewUrl', 'preview_url', 'deployUrl', 'deploy_url'];
+    for (const relativeFile of jsonCandidates) {
+        const payload = readJsonFile(path.join(targetDir, relativeFile));
+        if (!payload || typeof payload !== 'object') continue;
+        for (const key of candidateKeys) {
+            const normalized = normalizePreviewUrlCandidate(payload[key]);
+            if (normalized) {
+                return {
+                    target: normalized,
+                    source: `${relativeFile}:${key}`,
+                    mode: 'url',
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
+function resolvePreviewUrlFromPackageMetadata() {
+    const pkgPath = path.join(targetDir, 'package.json');
+    if (!fs.existsSync(pkgPath)) return null;
+
+    try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        const candidates = [
+            ['homepage', pkg.homepage],
+            ['url', pkg.url],
+            ['siteUrl', pkg.siteUrl],
+            ['previewUrl', pkg.previewUrl],
+            ['config.previewUrl', pkg.config?.previewUrl],
+            ['appConfig.previewUrl', pkg.appConfig?.previewUrl],
+        ];
+
+        for (const [key, value] of candidates) {
+            const normalized = normalizePreviewUrlCandidate(value);
+            if (normalized) {
+                return {
+                    target: normalized,
+                    source: `package.json:${key}`,
+                    mode: 'url',
+                };
+            }
+        }
+    } catch {
+        return null;
+    }
+
+    return null;
+}
+
+function resolveBrowserAuditTarget(featureDir, htmlTargets = [], options = {}) {
+    const explicitUrl = normalizePreviewUrlCandidate(options.url);
+    if (explicitUrl) {
+        return {
+            target: explicitUrl,
+            source: 'verify-feature --url',
+            mode: 'url',
+        };
+    }
+
+    const envCandidates = getPreviewUrlEnvKeys().map((key) => [key, process.env[key]]);
+
+    for (const [source, value] of envCandidates) {
+        const normalized = normalizePreviewUrlCandidate(value);
+        if (normalized) {
+            return {
+                target: normalized,
+                source,
+                mode: 'url',
+            };
+        }
+    }
+
+    const envFileCandidate = resolvePreviewUrlFromEnvFiles();
+    if (envFileCandidate) {
+        return envFileCandidate;
+    }
+
+    const projectFileCandidate = resolvePreviewUrlFromProjectFiles();
+    if (projectFileCandidate) {
+        return projectFileCandidate;
+    }
+
+    const previewUrlText = normalizePreviewUrlCandidate(readFeatureArtifactText(featureDir, 'preview-url.txt'));
+    if (previewUrlText) {
+        return {
+            target: previewUrlText,
+            source: 'preview-url.txt',
+            mode: 'url',
+        };
+    }
+
+    const previewUrlJson = readJsonFile(path.join(featureDir, 'preview-url.json'));
+    const previewUrlJsonValue = normalizePreviewUrlCandidate(previewUrlJson?.url);
+    if (previewUrlJsonValue) {
+        return {
+            target: previewUrlJsonValue,
+            source: 'preview-url.json',
+            mode: 'url',
+        };
+    }
+
+    const packageMetadataCandidate = resolvePreviewUrlFromPackageMetadata();
+    if (packageMetadataCandidate) {
+        return packageMetadataCandidate;
+    }
+
+    if (htmlTargets.length > 0) {
+        return {
+            target: pathToFileURL(htmlTargets[0]).href,
+            source: path.relative(targetDir, htmlTargets[0]) || path.basename(htmlTargets[0]),
+            mode: 'file',
+        };
+    }
+
+    return null;
+}
+
+function summarizeBrowserAuditResult(audit) {
+    if (!audit || audit.ok === false) {
+        return {
+            status: 'FAIL',
+            detail: audit?.error || audit?.reason || 'Browser audit failed before the page could be inspected',
+        };
+    }
+
+    const consoleErrors = (audit.consoleMessages || []).filter((message) => message.type === 'error');
+    const consoleWarnings = (audit.consoleMessages || []).filter((message) => message.type === 'warning');
+    const pageErrors = Array.isArray(audit.pageErrors) ? audit.pageErrors : [];
+    const failedRequests = Array.isArray(audit.failedRequests) ? audit.failedRequests : [];
+    const titleMissing = !String(audit.pageTitle || '').trim();
+
+    const status =
+        pageErrors.length > 0 || failedRequests.length > 0 || consoleErrors.length > 0
+            ? 'FAIL'
+            : consoleWarnings.length > 0 || titleMissing
+              ? 'WARN'
+              : 'PASS';
+
+    const detailParts = [
+        `target ${audit.finalUrl || audit.target || 'unknown'}`,
+        `console errors ${consoleErrors.length}`,
+        `console warnings ${consoleWarnings.length}`,
+        `page errors ${pageErrors.length}`,
+        `failed requests ${failedRequests.length}`,
+    ];
+
+    if (titleMissing) {
+        detailParts.push('missing document title');
+    } else {
+        detailParts.push(`title "${String(audit.pageTitle).trim()}"`);
+    }
+
+    if (audit.screenshotPath) {
+        detailParts.push(`screenshot ${audit.screenshotPath}`);
+    }
+
+    return {
+        status,
+        detail: detailParts.join('; '),
+    };
+}
+
+function buildUiRiskFindings({
+    designReceipt,
+    hasDesignSystem,
+    accesslintReceipt,
+    accesslintResult,
+    browserAuditReceipt,
+    browserAuditResult,
+    deepMode,
+}) {
+    const findings = [];
+
+    if (designReceipt && !designReceipt.auditOnly && !hasDesignSystem) {
+        findings.push({
+            severity: 'critical',
+            title: 'Design system artifact missing',
+            detail: 'UI work was routed through the design system flow, but design-system.md is missing.',
+        });
+    }
+
+    if (!accesslintReceipt) {
+        findings.push({
+            severity: deepMode ? 'medium' : 'info',
+            title: 'Accessibility evidence missing',
+            detail: accesslintResult?.detail || 'No AccessLint receipt was available for this UI review.',
+        });
+    } else if ((accesslintReceipt.violationCount || 0) > 0) {
+        findings.push({
+            severity:
+                accesslintReceipt.highestImpact === 'critical' || accesslintReceipt.highestImpact === 'serious'
+                    ? 'critical'
+                    : 'medium',
+            title: 'Accessibility violations detected',
+            detail: `${accesslintReceipt.violationCount} issue(s) across ${accesslintReceipt.fileCount || 0} HTML target(s); highest impact ${accesslintReceipt.highestImpact || 'unknown'}.`,
+        });
+    }
+
+    if (browserAuditReceipt) {
+        const consoleErrors = (browserAuditReceipt.consoleMessages || []).filter((message) => message.type === 'error');
+        const pageErrors = browserAuditReceipt.pageErrors || [];
+        const failedRequests = browserAuditReceipt.failedRequests || [];
+        const consoleWarnings = (browserAuditReceipt.consoleMessages || []).filter(
+            (message) => message.type === 'warning',
+        );
+        const titleMissing = !String(browserAuditReceipt.pageTitle || '').trim();
+
+        if (pageErrors.length > 0 || failedRequests.length > 0 || consoleErrors.length > 0) {
+            findings.push({
+                severity: 'critical',
+                title: 'Browser audit found runtime failures',
+                detail: `${consoleErrors.length} console error(s), ${pageErrors.length} page error(s), ${failedRequests.length} failed request(s).`,
+            });
+        } else if (consoleWarnings.length > 0 || titleMissing) {
+            findings.push({
+                severity: 'medium',
+                title: 'Browser audit found polish issues',
+                detail: `${consoleWarnings.length} console warning(s)${titleMissing ? '; missing document title' : ''}.`,
+            });
+        }
+    } else if (deepMode) {
+        findings.push({
+            severity: 'medium',
+            title: 'Browser runtime evidence missing',
+            detail: browserAuditResult?.detail || 'Deep browser audit did not produce a ui-audit.json receipt.',
+        });
+    }
+
+    return findings;
+}
+
+function summarizeUiReviewStatus(findings) {
+    if (findings.some((finding) => finding.severity === 'critical')) return 'FAIL';
+    if (findings.some((finding) => finding.severity === 'medium')) return 'CONDITIONAL';
+    return 'PASS';
+}
+
+function buildUiArchivePolicy(uiReviewReceipt, options = {}) {
+    if (!uiReviewReceipt?.status) {
+        return {
+            decision: 'PASS',
+            recommendation: 'READY',
+            summary: 'No UI review receipt is present, so no frontend archive policy applies.',
+            blockReasons: [],
+            warnReasons: [],
+            overrideFlag: null,
+        };
+    }
+
+    const findings = Array.isArray(uiReviewReceipt.findings) ? uiReviewReceipt.findings : [];
+    const findingTitles = new Set(findings.map((finding) => finding.title));
+    const blockReasons = [];
+    const warnReasons = [];
+
+    if (uiReviewReceipt.status === 'FAIL') {
+        return {
+            decision: 'BLOCK',
+            recommendation: 'HOLD',
+            summary: 'Frontend review is FAIL, so archive should stay blocked.',
+            blockReasons: ['ui-review.json status is FAIL.'],
+            warnReasons: [],
+            overrideFlag: null,
+        };
+    }
+
+    if (uiReviewReceipt.status !== 'CONDITIONAL') {
+        return {
+            decision: 'PASS',
+            recommendation: 'READY',
+            summary: 'Frontend review is PASS.',
+            blockReasons,
+            warnReasons,
+            overrideFlag: null,
+        };
+    }
+
+    if (findingTitles.has('Accessibility violations detected')) {
+        blockReasons.push('Accessibility review still reports moderate/minor violations.');
+    }
+    if (options.deepRequested && findingTitles.has('Browser runtime evidence missing')) {
+        blockReasons.push('Deep verification was requested, but browser runtime evidence is still missing.');
+    }
+
+    if (findingTitles.has('Browser audit found polish issues')) {
+        warnReasons.push('Browser audit found polish issues that should be cleaned up before release.');
+    }
+    if (findingTitles.has('Accessibility evidence missing')) {
+        warnReasons.push('Accessibility evidence is missing, so the frontend verdict is less trustworthy.');
+    }
+    if (findings.length === 0) {
+        warnReasons.push('Frontend review is CONDITIONAL, but no structured findings were captured.');
+    }
+
+    if (blockReasons.length > 0) {
+        return {
+            decision: 'BLOCK_CONDITIONAL',
+            recommendation: 'HOLD',
+            summary:
+                'Frontend review is CONDITIONAL with issues serious enough to block archive unless explicitly overridden.',
+            blockReasons,
+            warnReasons,
+            overrideFlag: '--force-ui',
+        };
+    }
+
+    return {
+        decision: 'WARN_CONDITIONAL',
+        recommendation: 'CAUTION',
+        summary: 'Frontend review is CONDITIONAL, but archive can proceed with an explicit warning.',
+        blockReasons,
+        warnReasons,
+        overrideFlag: null,
+    };
+}
+
+function buildUiReviewMarkdown(feature, options) {
+    const {
+        verifyStatus,
+        promptReceipt,
+        designReceipt,
+        hasDesignSystem,
+        accesslintReceipt,
+        accesslintResult,
+        browserAuditReceipt,
+        browserAuditResult,
+        previewTarget,
+        deepMode,
+        refreshSource,
+        refreshReason,
+        evidenceUpdatedAt,
+        evidenceUpdatedFrom,
+    } = options;
+
+    const findings = buildUiRiskFindings({
+        designReceipt,
+        hasDesignSystem,
+        accesslintReceipt,
+        accesslintResult,
+        browserAuditReceipt,
+        browserAuditResult,
+        deepMode,
+    });
+    const uiStatus = summarizeUiReviewStatus(findings);
+    const accesslintEvidence = {
+        present: !!accesslintReceipt,
+        status: accesslintResult?.status || 'SKIP',
+        detail: accesslintResult?.detail || '',
+        violationCount: accesslintReceipt?.violationCount || 0,
+        highestImpact: accesslintReceipt?.highestImpact || 'none',
+        fileCount: accesslintReceipt?.fileCount || 0,
+    };
+    const browserAuditEvidence = {
+        present: !!browserAuditReceipt,
+        status: browserAuditResult?.status || 'SKIP',
+        detail: browserAuditResult?.detail || '',
+        finalUrl: browserAuditReceipt?.finalUrl || browserAuditReceipt?.target || null,
+        consoleErrors: (browserAuditReceipt?.consoleMessages || []).filter((message) => message.type === 'error')
+            .length,
+        consoleWarnings: (browserAuditReceipt?.consoleMessages || []).filter((message) => message.type === 'warning')
+            .length,
+        pageErrors: (browserAuditReceipt?.pageErrors || []).length,
+        failedRequests: (browserAuditReceipt?.failedRequests || []).length,
+        screenshotPath: browserAuditReceipt?.screenshotPath || null,
+    };
+    const receipt = {
+        feature,
+        status: uiStatus,
+        verifyStatus,
+        generatedAt: new Date().toISOString(),
+        stack: designReceipt?.stack || 'unknown',
+        auditOnly: !!designReceipt?.auditOnly,
+        wrapperSkill: designReceipt?.wrapperSkill || null,
+        importedSourceIds: Array.isArray(designReceipt?.importedSourceIds) ? designReceipt.importedSourceIds : [],
+        promptSummary: promptReceipt?.normalizedSummary || '',
+        previewTarget: previewTarget || null,
+        evidence: {
+            designRoutePresent: !!designReceipt,
+            designSystemPresent: !!hasDesignSystem,
+            accesslint: accesslintEvidence,
+            browserAudit: browserAuditEvidence,
+        },
+        freshness: {
+            source: refreshSource || 'unknown',
+            reason: refreshReason || 'UI review refreshed.',
+            evidenceUpdatedAt: evidenceUpdatedAt || null,
+            evidenceUpdatedFrom: evidenceUpdatedFrom || null,
+        },
+        findings,
+    };
+
+    const lines = [
+        `# UI Review: ${feature}`,
+        '',
+        `**Generated:** ${receipt.generatedAt}`,
+        `**UI Status:** ${uiStatus}`,
+        `**Verification Status:** ${verifyStatus}`,
+        `**Refresh Source:** ${receipt.freshness.source}`,
+        '',
+        '## Inputs',
+        '',
+        `- Prompt summary: ${promptReceipt?.normalizedSummary || 'Unknown'}`,
+        `- Wrapper skill: ${designReceipt?.wrapperSkill || 'none'}`,
+        `- Stack: ${designReceipt?.stack || 'Unknown'}`,
+        `- Audit-only route: ${designReceipt?.auditOnly ? 'yes' : 'no'}`,
+        `- Design routing receipt: ${designReceipt ? 'present' : 'missing'}`,
+        `- Design system artifact: ${hasDesignSystem ? 'present' : 'missing'}`,
+        `- Imported systems: ${
+            Array.isArray(designReceipt?.importedSourceIds) && designReceipt.importedSourceIds.length > 0
+                ? designReceipt.importedSourceIds.join(', ')
+                : 'none'
+        }`,
+        `- Preview target: ${previewTarget || 'not provided'}`,
+        `- Refresh reason: ${receipt.freshness.reason}`,
+        `- Latest evidence update: ${receipt.freshness.evidenceUpdatedAt || 'unknown'}`,
+        `- Latest evidence source: ${receipt.freshness.evidenceUpdatedFrom || 'unknown'}`,
+        '',
+        '## Automated Evidence',
+        '',
+        `- AccessLint: ${accesslintEvidence.status}${accesslintEvidence.detail ? ` — ${accesslintEvidence.detail}` : ''}`,
+        `- Browser audit: ${browserAuditEvidence.status}${browserAuditEvidence.detail ? ` — ${browserAuditEvidence.detail}` : ''}`,
+        '',
+        '## Key Frontend Risks',
+        '',
+    ];
+
+    if (findings.length === 0) {
+        lines.push('- No significant frontend risks were detected from the current UI receipts.');
+    } else {
+        for (const finding of findings) {
+            lines.push(`- ${finding.severity.toUpperCase()}: ${finding.title} — ${finding.detail}`);
+        }
+    }
+
+    lines.push(
+        '',
+        '## Artifacts',
+        '',
+        `- design-routing.json: ${designReceipt ? 'present' : 'missing'}`,
+        `- design-system.md: ${hasDesignSystem ? 'present' : 'missing'}`,
+        `- accessibility.json: ${accesslintReceipt ? 'present' : 'missing'}`,
+        `- ui-audit.json: ${browserAuditReceipt ? 'present' : 'missing'}`,
+        '',
+        `---`,
+        `_Generated by steroid-workflow v${SW_VERSION}_`,
+        '',
+    );
+
+    return {
+        status: uiStatus,
+        content: lines.join('\n'),
+        findings,
+        receipt,
+    };
+}
+
+function buildAccesslintResultFromReceipt(receipt) {
+    if (!receipt) {
+        return {
+            status: 'SKIP',
+            detail: 'No AccessLint receipt was available for this UI review.',
+        };
+    }
+
+    const status = summarizeAccessibilityImpact(receipt.highestImpact || 'none');
+    return {
+        status,
+        detail:
+            receipt.violationCount > 0
+                ? `${receipt.violationCount} issue(s) across ${receipt.fileCount || 0} HTML target(s); highest impact ${receipt.highestImpact || 'unknown'}.`
+                : `No violations across ${receipt.fileCount || 0} HTML target(s)`,
+    };
+}
+
+function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
+    const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
+    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const accesslintReceipt = readJsonFile(path.join(featureDir, 'accessibility.json'));
+    const browserAuditReceipt = readJsonFile(path.join(featureDir, 'ui-audit.json'));
+    const verifyReceipt = loadVerifyReceipt(feature, featureDir);
+    const previewTarget =
+        normalizePreviewUrlCandidate(options.previewUrl) ||
+        normalizePreviewUrlCandidate(readFeatureArtifactText(featureDir, 'preview-url.txt')) ||
+        normalizePreviewUrlCandidate(readJsonFile(path.join(featureDir, 'preview-url.json'))?.url) ||
+        browserAuditReceipt?.finalUrl ||
+        browserAuditReceipt?.target ||
+        null;
+
+    const uiReviewEligible =
+        detectUiFeatureForGate(featureDir, promptReceipt) ||
+        Boolean(designReceipt) ||
+        Boolean(accesslintReceipt) ||
+        Boolean(browserAuditReceipt);
+
+    if (!uiReviewEligible) {
+        return {
+            ok: false,
+            skipped: true,
+            reason: 'Feature does not currently look UI-intensive, so no frontend review was generated.',
+        };
+    }
+
+    const accesslintResult = buildAccesslintResultFromReceipt(accesslintReceipt);
+    const browserAuditResult = browserAuditReceipt
+        ? summarizeBrowserAuditResult(browserAuditReceipt)
+        : {
+              status: 'SKIP',
+              detail: 'No browser audit receipt was available for this UI review.',
+          };
+    const deepMode = options.deepMode ?? (!!verifyReceipt.deepRequested || !!browserAuditReceipt);
+    const uiReview = buildUiReviewMarkdown(feature, {
+        verifyStatus: options.verifyStatus || verifyReceipt.status || 'PENDING',
+        promptReceipt,
+        designReceipt,
+        hasDesignSystem: fs.existsSync(path.join(featureDir, 'design-system.md')),
+        accesslintReceipt,
+        accesslintResult,
+        browserAuditReceipt,
+        browserAuditResult,
+        previewTarget,
+        deepMode,
+        refreshSource: options.refreshSource,
+        refreshReason: options.refreshReason,
+        evidenceUpdatedAt: options.evidenceUpdatedAt,
+        evidenceUpdatedFrom: options.evidenceUpdatedFrom,
+    });
+
+    const uiReviewArtifact = path.join(featureDir, 'ui-review.md');
+    const uiReviewReceiptArtifact = path.join(featureDir, 'ui-review.json');
+    fs.writeFileSync(uiReviewArtifact, uiReview.content);
+    writeJsonFile(uiReviewReceiptArtifact, uiReview.receipt);
+
+    return {
+        ok: true,
+        skipped: false,
+        reportPath: uiReviewArtifact,
+        receiptPath: uiReviewReceiptArtifact,
+        status: uiReview.status,
+        receipt: uiReview.receipt,
+    };
+}
+
+function getArtifactMtimeMs(filePath) {
+    if (!fs.existsSync(filePath)) return null;
+    try {
+        return fs.statSync(filePath).mtimeMs;
+    } catch {
+        return null;
+    }
+}
+
+function ensureCurrentUiReviewArtifacts(feature, featureDir, options = {}) {
+    const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
+    const uiReviewArtifact = path.join(featureDir, 'ui-review.md');
+    const uiReviewReceiptArtifact = path.join(featureDir, 'ui-review.json');
+    const candidateInputs = [
+        'prompt.json',
+        'design-routing.json',
+        'design-system.md',
+        'accessibility.json',
+        'ui-audit.json',
+        'verify.json',
+        'preview-url.txt',
+        'preview-url.json',
+    ]
+        .map((name) => {
+            const filePath = path.join(featureDir, name);
+            return {
+                name,
+                filePath,
+                mtimeMs: getArtifactMtimeMs(filePath),
+            };
+        })
+        .filter((entry) => entry.mtimeMs !== null);
+
+    const uiReviewEligible =
+        detectUiFeatureForGate(featureDir, promptReceipt) ||
+        candidateInputs.some((entry) =>
+            ['design-routing.json', 'design-system.md', 'accessibility.json', 'ui-audit.json'].includes(entry.name),
+        );
+
+    if (!uiReviewEligible) {
+        return {
+            attempted: false,
+            refreshed: false,
+            skipped: true,
+            reason: 'Feature does not currently look UI-intensive.',
+            receipt: readJsonFile(uiReviewReceiptArtifact),
+        };
+    }
+
+    const uiReviewMtimes = [getArtifactMtimeMs(uiReviewArtifact), getArtifactMtimeMs(uiReviewReceiptArtifact)].filter(
+        (value) => value !== null,
+    );
+    const missingUiReviewArtifacts = uiReviewMtimes.length < 2;
+    const newestInput = candidateInputs.reduce(
+        (latest, entry) => (!latest || entry.mtimeMs > latest.mtimeMs ? entry : latest),
+        null,
+    );
+    const oldestUiReviewMtime = uiReviewMtimes.length > 0 ? Math.min(...uiReviewMtimes) : null;
+    const staleBecauseNewerInput = Boolean(
+        newestInput && oldestUiReviewMtime !== null && newestInput.mtimeMs > oldestUiReviewMtime,
+    );
+    const shouldRefresh = missingUiReviewArtifacts || staleBecauseNewerInput;
+
+    if (!shouldRefresh) {
+        return {
+            attempted: false,
+            refreshed: false,
+            skipped: false,
+            reason: 'UI review artifacts are already current.',
+            receipt: readJsonFile(uiReviewReceiptArtifact),
+        };
+    }
+
+    const refreshReason = missingUiReviewArtifacts
+        ? 'ui-review.md and ui-review.json were incomplete or missing.'
+        : `${newestInput.name} is newer than the current UI review receipts.`;
+    const refreshed = refreshUiReviewArtifacts(feature, featureDir, {
+        ...options,
+        refreshReason,
+        evidenceUpdatedAt: newestInput ? new Date(newestInput.mtimeMs).toISOString() : null,
+        evidenceUpdatedFrom: newestInput?.name || null,
+    });
+    if (refreshed.receipt) {
+        refreshed.receipt.freshness = {
+            source: refreshed.receipt.freshness?.source || options.refreshSource || 'unknown',
+            reason: refreshed.receipt.freshness?.reason || refreshReason,
+            evidenceUpdatedAt:
+                refreshed.receipt.freshness?.evidenceUpdatedAt ||
+                (newestInput ? new Date(newestInput.mtimeMs).toISOString() : null),
+            evidenceUpdatedFrom: refreshed.receipt.freshness?.evidenceUpdatedFrom || newestInput?.name || null,
+        };
+        writeJsonFile(uiReviewReceiptArtifact, refreshed.receipt);
+    }
+
+    return {
+        ...refreshed,
+        attempted: true,
+        refreshed: refreshed.ok && !refreshed.skipped,
+        reason: refreshReason,
+        evidenceUpdatedAt: newestInput ? new Date(newestInput.mtimeMs).toISOString() : null,
+        evidenceUpdatedFrom: newestInput?.name || null,
+        receipt: refreshed.receipt || readJsonFile(uiReviewReceiptArtifact),
+    };
+}
+
+function bootstrapFeatureDesignArtifacts(feature, featureDir, options = {}) {
+    const prompt = normalizePromptWhitespace(options.prompt || resolveFeaturePromptForDesign(featureDir));
+    if (!prompt) {
+        return {
+            ok: false,
+            skipped: false,
+            reason: 'No prompt/spec/vibe context was available to derive UI design artifacts.',
+        };
+    }
+
+    const existingRoutePath = path.join(featureDir, 'design-routing.json');
+    const existingRoute = readJsonFile(existingRoutePath);
+    const route = existingRoute || routeDesignSystems(prompt, { stack: options.stack });
+
+    if (route.domain === 'none') {
+        return {
+            ok: true,
+            skipped: true,
+            route,
+            reason: 'Feature does not appear UI-intensive, so no design artifacts were generated.',
+        };
+    }
+
+    if (!existingRoute || options.force) {
+        writeJsonFile(existingRoutePath, {
+            ...route,
+            source: options.source || 'bootstrap-design',
+            prompt,
+            updatedAt: new Date().toISOString(),
+        });
+    }
+
+    const designSystemPath = path.join(featureDir, 'design-system.md');
+    let designSystemWritten = false;
+    if (!route.auditOnly && (!fs.existsSync(designSystemPath) || options.force)) {
+        const generation = generateDesignSystemMarkdown(prompt, {
+            projectName: options.projectName || feature || 'Steroid Design System',
+        });
+        if (!generation.ok) {
+            return {
+                ok: false,
+                skipped: false,
+                route,
+                reason: generation.error,
+            };
+        }
+        fs.writeFileSync(designSystemPath, `${generation.content.trim()}\n`);
+        designSystemWritten = true;
+    }
+
+    return {
+        ok: true,
+        skipped: false,
+        route,
+        designRouteWritten: !existingRoute || !!options.force,
+        designSystemWritten,
+        auditOnly: !!route.auditOnly,
+    };
 }
 
 /**
@@ -369,6 +1545,9 @@ function parseChecklistStats(content) {
  * @returns {string|null}
  */
 function readLatestFeatureArtifact(featureDir, name) {
+    const activePath = path.join(featureDir, name);
+    if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
+
     const archiveDir = path.join(featureDir, 'archive');
     if (fs.existsSync(archiveDir)) {
         const archiveFiles = fs
@@ -379,9 +1558,24 @@ function readLatestFeatureArtifact(featureDir, name) {
             return fs.readFileSync(path.join(archiveDir, archiveFiles[archiveFiles.length - 1]), 'utf-8');
         }
     }
-    const activePath = path.join(featureDir, name);
-    if (fs.existsSync(activePath)) return fs.readFileSync(activePath, 'utf-8');
     return null;
+}
+
+/**
+ * Reads the active or latest archived JSON artifact for a feature.
+ *
+ * @param {string} featureDir
+ * @param {string} name
+ * @returns {Record<string, any>|null}
+ */
+function readLatestFeatureJsonArtifact(featureDir, name) {
+    const content = readLatestFeatureArtifact(featureDir, name);
+    if (!content) return null;
+    try {
+        return JSON.parse(content);
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -393,7 +1587,10 @@ function readLatestFeatureArtifact(featureDir, name) {
  */
 function globToRegExp(pattern) {
     const normalized = (pattern || '').replace(/\\/g, '/');
-    const escaped = normalized.replace(/[|\\{}()[\]^$+?.]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+    const escaped = normalized
+        .replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.');
     return new RegExp(`^${escaped}$`);
 }
 
@@ -624,8 +1821,13 @@ function generateHandoffReport(feature, featureDir, state, options = {}) {
     const specContent = readLatestFeatureArtifact(featureDir, 'spec.md');
     const promptReceiptContent = readLatestFeatureArtifact(featureDir, 'prompt.json');
     const verifyContent = readLatestFeatureArtifact(featureDir, 'verify.md');
+    const verifyReceipt = readLatestFeatureJsonArtifact(featureDir, 'verify.json');
     const planContent = readLatestFeatureArtifact(featureDir, 'plan.md');
     const reviewContent = readLatestFeatureArtifact(featureDir, 'review.md');
+    const uiReviewReceipt = readLatestFeatureJsonArtifact(featureDir, 'ui-review.json');
+    const uiArchivePolicy = buildUiArchivePolicy(uiReviewReceipt, {
+        deepRequested: !!verifyReceipt?.deepRequested,
+    });
     const checklist = planContent ? parseChecklistStats(planContent) : null;
     const archived = !!options.archived;
 
@@ -720,6 +1922,55 @@ function generateHandoffReport(feature, featureDir, state, options = {}) {
     if (state.error_history && state.error_history.length > 0) {
         report += '- Errors encountered:\n';
         for (const err of state.error_history.slice(-5)) report += `  - ${err}\n`;
+    }
+
+    if (uiReviewReceipt) {
+        report += `\n## Frontend Quality\n\n`;
+        report += `- UI Review Status: ${uiReviewReceipt.status || 'Unknown'}\n`;
+        report += `- Verification Status: ${uiReviewReceipt.verifyStatus || 'Unknown'}\n`;
+        report += `- Frontend Release Recommendation: ${uiArchivePolicy.recommendation}\n`;
+        report += `- Stack: ${uiReviewReceipt.stack || 'Unknown'}\n`;
+        report += `- Wrapper Skill: ${uiReviewReceipt.wrapperSkill || 'none'}\n`;
+        report += `- Refreshed By: ${uiReviewReceipt.freshness?.source || 'unknown'}\n`;
+        report += `- Refresh Reason: ${uiReviewReceipt.freshness?.reason || 'Unknown'}\n`;
+        if (uiReviewReceipt.generatedAt) {
+            report += `- UI Review Generated: ${uiReviewReceipt.generatedAt}\n`;
+        }
+        if (uiReviewReceipt.freshness?.evidenceUpdatedAt) {
+            report += `- Latest Frontend Evidence: ${uiReviewReceipt.freshness.evidenceUpdatedAt}\n`;
+        }
+        if (uiReviewReceipt.freshness?.evidenceUpdatedFrom) {
+            report += `- Latest Evidence Source: ${uiReviewReceipt.freshness.evidenceUpdatedFrom}\n`;
+        }
+        if (uiReviewReceipt.previewTarget) {
+            report += `- Preview Target: ${uiReviewReceipt.previewTarget}\n`;
+        }
+        report += `- Policy Summary: ${uiArchivePolicy.summary}\n`;
+        const findings = Array.isArray(uiReviewReceipt.findings) ? uiReviewReceipt.findings : [];
+        if (findings.length > 0) {
+            report += '\nTop frontend findings:\n';
+            for (const finding of findings.slice(0, 5)) {
+                report += `- ${String(finding.severity || 'info').toUpperCase()}: ${finding.title || 'Untitled'}${
+                    finding.detail ? ` — ${finding.detail}` : ''
+                }\n`;
+            }
+        } else {
+            report += '- No significant frontend risks were recorded.\n';
+        }
+        if (uiArchivePolicy.blockReasons.length > 0) {
+            report += '\nFrontend policy blockers:\n';
+            for (const reason of uiArchivePolicy.blockReasons) {
+                report += `- ${reason}\n`;
+            }
+            if (uiArchivePolicy.overrideFlag) {
+                report += `- Override available: ${uiArchivePolicy.overrideFlag}\n`;
+            }
+        } else if (uiArchivePolicy.warnReasons.length > 0) {
+            report += '\nFrontend policy cautions:\n';
+            for (const reason of uiArchivePolicy.warnReasons) {
+                report += `- ${reason}\n`;
+            }
+        }
     }
 
     report += `\n---\n\n_Generated by steroid-workflow v${SW_VERSION} handoff system_\n`;
@@ -1345,11 +2596,17 @@ function buildFeatureArtifactState(featureDir) {
     return {
         context: fs.existsSync(path.join(featureDir, 'context.md')),
         prompt: fs.existsSync(path.join(featureDir, 'prompt.json')),
+        designRoute: fs.existsSync(path.join(featureDir, 'design-routing.json')),
         vibe: fs.existsSync(path.join(featureDir, 'vibe.md')),
         spec: fs.existsSync(path.join(featureDir, 'spec.md')),
         research: fs.existsSync(path.join(featureDir, 'research.md')),
+        designSystem: fs.existsSync(path.join(featureDir, 'design-system.md')),
         plan: fs.existsSync(path.join(featureDir, 'plan.md')),
         diagnosis: fs.existsSync(path.join(featureDir, 'diagnosis.md')),
+        accessibility: fs.existsSync(path.join(featureDir, 'accessibility.json')),
+        uiAudit: fs.existsSync(path.join(featureDir, 'ui-audit.json')),
+        uiReview: fs.existsSync(path.join(featureDir, 'ui-review.md')),
+        uiReviewReceipt: fs.existsSync(path.join(featureDir, 'ui-review.json')),
         verify:
             fs.existsSync(path.join(featureDir, 'verify.md')) || fs.existsSync(path.join(featureDir, 'verify.json')),
     };
@@ -1363,6 +2620,17 @@ function getRouteDisplayPhases(route) {
 function getPipelineStatusEntries(featureDir, promptReceipt) {
     const route = promptReceipt ? promptReceipt.recommendedPipeline || 'standard-build' : 'standard-build';
     const expectedPhases = new Set(getRouteDisplayPhases(route));
+    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const verifyReceipt = readJsonFile(path.join(featureDir, 'verify.json'));
+    const designHint = `${promptReceipt?.normalizedSummary || ''} ${designReceipt?.prompt || ''}`.trim();
+    const designRouteExpected = Boolean(designReceipt) || detectUiTask(designHint);
+    const designSystemExpected = designRouteExpected && !Boolean(designReceipt?.auditOnly);
+    const accessibilityExpected = designRouteExpected && designReceipt?.stack !== 'react-native';
+    const uiAuditExpected = accessibilityExpected && Boolean(verifyReceipt?.deepRequested);
+    const uiReviewExpected =
+        designRouteExpected &&
+        (fs.existsSync(path.join(featureDir, 'verify.md')) || fs.existsSync(path.join(featureDir, 'verify.json')));
+    const uiReviewReceiptExpected = uiReviewExpected;
     const entries = [
         {
             name: 'scan',
@@ -1375,6 +2643,12 @@ function getPipelineStatusEntries(featureDir, promptReceipt) {
             file: 'prompt.json',
             label: 'Prompt interpretation',
             present: fs.existsSync(path.join(featureDir, 'prompt.json')),
+        },
+        {
+            name: 'design-route',
+            file: 'design-routing.json',
+            label: 'Design routing receipt',
+            present: fs.existsSync(path.join(featureDir, 'design-routing.json')),
         },
         {
             name: 'vibe',
@@ -1393,6 +2667,36 @@ function getPipelineStatusEntries(featureDir, promptReceipt) {
             file: 'research.md',
             label: 'Tech research',
             present: fs.existsSync(path.join(featureDir, 'research.md')),
+        },
+        {
+            name: 'design-system',
+            file: 'design-system.md',
+            label: 'Design system artifact',
+            present: fs.existsSync(path.join(featureDir, 'design-system.md')),
+        },
+        {
+            name: 'accessibility',
+            file: 'accessibility.json',
+            label: 'Accessibility audit receipt',
+            present: fs.existsSync(path.join(featureDir, 'accessibility.json')),
+        },
+        {
+            name: 'ui-audit',
+            file: 'ui-audit.json',
+            label: 'Browser UI audit receipt',
+            present: fs.existsSync(path.join(featureDir, 'ui-audit.json')),
+        },
+        {
+            name: 'ui-review',
+            file: 'ui-review.md',
+            label: 'Frontend review summary',
+            present: fs.existsSync(path.join(featureDir, 'ui-review.md')),
+        },
+        {
+            name: 'ui-review-receipt',
+            file: 'ui-review.json',
+            label: 'Frontend review receipt',
+            present: fs.existsSync(path.join(featureDir, 'ui-review.json')),
         },
         {
             name: 'architect',
@@ -1425,10 +2729,27 @@ function getPipelineStatusEntries(featureDir, promptReceipt) {
         },
     ];
 
-    return entries.map((entry) => ({
-        ...entry,
-        expected: expectedPhases.has(entry.name),
-    }));
+    return entries.map((entry) => {
+        let expected = expectedPhases.has(entry.name);
+        if (entry.name === 'design-route') {
+            expected = designRouteExpected;
+        } else if (entry.name === 'design-system') {
+            expected = designSystemExpected;
+        } else if (entry.name === 'accessibility') {
+            expected = accessibilityExpected;
+        } else if (entry.name === 'ui-audit') {
+            expected = uiAuditExpected;
+        } else if (entry.name === 'ui-review') {
+            expected = uiReviewExpected;
+        } else if (entry.name === 'ui-review-receipt') {
+            expected = uiReviewReceiptExpected;
+        }
+
+        return {
+            ...entry,
+            expected,
+        };
+    });
 }
 
 function formatPromptMarkdown(feature, analysis, sessionState) {
@@ -1502,7 +2823,7 @@ function formatPromptMarkdown(feature, analysis, sessionState) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.2.2';
+let SW_VERSION = '6.3.0-beta.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -1557,7 +2878,8 @@ Usage:
     node steroid-run.cjs log <feature> <message>           Append to progress log
     node steroid-run.cjs check-plan <feature>              Count remaining tasks in plan
     node steroid-run.cjs archive <feature>                 Archive completed feature (requires verify.json)
-    node steroid-run.cjs verify-feature <feature> [--deep] Run verification (writes verify.md + verify.json)
+                                                          Use --force-ui to override blocking CONDITIONAL frontend risk
+    node steroid-run.cjs verify-feature <feature> [--deep] [--url <preview>] Run verification (writes verify.md + verify.json)
 
   Stories:
     node steroid-run.cjs stories <feature>                 List prioritized stories (P1/P2/P3)
@@ -1566,6 +2888,7 @@ Usage:
   Review:
     node steroid-run.cjs review spec <feature>             Stage 1: Spec compliance review
     node steroid-run.cjs review quality <feature>          Stage 2: Code quality review
+    node steroid-run.cjs review ui <feature>               Refresh frontend review receipts from current UI evidence
     node steroid-run.cjs review status <feature>           Show review stage status and sync review.json
     node steroid-run.cjs review reset <feature>            Reset review for re-review
 
@@ -1585,6 +2908,13 @@ Usage:
     node steroid-run.cjs normalize-prompt "<message>"      Normalize a raw user prompt into a structured brief
     node steroid-run.cjs normalize-prompt "<message>" --feature <feature> --write
                                                           Normalize and persist .memory/changes/<feature>/prompt.json
+    node steroid-run.cjs design-prep "<message>"           Generate design-routing.json + design-system.md together
+    node steroid-run.cjs design-prep --feature <feature> --write
+                                                          Prepare UI design artifacts from prompt/spec/vibe context
+    node steroid-run.cjs design-route "<message>"          Route UI work to Steroid's internal frontend systems
+    node steroid-run.cjs design-system "<message>"         Generate a design-system artifact from imported UI systems
+    node steroid-run.cjs design-system --feature <feature> --write
+                                                          Generate or refresh .memory/changes/<feature>/design-system.md
     node steroid-run.cjs prompt-health "<message>"         Score prompt clarity, ambiguity, and risk
     node steroid-run.cjs session-detect                    Detect current project/session state
     node steroid-run.cjs detect-tests                      Detect test framework in current project
@@ -1968,6 +3298,43 @@ if (args[0] === 'pipeline-status') {
         console.log(`    - Expected phases: ${routeSummary.expectedPhases.join(' -> ')}`);
         console.log(`    - Next step: ${routeSummary.next.phase}`);
         console.log(`    - Why next: ${routeSummary.next.reason}`);
+        console.log('');
+    }
+
+    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const uiReviewReceipt = readJsonFile(path.join(featureDir, 'ui-review.json'));
+    const designExpected =
+        artifactState.designRoute || artifactState.designSystem || detectUiTask(promptReceipt?.normalizedSummary || '');
+    if (designReceipt || designExpected) {
+        console.log('  Design Intelligence');
+        console.log(`    - Routing receipt: ${artifactState.designRoute ? 'present' : 'missing'}`);
+        console.log(`    - Design system: ${artifactState.designSystem ? 'present' : 'missing'}`);
+        console.log(`    - Accessibility receipt: ${artifactState.accessibility ? 'present' : 'missing'}`);
+        console.log(`    - Browser audit receipt: ${artifactState.uiAudit ? 'present' : 'missing'}`);
+        console.log(`    - UI review summary: ${artifactState.uiReview ? 'present' : 'missing'}`);
+        console.log(`    - UI review receipt: ${artifactState.uiReviewReceipt ? 'present' : 'missing'}`);
+        if (uiReviewReceipt) {
+            console.log(`    - UI review status: ${uiReviewReceipt.status || 'Unknown'}`);
+            console.log(`    - UI review refreshed by: ${uiReviewReceipt.freshness?.source || 'unknown'}`);
+            if (uiReviewReceipt.generatedAt) {
+                console.log(`    - UI review generated: ${uiReviewReceipt.generatedAt}`);
+            }
+            if (uiReviewReceipt.freshness?.evidenceUpdatedAt) {
+                console.log(`    - Latest frontend evidence: ${uiReviewReceipt.freshness.evidenceUpdatedAt}`);
+            }
+        }
+        if (designReceipt) {
+            console.log(`    - Stack: ${designReceipt.stack || 'Unknown'}`);
+            console.log(`    - Audit only: ${designReceipt.auditOnly ? 'yes' : 'no'}`);
+            console.log(`    - Wrapper: ${designReceipt.wrapperSkill || 'none'}`);
+            const sources =
+                Array.isArray(designReceipt.importedSourceIds) && designReceipt.importedSourceIds.length > 0
+                    ? designReceipt.importedSourceIds.join(', ')
+                    : 'none';
+            console.log(`    - Imported sources: ${sources}`);
+        } else {
+            console.log('    - Routing hint: UI work appears likely, but design-routing.json is missing.');
+        }
         console.log('');
     }
 
@@ -2690,8 +4057,7 @@ if (args[0] === 'fs-cat') {
 
     const relativePath = path.relative(targetDir, resolvedPath) || chosenPath;
     const contents = fs.readFileSync(resolvedPath, 'utf-8');
-    const display =
-        headCount === null ? contents : contents.split(/\r?\n/).slice(0, headCount).join('\n');
+    const display = headCount === null ? contents : contents.split(/\r?\n/).slice(0, headCount).join('\n');
 
     console.log(`[steroid-run] 📄 ${relativePath}`);
     if (display.length > 0) {
@@ -2715,20 +4081,26 @@ if (args[0] === 'fs-find') {
         } else if (arg.startsWith('--type=')) {
             type = arg.slice('--type='.length);
             if (!['any', 'file', 'dir'].includes(type)) {
-                console.error('[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]');
+                console.error(
+                    '[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]',
+                );
                 process.exit(1);
             }
         } else if (arg.startsWith('--max-depth=')) {
             const parsed = Number.parseInt(arg.slice('--max-depth='.length), 10);
             if (!Number.isFinite(parsed) || parsed < 0) {
-                console.error('[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]');
+                console.error(
+                    '[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]',
+                );
                 process.exit(1);
             }
             maxDepth = parsed;
         } else if (arg.startsWith('--limit=')) {
             const parsed = Number.parseInt(arg.slice('--limit='.length), 10);
             if (!Number.isFinite(parsed) || parsed < 1) {
-                console.error('[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]');
+                console.error(
+                    '[steroid-run] Usage: node steroid-run.cjs fs-find [path...] [--name=<glob>] [--type=file|dir] [--max-depth=<n>] [--limit=<n>] [--count]',
+                );
                 process.exit(1);
             }
             limit = parsed;
@@ -2797,7 +4169,9 @@ if (args[0] === 'fs-grep') {
         } else if (arg.startsWith('--limit=')) {
             const parsed = Number.parseInt(arg.slice('--limit='.length), 10);
             if (!Number.isFinite(parsed) || parsed < 1) {
-                console.error('[steroid-run] Usage: node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]');
+                console.error(
+                    '[steroid-run] Usage: node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]',
+                );
                 process.exit(1);
             }
             limit = parsed;
@@ -2812,7 +4186,9 @@ if (args[0] === 'fs-grep') {
     }
 
     if (!patternText) {
-        console.error('[steroid-run] Usage: node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]');
+        console.error(
+            '[steroid-run] Usage: node steroid-run.cjs fs-grep <pattern> [path...] [--include=<glob>] [--files-with-matches] [--limit=<n>] [--ignore-case] [--fixed]',
+        );
         process.exit(1);
     }
 
@@ -3133,6 +4509,46 @@ if (args[0] === 'gate') {
         }
         console.error(friendlyHint('gate-incomplete'));
         process.exit(1);
+    }
+
+    const missingDesignArtifacts = getMissingDesignArtifactsForPhase(featureDir, phase, promptReceipt);
+    if (missingDesignArtifacts.length > 0) {
+        console.error(`[steroid-run] 🚫 DESIGN GATE BLOCKED: ${phase} requires UI design artifacts for this feature.`);
+        console.error(`  Missing: ${missingDesignArtifacts.join(', ')}`);
+        if (!promptReceipt) {
+            console.error(`  Run: node steroid-run.cjs normalize-prompt "<user prompt>" --feature ${feature} --write`);
+        }
+        console.error(`  Run: node steroid-run.cjs design-route "<user prompt>" --feature ${feature} --write`);
+        console.error(`  Run: node steroid-run.cjs design-system --feature ${feature} --write`);
+        console.error(
+            '  UI-intensive work must produce a routing receipt and design system before architecture or engine can proceed.',
+        );
+        process.exit(1);
+    }
+
+    if (phase === 'research') {
+        const designBootstrap = bootstrapFeatureDesignArtifacts(feature, featureDir, {
+            source: 'gate:research',
+            projectName: feature,
+        });
+        if (!designBootstrap.ok) {
+            console.error('[steroid-run] 🚫 DESIGN PREP FAILED: research could not bootstrap UI design artifacts.');
+            console.error(`  Reason: ${designBootstrap.reason}`);
+            console.error(`  Try: node steroid-run.cjs design-route "<user prompt>" --feature ${feature} --write`);
+            console.error(`  Then: node steroid-run.cjs design-system --feature ${feature} --write`);
+            process.exit(1);
+        }
+        if (!designBootstrap.skipped) {
+            const routeAction = designBootstrap.designRouteWritten
+                ? 'wrote design-routing.json'
+                : 'kept design-routing.json';
+            const systemAction = designBootstrap.auditOnly
+                ? 'skipped design-system.md (audit-only route)'
+                : designBootstrap.designSystemWritten
+                  ? 'wrote design-system.md'
+                  : 'kept design-system.md';
+            console.log(`[steroid-run] 🎨 Research prep: ${routeAction}; ${systemAction}.`);
+        }
     }
 
     console.log(`[steroid-run] ✅ Gate passed: ${gate.requires} exists (${lines} lines). Proceeding to ${phase}.`);
@@ -3456,6 +4872,51 @@ if (args[0] === 'archive') {
         console.log(`[steroid-run] ⚠️  --force flag used. Archiving without verification.`);
     }
 
+    const uiReviewRefresh = ensureCurrentUiReviewArtifacts(feature, featureDir, {
+        verifyStatus: verifyReceipt.status || 'PENDING',
+        deepMode: !!verifyReceipt.deepRequested,
+        refreshSource: 'archive',
+    });
+    if (uiReviewRefresh.attempted && uiReviewRefresh.refreshed) {
+        console.log(`[steroid-run] 🔄 Refreshed UI review before archive: ${uiReviewRefresh.reason}`);
+    }
+
+    const uiReviewReceipt = uiReviewRefresh.receipt || readJsonFile(path.join(featureDir, 'ui-review.json'));
+    const uiArchivePolicy = buildUiArchivePolicy(uiReviewReceipt, {
+        deepRequested: !!verifyReceipt.deepRequested,
+    });
+    if (uiArchivePolicy.decision === 'BLOCK') {
+        console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: ui-review.json status is FAIL.`);
+        console.error(`  Frontend quality issues still need resolution before archiving this UI feature.`);
+        console.error(
+            `  Run: node steroid-run.cjs verify-feature ${feature}${uiReviewReceipt.previewTarget ? ` --deep --url ${uiReviewReceipt.previewTarget}` : ''}`,
+        );
+        process.exit(1);
+    }
+    if (uiArchivePolicy.decision === 'BLOCK_CONDITIONAL') {
+        if (!args.includes('--force-ui')) {
+            console.error(
+                `[steroid-run] 🚫 ARCHIVE BLOCKED: ui-review.json is CONDITIONAL with blocking frontend issues.`,
+            );
+            for (const reason of uiArchivePolicy.blockReasons) {
+                console.error(`  - ${reason}`);
+            }
+            console.error(
+                `  Override only if you accept the frontend risk: node steroid-run.cjs archive ${feature} --force-ui`,
+            );
+            process.exit(1);
+        }
+        console.log(`[steroid-run] ⚠️  --force-ui override used. Archiving with blocking frontend cautions.`);
+        for (const reason of uiArchivePolicy.blockReasons) {
+            console.log(`  - ${reason}`);
+        }
+    } else if (uiArchivePolicy.decision === 'WARN_CONDITIONAL') {
+        console.log(`[steroid-run] ⚠️  Frontend review is CONDITIONAL. Archive may proceed with caution.`);
+        for (const reason of uiArchivePolicy.warnReasons) {
+            console.log(`  - ${reason}`);
+        }
+    }
+
     if (!fs.existsSync(archiveDir)) {
         fs.mkdirSync(archiveDir, { recursive: true });
     }
@@ -3472,6 +4933,8 @@ if (args[0] === 'archive') {
         'plan.md',
         'verify.md',
         'verify.json',
+        'ui-review.md',
+        'ui-review.json',
         'diagnosis.md',
         'review.md',
         'review.json',
@@ -3507,6 +4970,12 @@ if (args[0] === 'archive') {
         filesArchived: archived,
         errorCount: state.error_count,
         status: 'complete',
+        uiReviewStatus: uiReviewReceipt?.status || null,
+        uiReviewFindings: Array.isArray(uiReviewReceipt?.findings) ? uiReviewReceipt.findings.length : 0,
+        uiReviewRefreshSource: uiReviewReceipt?.freshness?.source || null,
+        uiReviewGeneratedAt: uiReviewReceipt?.generatedAt || null,
+        uiReviewRecommendation: uiArchivePolicy.recommendation || null,
+        uiReviewOverrideUsed: args.includes('--force-ui'),
     };
     featuresData._lastUpdated = new Date().toISOString();
     fs.writeFileSync(featuresFile, JSON.stringify(featuresData, null, 2));
@@ -3869,6 +5338,343 @@ if (args[0] === 'normalize-prompt') {
     process.exit(0);
 }
 
+/** CMD: design-route — Route UI work to Steroid's internalized frontend systems */
+if (args[0] === 'design-route') {
+    const featureFlagIndex = args.indexOf('--feature');
+    const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
+    const stackFlagIndex = args.indexOf('--stack');
+    const stack = stackFlagIndex !== -1 ? args[stackFlagIndex + 1] : '';
+    const controlArgs = new Set(['--json', '--write', '--audit-only', '--feature', '--stack']);
+    if (feature) controlArgs.add(feature);
+    if (stack) controlArgs.add(stack);
+    const message = args
+        .slice(1)
+        .filter(
+            (arg, index) =>
+                !(featureFlagIndex !== -1 && index + 1 === featureFlagIndex) &&
+                !(stackFlagIndex !== -1 && index + 1 === stackFlagIndex) &&
+                !controlArgs.has(arg),
+        )
+        .join(' ');
+
+    if (!message) {
+        console.error(
+            '[steroid-run] Usage: npx steroid-run design-route "<user message>" [--json] [--audit-only] [--stack <stack>] [--feature <feature> --write]',
+        );
+        process.exit(1);
+    }
+
+    const route = routeDesignSystems(message, { stack, auditOnly: args.includes('--audit-only') });
+    if (args.includes('--write')) {
+        if (!feature) {
+            console.error('[steroid-run] ❌ --write requires --feature <feature>.');
+            process.exit(1);
+        }
+        const featureDir = path.join(changesDir, feature);
+        if (!fs.existsSync(featureDir)) {
+            console.error(
+                `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}`,
+            );
+            process.exit(1);
+        }
+        writeJsonFile(path.join(featureDir, 'design-routing.json'), {
+            ...route,
+            source: 'design-route',
+            prompt: message,
+            updatedAt: new Date().toISOString(),
+        });
+    }
+
+    if (args.includes('--json')) {
+        console.log(JSON.stringify(route, null, 2));
+    } else {
+        console.log(`[steroid-run] 🎨 Design Route`);
+        console.log(`  Stack: ${route.stack}`);
+        console.log(`  Audit only: ${route.auditOnly ? 'yes' : 'no'}`);
+        console.log(`  Wrapper skill: ${route.wrapperSkill || 'none'}`);
+        console.log(
+            `  Imported sources: ${route.importedSourceIds.length > 0 ? route.importedSourceIds.join(', ') : 'none'}`,
+        );
+        if (args.includes('--write')) {
+            console.log(`  Receipt: .memory/changes/${feature}/design-routing.json`);
+        }
+    }
+    process.exit(0);
+}
+
+/** CMD: design-prep — Generate UI design artifacts together from imported systems */
+if (args[0] === 'design-prep') {
+    const featureFlagIndex = args.indexOf('--feature');
+    const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
+    const stackFlagIndex = args.indexOf('--stack');
+    const stack = stackFlagIndex !== -1 ? args[stackFlagIndex + 1] : '';
+    const projectNameFlagIndex = args.indexOf('--project-name');
+    const projectNameFlag = projectNameFlagIndex !== -1 ? args[projectNameFlagIndex + 1] : '';
+    const controlArgs = new Set(['--json', '--write', '--feature', '--stack', '--project-name', '--force']);
+    if (feature) controlArgs.add(feature);
+    if (stack) controlArgs.add(stack);
+    if (projectNameFlag) controlArgs.add(projectNameFlag);
+
+    let featureDir = null;
+    if (feature) {
+        featureDir = path.join(changesDir, feature);
+        if (!fs.existsSync(featureDir)) {
+            console.error(
+                `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}`,
+            );
+            process.exit(1);
+        }
+    }
+
+    let message = args
+        .slice(1)
+        .filter(
+            (arg, index) =>
+                !(featureFlagIndex !== -1 && index + 1 === featureFlagIndex) &&
+                !(stackFlagIndex !== -1 && index + 1 === stackFlagIndex) &&
+                !(projectNameFlagIndex !== -1 && index + 1 === projectNameFlagIndex) &&
+                !controlArgs.has(arg),
+        )
+        .join(' ');
+
+    if (!message && featureDir) {
+        message = resolveFeaturePromptForDesign(featureDir);
+    }
+
+    if (args.includes('--write') && !featureDir) {
+        console.error('[steroid-run] ❌ --write requires --feature <feature>.');
+        process.exit(1);
+    }
+
+    if (!message) {
+        console.error(
+            '[steroid-run] Usage: npx steroid-run design-prep "<user message>" [--stack <stack>] [--project-name <name>] [--feature <feature> --write] [--force]',
+        );
+        console.error(
+            '[steroid-run]        Or use: npx steroid-run design-prep --feature <feature> --write once prompt.json, spec.md, or vibe.md exists.',
+        );
+        process.exit(1);
+    }
+
+    let bootstrap = null;
+    let routeSummary = null;
+    let previewContent = null;
+
+    if (featureDir) {
+        bootstrap = bootstrapFeatureDesignArtifacts(feature, featureDir, {
+            prompt: message,
+            stack,
+            force: args.includes('--force'),
+            source: 'design-prep',
+            projectName: projectNameFlag || feature || 'Steroid Design System',
+        });
+
+        if (!bootstrap.ok) {
+            console.error(`[steroid-run] ❌ ${bootstrap.reason}`);
+            process.exit(1);
+        }
+
+        routeSummary = readJsonFile(path.join(featureDir, 'design-routing.json')) || bootstrap.route;
+    } else {
+        routeSummary = routeDesignSystems(message, { stack });
+        if (routeSummary.domain !== 'none' && !routeSummary.auditOnly) {
+            const preview = generateDesignSystemMarkdown(message, {
+                projectName: projectNameFlag || 'Steroid Design System',
+            });
+            if (!preview.ok) {
+                console.error(`[steroid-run] ❌ ${preview.error}`);
+                process.exit(1);
+            }
+            previewContent = preview.content;
+        }
+        bootstrap = {
+            ok: true,
+            skipped: routeSummary.domain === 'none',
+            designRouteWritten: false,
+            designSystemWritten: false,
+            auditOnly: !!routeSummary.auditOnly,
+            route: routeSummary,
+            reason:
+                routeSummary.domain === 'none'
+                    ? 'Prompt does not appear UI-intensive, so no design artifacts would be generated.'
+                    : null,
+        };
+    }
+
+    const payload = {
+        stack: routeSummary?.stack || 'web',
+        auditOnly: !!routeSummary?.auditOnly,
+        wrapperSkill: routeSummary?.wrapperSkill || null,
+        importedSourceIds: routeSummary?.importedSourceIds || [],
+        designRouteWritten: !!bootstrap.designRouteWritten,
+        designSystemWritten: !!bootstrap.designSystemWritten,
+        skipped: !!bootstrap.skipped,
+        outputPaths: featureDir
+            ? {
+                  designRoute: `.memory/changes/${feature}/design-routing.json`,
+                  designSystem: routeSummary?.auditOnly ? null : `.memory/changes/${feature}/design-system.md`,
+              }
+            : null,
+        content: previewContent,
+    };
+
+    if (args.includes('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+    } else {
+        console.log('[steroid-run] 🎨 Design Prep');
+        console.log(`  Stack: ${payload.stack}`);
+        console.log(`  Audit only: ${payload.auditOnly ? 'yes' : 'no'}`);
+        console.log(`  Wrapper skill: ${payload.wrapperSkill || 'none'}`);
+        console.log(
+            `  Imported sources: ${payload.importedSourceIds.length > 0 ? payload.importedSourceIds.join(', ') : 'none'}`,
+        );
+        if (payload.skipped) {
+            console.log(`  Result: ${bootstrap.reason}`);
+        } else {
+            console.log(
+                `  Design route: ${payload.designRouteWritten ? 'written/refreshed' : 'kept existing receipt'}`,
+            );
+            console.log(
+                `  Design system: ${
+                    payload.auditOnly
+                        ? 'not applicable (audit-only route)'
+                        : payload.designSystemWritten
+                          ? 'written/refreshed'
+                          : 'kept existing artifact'
+                }`,
+            );
+            if (featureDir) {
+                console.log(`  Receipt: .memory/changes/${feature}/design-routing.json`);
+                if (!payload.auditOnly) {
+                    console.log(`  Artifact: .memory/changes/${feature}/design-system.md`);
+                }
+            }
+        }
+    }
+    process.exit(0);
+}
+
+/** CMD: design-system — Generate a design-system artifact from imported UI systems */
+if (args[0] === 'design-system') {
+    const featureFlagIndex = args.indexOf('--feature');
+    const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
+    const stackFlagIndex = args.indexOf('--stack');
+    const stack = stackFlagIndex !== -1 ? args[stackFlagIndex + 1] : '';
+    const projectNameFlagIndex = args.indexOf('--project-name');
+    const projectNameFlag = projectNameFlagIndex !== -1 ? args[projectNameFlagIndex + 1] : '';
+    const controlArgs = new Set(['--json', '--write', '--feature', '--stack', '--project-name']);
+    if (feature) controlArgs.add(feature);
+    if (stack) controlArgs.add(stack);
+    if (projectNameFlag) controlArgs.add(projectNameFlag);
+
+    let featureDir = null;
+    if (feature) {
+        featureDir = path.join(changesDir, feature);
+        if (!fs.existsSync(featureDir)) {
+            console.error(
+                `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}`,
+            );
+            process.exit(1);
+        }
+    }
+
+    let message = args
+        .slice(1)
+        .filter(
+            (arg, index) =>
+                !(featureFlagIndex !== -1 && index + 1 === featureFlagIndex) &&
+                !(stackFlagIndex !== -1 && index + 1 === stackFlagIndex) &&
+                !(projectNameFlagIndex !== -1 && index + 1 === projectNameFlagIndex) &&
+                !controlArgs.has(arg),
+        )
+        .join(' ');
+
+    if (!message && featureDir) {
+        message = resolveFeaturePromptForDesign(featureDir);
+    }
+
+    if (!message) {
+        console.error(
+            '[steroid-run] Usage: npx steroid-run design-system "<user message>" [--stack <stack>] [--project-name <name>] [--feature <feature> --write]',
+        );
+        console.error(
+            '[steroid-run]        Or use: npx steroid-run design-system --feature <feature> --write once prompt.json or design-routing.json exists.',
+        );
+        process.exit(1);
+    }
+
+    const routeReceiptPath = featureDir ? path.join(featureDir, 'design-routing.json') : null;
+    const existingRoute = routeReceiptPath ? readJsonFile(routeReceiptPath) : null;
+    const route = existingRoute || routeDesignSystems(message, { stack });
+
+    if (route.domain === 'none') {
+        console.error(
+            '[steroid-run] ❌ This prompt does not look like UI or UX work, so no design system was generated.',
+        );
+        process.exit(1);
+    }
+    if (route.auditOnly) {
+        console.error(
+            '[steroid-run] ❌ design-system is not used for audit-only routes. Run design-route or verify instead.',
+        );
+        process.exit(1);
+    }
+
+    const projectName = projectNameFlag || feature || 'Steroid Design System';
+    const generation = generateDesignSystemMarkdown(message, { projectName });
+    if (!generation.ok) {
+        console.error(`[steroid-run] ❌ ${generation.error}`);
+        process.exit(1);
+    }
+
+    let artifactPath = null;
+    if (args.includes('--write')) {
+        if (!featureDir) {
+            console.error('[steroid-run] ❌ --write requires --feature <feature>.');
+            process.exit(1);
+        }
+        artifactPath = path.join(featureDir, 'design-system.md');
+        fs.writeFileSync(artifactPath, `${generation.content.trim()}\n`);
+        if (!existingRoute) {
+            writeJsonFile(routeReceiptPath, {
+                ...route,
+                source: 'design-system',
+                prompt: message,
+                updatedAt: new Date().toISOString(),
+            });
+        }
+    }
+
+    if (args.includes('--json')) {
+        console.log(
+            JSON.stringify(
+                {
+                    stack: route.stack,
+                    wrapperSkill: route.wrapperSkill,
+                    importedSourceIds: route.importedSourceIds,
+                    projectName,
+                    outputPath: artifactPath ? `.memory/changes/${feature}/design-system.md` : null,
+                    content: generation.content,
+                },
+                null,
+                2,
+            ),
+        );
+    } else if (artifactPath) {
+        console.log('[steroid-run] 🎨 Design System');
+        console.log(`  Project: ${projectName}`);
+        console.log(`  Stack: ${route.stack}`);
+        console.log(`  Wrapper skill: ${route.wrapperSkill || 'none'}`);
+        console.log(
+            `  Imported sources: ${route.importedSourceIds.length > 0 ? route.importedSourceIds.join(', ') : 'none'}`,
+        );
+        console.log(`  Artifact: .memory/changes/${feature}/design-system.md`);
+    } else {
+        console.log(generation.content);
+    }
+    process.exit(0);
+}
+
 /** CMD: prompt-health — Score prompt quality and recommend next action */
 if (args[0] === 'prompt-health') {
     const message = args.slice(1).join(' ');
@@ -3992,8 +5798,18 @@ if (args[0] === 'detect-tests') {
 /** CMD: verify-feature — Core verification with optional deep scans (v6.1.0) */
 if (args[0] === 'verify-feature') {
     const feature = args[1];
+    const previewUrlFlagIndex = args.indexOf('--url');
+    const previewUrl = previewUrlFlagIndex !== -1 && args[previewUrlFlagIndex + 1] ? args[previewUrlFlagIndex + 1] : '';
     if (!feature) {
-        console.error('[steroid-run] Usage: npx steroid-run verify-feature <feature> [--deep]');
+        console.error('[steroid-run] Usage: npx steroid-run verify-feature <feature> [--deep] [--url <preview>]');
+        process.exit(1);
+    }
+    if (previewUrlFlagIndex !== -1 && !previewUrl) {
+        console.error('[steroid-run] ❌ --url requires an http(s) preview URL.');
+        process.exit(1);
+    }
+    if (previewUrlFlagIndex !== -1 && !normalizePreviewUrlCandidate(previewUrl)) {
+        console.error('[steroid-run] ❌ --url must be a valid http(s) URL or hostname.');
         process.exit(1);
     }
     const deepMode = args.includes('--deep');
@@ -4003,6 +5819,8 @@ if (args[0] === 'verify-feature') {
     const diagnosisFile = path.join(featureDir, 'diagnosis.md');
     const executionFile = fs.existsSync(planFile) ? planFile : fs.existsSync(diagnosisFile) ? diagnosisFile : null;
     const executionLabel = executionFile === diagnosisFile ? 'diagnosis.md' : 'plan.md';
+    const accesslintArtifact = path.join(featureDir, 'accessibility.json');
+    const browserAuditArtifact = path.join(featureDir, 'ui-audit.json');
 
     if (!executionFile) {
         console.error(
@@ -4014,9 +5832,14 @@ if (args[0] === 'verify-feature') {
     console.log(`\n[steroid-run] 🔍 VERIFICATION: ${feature} (v${SW_VERSION})`);
     console.log(`  Mode: ${deepMode ? 'core + deep scans' : 'core only'}\n`);
 
+    if (previewUrlFlagIndex !== -1) {
+        fs.writeFileSync(path.join(featureDir, 'preview-url.txt'), `${normalizePreviewUrlCandidate(previewUrl)}\n`);
+    }
+
     const results = [];
     let hasFailure = false;
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
+    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
 
     // ── Step 0: Review gate ──
     const reviewReceipt = loadReviewReceipt(feature, featureDir);
@@ -4228,7 +6051,88 @@ if (args[0] === 'verify-feature') {
         }
     }
 
-    // ── Step 5: Dead route detection ──
+    // ── Step 5: Accessibility audit (AccessLint) ──
+    const accesslintRunner = resolveAccessLintRunnerPath();
+    if (designReceipt?.stack === 'react-native') {
+        results.push({
+            step: 'Accessibility (AccessLint)',
+            status: 'SKIP',
+            detail: 'React Native route detected; web HTML accessibility audit not applicable',
+        });
+    } else if (!fs.existsSync(accesslintRunner)) {
+        results.push({
+            step: 'Accessibility (AccessLint)',
+            status: 'SKIP',
+            detail: 'AccessLint runner not installed in this Steroid project',
+        });
+    } else {
+        const htmlTargets = collectAccessibilityAuditTargets();
+        if (htmlTargets.length === 0) {
+            results.push({
+                step: 'Accessibility (AccessLint)',
+                status: 'SKIP',
+                detail: 'No HTML targets found in out/, dist/, build/, public/, src/, or index.html',
+            });
+        } else {
+            console.log(`  ⏳ Running accessibility audit (AccessLint) on ${htmlTargets.length} HTML target(s)...`);
+            const audit = spawnSync('node', [accesslintRunner, ...htmlTargets, '--json'], {
+                cwd: targetDir,
+                stdio: 'pipe',
+                encoding: 'utf-8',
+                timeout: 120000,
+            });
+            if (audit.error || audit.status !== 0) {
+                const detail =
+                    audit.error?.message ||
+                    String(audit.stderr || audit.stdout || '')
+                        .trim()
+                        .split('\n')
+                        .slice(-6)
+                        .join('\n') ||
+                    'AccessLint runner failed';
+                results.push({
+                    step: 'Accessibility (AccessLint)',
+                    status: 'WARN',
+                    detail,
+                });
+            } else {
+                try {
+                    const parsed = JSON.parse(String(audit.stdout || '{}'));
+                    const highestImpact = parsed.highestImpact || 'none';
+                    const status = summarizeAccessibilityImpact(highestImpact);
+                    const topRules = Array.from(
+                        new Set(
+                            (parsed.results || [])
+                                .flatMap((entry) => entry.violations || [])
+                                .map((violation) => violation.ruleId)
+                                .filter(Boolean),
+                        ),
+                    ).slice(0, 5);
+
+                    writeJsonFile(accesslintArtifact, parsed);
+                    results.push({
+                        step: 'Accessibility (AccessLint)',
+                        status,
+                        detail:
+                            parsed.violationCount > 0
+                                ? `${parsed.violationCount} violation(s) across ${parsed.fileCount} HTML target(s); highest impact ${highestImpact}${topRules.length > 0 ? `; top rules: ${topRules.join(', ')}` : ''}`
+                                : `No violations across ${parsed.fileCount} HTML target(s)`,
+                    });
+                    if (status === 'FAIL') {
+                        hasFailure = true;
+                    }
+                } catch (e) {
+                    results.push({
+                        step: 'Accessibility (AccessLint)',
+                        status: 'WARN',
+                        detail: `AccessLint output parse error: ${e.message}`,
+                    });
+                }
+            }
+        }
+    }
+
+    // ── Step 6: Dead route detection ──
     try {
         const srcDir = path.join(targetDir, 'src');
         if (fs.existsSync(srcDir)) {
@@ -4262,7 +6166,7 @@ if (args[0] === 'verify-feature') {
         results.push({ step: 'Dead routes', status: 'SKIP', detail: `Scan error: ${e.message}` });
     }
 
-    // ── Step 6: Unused exports (hooks, types never imported) ──
+    // ── Step 7: Unused exports (hooks, types never imported) ──
     try {
         const srcDir = path.join(targetDir, 'src');
         if (fs.existsSync(srcDir)) {
@@ -4320,7 +6224,7 @@ if (args[0] === 'verify-feature') {
         results.push({ step: 'Orphan detection', status: 'SKIP', detail: `Scan error: ${e.message}` });
     }
 
-    // ── Step 7: Memory freshness ──
+    // ── Step 8: Memory freshness ──
     const techStackFile = path.join(knowledgeDir, 'tech-stack.json');
     if (fs.existsSync(techStackFile)) {
         try {
@@ -4350,14 +6254,109 @@ if (args[0] === 'verify-feature') {
         });
     }
 
-    // ── Step 8: Optional deep scans ──
+    // ── Step 9: Optional deep scans ──
     if (deepMode) {
+        const browserAuditRunner = resolveBrowserAuditRunnerPath();
+        const browserAuditScreenshot = path.join(featureDir, 'ui-audit.png');
+        const browserAuditEligible = detectUiFeatureForGate(featureDir, promptReceipt);
+
+        if (!browserAuditEligible || designReceipt?.stack === 'react-native') {
+            results.push({
+                step: 'Deep scan: Playwright UI audit',
+                status: 'SKIP',
+                detail: 'Browser UI audit is only applicable to web UI routes',
+            });
+        } else if (!fs.existsSync(browserAuditRunner)) {
+            results.push({
+                step: 'Deep scan: Playwright UI audit',
+                status: 'SKIP',
+                detail: 'Browser audit runner not installed in this Steroid project',
+            });
+        } else {
+            const htmlTargets = collectAccessibilityAuditTargets();
+            const browserTarget = resolveBrowserAuditTarget(featureDir, htmlTargets, { url: previewUrl });
+
+            if (!browserTarget) {
+                results.push({
+                    step: 'Deep scan: Playwright UI audit',
+                    status: 'SKIP',
+                    detail: 'No preview URL or local HTML target available for browser audit',
+                });
+            } else {
+                console.log(`  ⏳ Running Deep scan: Playwright UI audit...`);
+                const localPlaywrightEntrypoint = path.join(targetDir, 'node_modules', 'playwright', 'index.js');
+                const audit = spawnSync(
+                    'node',
+                    [browserAuditRunner, browserTarget.target, '--json', '--screenshot', browserAuditScreenshot],
+                    {
+                        cwd: targetDir,
+                        stdio: 'pipe',
+                        encoding: 'utf-8',
+                        timeout: 120000,
+                        env: {
+                            ...process.env,
+                            STEROID_PLAYWRIGHT_PATH: fs.existsSync(localPlaywrightEntrypoint)
+                                ? localPlaywrightEntrypoint
+                                : path.join(targetDir, 'node_modules', 'playwright'),
+                        },
+                    },
+                );
+
+                if (audit.error || audit.status !== 0) {
+                    const detail =
+                        audit.error?.message ||
+                        String(audit.stderr || audit.stdout || '')
+                            .trim()
+                            .split('\n')
+                            .slice(-6)
+                            .join('\n') ||
+                        'Browser audit runner failed';
+                    results.push({
+                        step: 'Deep scan: Playwright UI audit',
+                        status: 'WARN',
+                        detail,
+                    });
+                } else {
+                    try {
+                        const parsed = JSON.parse(String(audit.stdout || '{}'));
+                        if (parsed.skipped) {
+                            results.push({
+                                step: 'Deep scan: Playwright UI audit',
+                                status: 'SKIP',
+                                detail: parsed.reason || 'Browser audit skipped',
+                            });
+                        } else {
+                            parsed.auditSource = browserTarget.source;
+                            parsed.auditMode = browserTarget.mode;
+                            writeJsonFile(browserAuditArtifact, parsed);
+
+                            const summary = summarizeBrowserAuditResult(parsed);
+                            results.push({
+                                step: 'Deep scan: Playwright UI audit',
+                                status: summary.status,
+                                detail: summary.detail,
+                            });
+                            if (summary.status === 'FAIL') {
+                                hasFailure = true;
+                            }
+                        }
+                    } catch (e) {
+                        results.push({
+                            step: 'Deep scan: Playwright UI audit',
+                            status: 'WARN',
+                            detail: `Browser audit output parse error: ${e.message}`,
+                        });
+                    }
+                }
+            }
+        }
+
         const deepScans = [
             {
                 step: 'Deep scan: knip',
                 shouldRun: fs.existsSync(pkgPath),
                 run: () =>
-                    spawnSync('npx', ['knip', '--no-exit-code', '--reporter', 'compact'], {
+                    spawnSync('npx', ['--no-install', 'knip', '--no-exit-code', '--reporter', 'compact'], {
                         cwd: targetDir,
                         stdio: 'pipe',
                         timeout: 120000,
@@ -4371,7 +6370,7 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: madge',
                 shouldRun: fs.existsSync(path.join(targetDir, 'src')),
                 run: () =>
-                    spawnSync('npx', ['madge', '--circular', 'src'], {
+                    spawnSync('npx', ['--no-install', 'madge', '--circular', 'src'], {
                         cwd: targetDir,
                         stdio: 'pipe',
                         timeout: 120000,
@@ -4385,7 +6384,7 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: gitleaks',
                 shouldRun: true,
                 run: () =>
-                    spawnSync('npx', ['@ziul285/gitleaks', 'detect', '--no-git', '--source', '.'], {
+                    spawnSync('npx', ['--no-install', '@ziul285/gitleaks', 'detect', '--no-git', '--source', '.'], {
                         cwd: targetDir,
                         stdio: 'pipe',
                         timeout: 120000,
@@ -4399,7 +6398,7 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: license-checker',
                 shouldRun: fs.existsSync(pkgPath),
                 run: () =>
-                    spawnSync('npx', ['license-checker', '--summary'], {
+                    spawnSync('npx', ['--no-install', 'license-checker', '--summary'], {
                         cwd: targetDir,
                         stdio: 'pipe',
                         timeout: 120000,
@@ -4453,6 +6452,11 @@ if (args[0] === 'verify-feature') {
     console.log(`  Result: ${passCount} passed, ${failCount} failed, ${warnCount} warnings, ${skipCount} skipped`);
 
     const verifyStatus = hasFailure ? 'FAIL' : warnCount > 0 ? 'CONDITIONAL' : 'PASS';
+    const previewTarget =
+        normalizePreviewUrlCandidate(previewUrl) ||
+        normalizePreviewUrlCandidate(readFeatureArtifactText(featureDir, 'preview-url.txt')) ||
+        normalizePreviewUrlCandidate(readJsonFile(path.join(featureDir, 'preview-url.json'))?.url) ||
+        null;
 
     // ── Write verify.md ──
     let verifyMd = `# Verification Report: ${feature}\n\n`;
@@ -4495,6 +6499,7 @@ if (args[0] === 'verify-feature') {
     }
     verifyMd += `\n---\n_Generated by steroid-workflow v${SW_VERSION}_\n`;
     fs.writeFileSync(path.join(featureDir, 'verify.md'), verifyMd);
+
     saveVerifyReceipt(featureDir, {
         feature,
         status: verifyStatus,
@@ -4504,8 +6509,20 @@ if (args[0] === 'verify-feature') {
         deepCompleted: deepMode,
     });
 
+    const uiReviewRefresh = ensureCurrentUiReviewArtifacts(feature, featureDir, {
+        verifyStatus,
+        deepMode,
+        previewUrl: previewTarget,
+        refreshSource: 'verify-feature',
+    });
+
     console.log(`  Report: .memory/changes/${feature}/verify.md`);
     console.log(`  Receipt: .memory/changes/${feature}/verify.json`);
+    if (uiReviewRefresh.attempted && uiReviewRefresh.refreshed) {
+        console.log(`  UI Review: refreshed from current verification evidence`);
+    } else if (uiReviewRefresh.attempted && !uiReviewRefresh.ok && !uiReviewRefresh.skipped) {
+        console.log(`  UI Review: refresh failed (${uiReviewRefresh.reason || 'unknown error'})`);
+    }
 
     if (hasFailure) {
         console.log('');
@@ -4536,6 +6553,7 @@ if (args[0] === 'review') {
 Usage:
   node steroid-run.cjs review spec <feature>       Stage 1: Spec compliance review
   node steroid-run.cjs review quality <feature>    Stage 2: Code quality review (requires Stage 1 PASS)
+  node steroid-run.cjs review ui <feature>         Refresh frontend review receipts from current UI evidence
   node steroid-run.cjs review status <feature>     Show review status for a feature
   node steroid-run.cjs review reset <feature>      Reset review state (re-review)
 
@@ -4543,6 +6561,7 @@ Stages:
   Stage 1 (Spec Review)   — "Did the AI build what was requested?"
   Stage 2 (Quality Review) — "Is it well-built?"
                              Only runs after Stage 1 passes.
+  UI Review                 — "Does the frontend evidence still look shippable?"
 
 Output: .memory/changes/<feature>/review.md + review.json
 
@@ -4574,6 +6593,11 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         console.log(`[steroid-run] 📋 Review Status for "${feature}":`);
         console.log(`  ${icons[specStatus]} Stage 1 (Spec Compliance): ${specStatus}`);
         console.log(`  ${icons[qualityStatus]} Stage 2 (Code Quality): ${qualityStatus}`);
+        const uiReviewReceipt = readJsonFile(path.join(featureDir, 'ui-review.json'));
+        if (uiReviewReceipt?.status) {
+            const uiStatus = uiReviewReceipt.status;
+            console.log(`  ${icons[uiStatus] || '○'} UI Review: ${uiStatus}`);
+        }
         if (receipt.updatedAt) console.log(`  🧾 Receipt updated: ${receipt.updatedAt}`);
 
         if (specStatus === 'PASS' && qualityStatus === 'PASS') {
@@ -4585,6 +6609,35 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         } else if (specStatus === 'PASS' && qualityStatus !== 'PASS') {
             console.log('\n  ⏳ Spec passed. Run quality review: node steroid-run.cjs review quality ' + feature);
         }
+        process.exit(0);
+    }
+
+    if (sub === 'ui') {
+        const refreshed = refreshUiReviewArtifacts(feature, featureDir, {
+            refreshSource: 'review ui',
+            refreshReason: 'Manual frontend review refresh requested.',
+        });
+        if (refreshed.skipped) {
+            console.log(`[steroid-run] 🎨 UI Review skipped for "${feature}".`);
+            console.log(`  Reason: ${refreshed.reason}`);
+            process.exit(0);
+        }
+
+        if (!refreshed.ok) {
+            console.error(`[steroid-run] ❌ UI review failed for "${feature}".`);
+            console.error(`  Reason: ${refreshed.reason || 'Unknown UI review error.'}`);
+            process.exit(1);
+        }
+
+        console.log(`[steroid-run] 🎨 UI Review for "${feature}"`);
+        console.log(`  Status: ${refreshed.status}`);
+        console.log(`  Stack: ${refreshed.receipt?.stack || 'Unknown'}`);
+        console.log(`  Wrapper: ${refreshed.receipt?.wrapperSkill || 'none'}`);
+        console.log(
+            `  Findings: ${Array.isArray(refreshed.receipt?.findings) ? refreshed.receipt.findings.length : 0}`,
+        );
+        console.log(`  Report: .memory/changes/${feature}/ui-review.md`);
+        console.log(`  Receipt: .memory/changes/${feature}/ui-review.json`);
         process.exit(0);
     }
 
@@ -4752,6 +6805,12 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
         }
 
         const featureDir = path.join(changesDir, feature);
+        const refreshedUiReview = ensureCurrentUiReviewArtifacts(feature, featureDir, {
+            refreshSource: 'report generate',
+        });
+        if (refreshedUiReview.attempted && refreshedUiReview.refreshed) {
+            console.log(`[steroid-run] 🔄 Refreshed UI review for report generation: ${refreshedUiReview.reason}`);
+        }
         const report = generateHandoffReport(feature, featureDir, state);
         const reportFile = path.join(reportsDir, `${feature}.md`);
         fs.writeFileSync(reportFile, report);
@@ -4791,16 +6850,53 @@ if (args[0] === 'dashboard') {
         console.log('  No features archived yet.');
     } else {
         let totalErrors = 0;
+        const uiReviewCounts = { PASS: 0, CONDITIONAL: 0, FAIL: 0 };
+        const uiRefreshSources = {};
+        const uiRecommendations = {};
         for (const name of featureNames) {
             const f = featuresData[name];
             const icon = f.status === 'complete' ? '✅' : '⏳';
             const errors = f.errorCount || 0;
             totalErrors += errors;
             const fDate = f.archived ? f.archived.split('T')[0] : 'unknown';
-            console.log(`  ${icon} ${name} — ${errors} error(s) — ${fDate}`);
+            const uiStatus = f.uiReviewStatus ? ` — UI ${f.uiReviewStatus}` : '';
+            const uiFreshness = f.uiReviewRefreshSource ? ` (${f.uiReviewRefreshSource})` : '';
+            const uiRecommendation = f.uiReviewRecommendation ? ` [${f.uiReviewRecommendation}]` : '';
+            if (f.uiReviewStatus && uiReviewCounts[f.uiReviewStatus] !== undefined) {
+                uiReviewCounts[f.uiReviewStatus] += 1;
+            }
+            if (f.uiReviewRefreshSource) {
+                uiRefreshSources[f.uiReviewRefreshSource] = (uiRefreshSources[f.uiReviewRefreshSource] || 0) + 1;
+            }
+            if (f.uiReviewRecommendation) {
+                uiRecommendations[f.uiReviewRecommendation] = (uiRecommendations[f.uiReviewRecommendation] || 0) + 1;
+            }
+            console.log(
+                `  ${icon} ${name} — ${errors} error(s)${uiStatus}${uiFreshness}${uiRecommendation} — ${fDate}`,
+            );
         }
         const avgErrors = featureNames.length > 0 ? (totalErrors / featureNames.length).toFixed(1) : 0;
         console.log(`\n  Total: ${featureNames.length} features | Avg errors: ${avgErrors}/feature`);
+        const uiTotal = uiReviewCounts.PASS + uiReviewCounts.CONDITIONAL + uiReviewCounts.FAIL;
+        if (uiTotal > 0) {
+            console.log(
+                `  Frontend quality: ${uiReviewCounts.PASS} PASS, ${uiReviewCounts.CONDITIONAL} CONDITIONAL, ${uiReviewCounts.FAIL} FAIL`,
+            );
+            const refreshSummary = Object.entries(uiRefreshSources)
+                .sort((a, b) => b[1] - a[1])
+                .map(([source, count]) => `${count} ${source}`)
+                .join(', ');
+            if (refreshSummary) {
+                console.log(`  Frontend freshness: ${refreshSummary}`);
+            }
+            const recommendationSummary = Object.entries(uiRecommendations)
+                .sort((a, b) => b[1] - a[1])
+                .map(([recommendation, count]) => `${count} ${recommendation}`)
+                .join(', ');
+            if (recommendationSummary) {
+                console.log(`  Frontend release recommendation: ${recommendationSummary}`);
+            }
+        }
     }
 
     // 2. Error patterns
@@ -4942,7 +7038,7 @@ if (args[0] === 'run') {
         if (arg.startsWith('--cwd=')) {
             const requestedCwd = arg.slice('--cwd='.length);
             if (!requestedCwd) {
-                console.error('[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> \'<command>\'');
+                console.error("[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> '<command>'");
                 process.exit(1);
             }
             executionCwd = path.resolve(targetDir, requestedCwd);
@@ -4953,7 +7049,7 @@ if (args[0] === 'run') {
     }
 
     if (!cwdProvided || executionArgs.length === 0) {
-        console.error('[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> \'<command>\'');
+        console.error("[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> '<command>'");
         process.exit(1);
     }
     if (!isWithinTargetDir(executionCwd)) {
@@ -5142,6 +7238,9 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
         'scan',
         'detect-intent',
         'normalize-prompt',
+        'design-prep',
+        'design-route',
+        'design-system',
         'prompt-health',
         'session-detect',
         'detect-tests',

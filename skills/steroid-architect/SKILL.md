@@ -16,9 +16,11 @@ Activate immediately after `@steroid-research` completes. Do not wait for user i
 ### 1. Phase Gate (Physical Enforcement)
 
 Before doing anything, run the gate check:
+
 ```
 node steroid-run.cjs gate architect <feature>
 ```
+
 If this command fails, STOP. The research phase is not complete.
 
 ### 2. No User Interaction
@@ -29,8 +31,11 @@ Do not ask the user any questions. Read the following files and make all archite
 2. `.memory/changes/<feature>/spec.md` — The acceptance criteria
 3. `.memory/changes/<feature>/research.md` — The investigated tech stack and patterns
 4. `.memory/changes/<feature>/prompt.json` — The normalized prompt interpretation, if present
+5. `.memory/changes/<feature>/design-routing.json` — The internal frontend routing receipt, if present
+6. `.memory/changes/<feature>/design-system.md` — The generated design system artifact, if present
 
 Use the researched stack from `research.md`. Do NOT guess or pick your own tech stack — the Research skill already investigated and verified the best tools.
+For UI-intensive work, `design-system.md` is the binding frontend artifact. The physical gate now blocks architect if UI work is missing `design-routing.json` or `design-system.md`.
 
 ### 2. Anti-Summarization Directive
 
@@ -51,12 +56,14 @@ Write the output to `.memory/changes/<feature>/plan.md` using this exact format:
 **Created**: <date>
 
 ## Tech Stack
+
 - Frontend: [from research.md Standard Stack]
 - Backend: [from research.md Standard Stack, or "None"]
 - Database: [from research.md, or "None - localStorage"]
 - Styling: [from research.md Standard Stack]
 
 ## Execution Checklist
+
 - [ ] Initialize [framework] project via temp-directory scaffold (see engine scaffold safety)
 - [ ] Install and configure [from research.md installation command]
 - [ ] Create [Component A] with layout and placeholder content
@@ -71,18 +78,21 @@ Write the output to `.memory/changes/<feature>/plan.md` using this exact format:
 ```
 
 **Brownfield Override (v5.5.0):** If vibe.md has `Project Type: Brownfield`, do NOT include:
+
 - `Initialize [framework] project` tasks — the project already exists
 - `npm init` or framework scaffolding commands
 - Tasks that would overwrite existing config files (`tsconfig.json`, `next.config.*`, etc.)
 
-Instead, generate an *integration* checklist that adds to the existing structure without destroying it.
+Instead, generate an _integration_ checklist that adds to the existing structure without destroying it.
 
 Each checklist item must:
+
 - Be specific enough that an AI sub-agent with fresh context can execute it without ambiguity
 - Reference which user story / acceptance criterion it satisfies (from spec.md)
 - Map to researched libraries (from research.md) — not arbitrary choices
 
 If `prompt.json` exists, adapt the checklist shape to the approved route without breaking the structure:
+
 - `lite-change` → keep the checklist tight and focused on the smallest viable set of files/tasks
 - `resume-mode` → prefer incremental integration tasks over fresh setup tasks
 - `split-work` → group tasks by sub-problem or story so execution does not blend multiple intents together
@@ -90,18 +100,19 @@ If `prompt.json` exists, adapt the checklist shape to the approved route without
 
 Do NOT invent new route names. Use `prompt.json` only as planning context inside the existing structure.
 
+**UI-intensive override:** If `research.md` contains `## Design Intelligence`, the checklist MUST translate it into implementation tasks. Do not leave design direction trapped in research. Create explicit tasks for tokens, layout hierarchy, component states, responsive behavior, accessibility constraints, imported rule application, and final anti-pattern review.
+If `design-system.md` exists, the checklist MUST reference it explicitly in frontend tasks instead of inventing a separate design direction.
+
 ### 4. Task Ordering Rules
 
 Follow this order for each component:
+
 1. **Create** the component file with layout/structure
 2. **Write test** for the component (referencing spec.md acceptance criteria)
 3. **Implement** the component to pass the test
 4. **Repeat** for next component
 
-After all components:
-5. **Wire up** the components together
-6. **Integration test** the full user flow
-7. **Polish** styling and animations (referencing vibe.md aesthetic)
+After all components: 5. **Wire up** the components together 6. **Integration test** the full user flow 7. **Polish** styling and animations (referencing vibe.md aesthetic)
 
 ### 5. Circuit Breaker Mandate
 
@@ -115,6 +126,7 @@ Append these tasks to EVERY execution checklist, regardless of what the user ask
 
 ```markdown
 ## Quality Baseline (auto-added)
+
 - [ ] Semantic HTML: use proper heading hierarchy (h1→h2→h3), landmark elements (header, main, footer, nav)
 - [ ] Accessibility: add aria-labels to all interactive elements, alt text on all images
 - [ ] SEO: add meta title, meta description, and OG tags (og:title, og:description, og:image) to layout/head
@@ -122,10 +134,25 @@ Append these tasks to EVERY execution checklist, regardless of what the user ask
 - [ ] Performance: lazy-load images, minimize JS bundle in initial load
 ```
 
+### 6a. Frontend Design Quality (auto-added for UI-intensive work)
+
+If `research.md` contains a `## Design Intelligence` section, append these checklist items:
+
+```markdown
+## Frontend Design Quality (auto-added for UI-intensive work)
+
+- [ ] Establish semantic design tokens for color, typography, spacing, radius, shadow, and motion before final polish
+- [ ] Implement layout hierarchy and core page composition according to the researched pattern before decorative effects
+- [ ] Add all required interactive states: hover, focus, active, disabled, loading, empty, and error
+- [ ] Validate responsive behavior and readability at the researched breakpoints
+- [ ] Run a final anti-pattern pass against research.md so the UI does not regress into generic AI-generated styling
+```
+
 ### 6b. Documentation Baseline (v5.2.0 — auto-added)
 
 ```markdown
 ## Documentation (auto-added)
+
 - [ ] Create README.md: project name, one-line description, how to install, how to run, tech stack
 - [ ] Create CHANGELOG.md with initial v0.1.0 entry
 - [ ] Set package.json version to 0.1.0 (semver)
@@ -137,6 +164,7 @@ These are non-negotiable. Every project ships with a README and a version.
 
 ```markdown
 ## Error Handling (auto-added)
+
 - [ ] Add global error boundary (React) or top-level try/catch (Node.js) for unhandled errors
 - [ ] Add loading states/skeletons for async data fetching
 - [ ] Handle unknown routes with a 404 page or redirect
@@ -147,6 +175,7 @@ These are non-negotiable. Every project ships with a README and a version.
 
 ```markdown
 ## Ship Readiness (auto-added)
+
 - [ ] Create .env.example documenting all required environment variables (API keys, URLs, flags) — never commit real secrets
 - [ ] Add .env and .env.local to .gitignore
 - [ ] Add deployment section to README.md: build command, output directory, recommended platform (Vercel/Netlify/Railway)
@@ -159,6 +188,7 @@ If `research.md` contains a `## Compliance Requirements` section, add the corres
 
 ```markdown
 ## Compliance (auto-added from research.md)
+
 - [ ] [Specific compliance task, e.g., "Add cookie consent banner for GDPR"]
 - [ ] [Specific compliance task, e.g., "Implement rate limiting on auth endpoints (OWASP)"]
 - [ ] [Specific compliance task, e.g., "Add aria-labels to all interactive elements (WCAG 2.1 AA)"]
@@ -180,6 +210,7 @@ Then immediately read the file at `.agents/skills/steroid-engine/SKILL.md` and f
 Input (from spec.md + research.md): Habit tracker with React 18/Vite 5/Tailwind CSS/Chart.js, user stories for daily completion, streak tracking, weekly overview
 
 Output (.memory/changes/habit-tracker/plan.md):
+
 ```markdown
 # Implementation Plan: Habit Tracker
 
@@ -187,12 +218,14 @@ Output (.memory/changes/habit-tracker/plan.md):
 **Created**: 2026-03-11
 
 ## Tech Stack
+
 - Frontend: React 18.3 via Vite 5.4 with TypeScript
 - Backend: None - local storage
 - Database: Browser localStorage
 - Styling: Tailwind CSS 3.4
 
 ## Execution Checklist
+
 - [ ] Scaffold Vite + React project into .steroid-scaffold-tmp and merge into root
 - [ ] Install tailwindcss chart.js react-chartjs-2 date-fns and configure Tailwind
 - [ ] Create HabitCard component with name, icon, and completion toggle (Story 1)
@@ -218,6 +251,7 @@ Output (.memory/changes/habit-tracker/plan.md):
 - [ ] Apply Apple Health-inspired styling: rounded-xl, shadow-sm, bg-emerald-500 (from vibe.md)
 - [ ] Add micro-animations: checkmark bounce on completion, card slide-in on load
 ```
+
 </good>
 
 <bad>

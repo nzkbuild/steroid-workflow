@@ -151,10 +151,23 @@ For other intents: Follow the pipeline variant above, skipping non-applicable ph
 Before the workflow locks onto a path, use the prompt intelligence layer when the request is vague, mixed, non-technical, or resumptive:
 - \\\`node steroid-run.cjs normalize-prompt "<message>"\\\` — infer intent, ambiguity, complexity, assumptions, and recommended route
 - \\\`node steroid-run.cjs normalize-prompt "<message>" --feature <feature> --write\\\` — persist \\\`.memory/changes/<feature>/prompt.json\\\` and \\\`prompt.md\\\`
+- \\\`node steroid-run.cjs design-prep "<message>" --feature <feature> --write\\\` — generate both \\\`.memory/changes/<feature>/design-routing.json\\\` and \\\`design-system.md\\\` together
+- \\\`node steroid-run.cjs design-route "<message>" --feature <feature> --write\\\` — persist \\\`.memory/changes/<feature>/design-routing.json\\\` for UI-intensive work
+- \\\`node steroid-run.cjs design-system --feature <feature> --write\\\` — generate \\\`.memory/changes/<feature>/design-system.md\\\` from Steroid's imported UI systems
 - \\\`node steroid-run.cjs prompt-health "<message>"\\\` — score clarity, completeness, ambiguity, and risk
 - \\\`node steroid-run.cjs session-detect\\\` — detect whether this looks like new work, continuation, or post-failure recovery
 
 If \\\`prompt.json\\\` exists, treat it as a first-class handoff artifact. Preserve its assumptions, non-goals, continuation context, and recommended route in later phases.
+
+## Frontend / UI Design Gate
+If the task affects UI, UX, visual hierarchy, landing pages, dashboards, responsive layout, motion, forms, onboarding, navigation, or component styling:
+- Treat design quality as a first-class requirement, not cosmetic polish
+- Prefer Steroid's internal design pipeline over assistant-specific global skill installs. The router centers \\\`steroid-design-orchestrator\\\` and \\\`ui-ux-pro-max\\\`, then pulls the right imported implementation and audit packs for the stack
+- During research, produce a concrete design system before implementation: pattern, style direction, color tokens, typography, spacing, radii, shadows, states, motion rules, accessibility constraints, and anti-patterns
+- During architecture and engine, translate that design system into explicit tasks and code instead of inventing a second design direction
+- During verify, expect Steroid to persist \\\`.memory/changes/<feature>/accessibility.json\\\`, optional deep browser evidence in \\\`.memory/changes/<feature>/ui-audit.json\\\`, and consolidated frontend review receipts in \\\`.memory/changes/<feature>/ui-review.md\\\` + \\\`.memory/changes/<feature>/ui-review.json\\\`
+- For preview-backed deep UI verification, use \\\`node steroid-run.cjs verify-feature <feature> --deep --url <preview>\\\` when Steroid cannot auto-discover the target
+- Do NOT ship generic gradients, random glassmorphism, placeholder hero sections, inconsistent card styles, or default "AI app" aesthetics
 
 ## The 8-Skill Pipeline (Build Intent — Full)
 
@@ -187,9 +200,12 @@ The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs log <feature> "<message>"\\\` — Append to progress log
 - \\\`node steroid-run.cjs check-plan <feature>\\\` — Check if all tasks are done
 - \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (optional \\\`--deep\\\` adds scanners)
-- \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature
+- \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature (\\\`--force-ui\\\` is available if blocking frontend cautions are explicitly accepted)
 - \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
 - \\\`node steroid-run.cjs normalize-prompt "<message>"\\\` — Normalize a raw user prompt into a structured brief
+- \\\`node steroid-run.cjs design-prep "<message>"\\\` — Prepare both UI design artifacts together
+- \\\`node steroid-run.cjs design-route "<message>"\\\` — Route UI work to Steroid's internal frontend systems
+- \\\`node steroid-run.cjs design-system "<message>"\\\` — Generate a design-system artifact from imported UI systems
 - \\\`node steroid-run.cjs prompt-health "<message>"\\\` — Score prompt quality before committing to a route
 - \\\`node steroid-run.cjs session-detect\\\` — Inspect current project/session state
 - \\\`node steroid-run.cjs detect-tests\\\` — Detect test framework in project
@@ -201,8 +217,9 @@ The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs stories <feature> next\\\` — Get next prioritized story (P1/P2/P3)
 - \\\`node steroid-run.cjs review spec <feature>\\\` — Stage 1: Spec compliance review
 - \\\`node steroid-run.cjs review quality <feature>\\\` — Stage 2: Code quality review (after Stage 1 passes)
+- \\\`node steroid-run.cjs review ui <feature>\\\` — Refresh frontend review receipts from current UI evidence
 - \\\`node steroid-run.cjs review status <feature>\\\` — Check review stage status
-- \\\`node steroid-run.cjs report generate <feature>\\\` — Generate handoff report
+- \\\`node steroid-run.cjs report generate <feature>\\\` — Generate handoff report and auto-refresh stale UI review receipts when newer frontend evidence exists
 - \\\`node steroid-run.cjs report list\\\` — List all handoff reports
 - \\\`node steroid-run.cjs dashboard\\\` — Project health analytics
 
@@ -336,11 +353,15 @@ copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
 console.log(`   ✅ Skills installed to ${skillsTarget}/`);
 console.log(`      → scan → vibe-capture → specify → research → architect → engine → verify (+ diagnose)`);
 
-// Step 3: Install raw forks + steroid-run.cjs
-console.log('📦 [3/7] Installing ecosystem forks + pipeline enforcer...');
+// Step 3: Install raw forks + imported systems + steroid-run.cjs
+console.log('📦 [3/7] Installing ecosystem forks, imported frontend systems, and pipeline enforcer...');
 copyRecursiveSync(path.join(sourceDir, 'src', 'forks'), path.join(targetDir, 'src', 'forks'));
+copyRecursiveSync(path.join(sourceDir, 'imported'), path.join(targetDir, 'imported'));
+copyRecursiveSync(path.join(sourceDir, 'integrations'), path.join(targetDir, 'integrations'));
 fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.cjs'), path.join(targetDir, 'steroid-run.cjs'));
 console.log('   ✅ Raw ecosystem forks installed to src/forks/');
+console.log('   ✅ Imported frontend systems installed to imported/');
+console.log('   ✅ Internal integrations installed to integrations/');
 console.log('   ✅ steroid-run.cjs copied to project root (pipeline enforcer)');
 
 // Step 4: Inject IDE Trigger Rules (The Maestro) — ALL major IDEs

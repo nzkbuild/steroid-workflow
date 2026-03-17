@@ -326,6 +326,49 @@ if (childProcessUnavailableReason) {
         if (receipt.stage2 !== 'PASS') throw new Error(`Stage 2 mismatch: ${receipt.stage2}`);
     });
 
+    test('review ui refreshes frontend review receipts', () => {
+        const feature = 'review-ui-refresh';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Polish the dashboard UI hierarchy',
+                    recommendedPipeline: 'standard-build',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    stack: 'react',
+                    auditOnly: false,
+                    wrapperSkill: 'steroid-react-implementation',
+                    importedSourceIds: ['ui-ux-pro-max'],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '## Design System: review-ui-refresh\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'accessibility.json'),
+            JSON.stringify({ violationCount: 0, highestImpact: 'none', fileCount: 1 }, null, 2),
+        );
+
+        const result = run(['review', 'ui', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('UI Review for')) throw new Error(`Missing review ui output: ${output}`);
+        if (!fs.existsSync(path.join(featureDir, 'ui-review.md'))) throw new Error('ui-review.md was not written');
+        if (!fs.existsSync(path.join(featureDir, 'ui-review.json'))) throw new Error('ui-review.json was not written');
+    });
+
     test('normalize-prompt --write persists prompt.json and prompt.md for a feature', () => {
         const feature = 'prompt-receipt';
         const featureDir = path.join(changesDir, feature);
@@ -383,6 +426,105 @@ if (childProcessUnavailableReason) {
             throw new Error(`Missing route-aware phase skip: ${output}`);
     });
 
+    test('pipeline-status surfaces design intelligence when routing artifacts exist', () => {
+        const feature = 'design-pipeline-status';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Redesign the react dashboard UI to feel premium',
+                    primaryIntent: 'build',
+                    recommendedPipeline: 'standard-build',
+                    continuationState: 'fresh-start',
+                    complexity: 'standard',
+                    risk: 'medium',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    stack: 'react',
+                    auditOnly: false,
+                    wrapperSkill: 'steroid-react-implementation',
+                    importedSourceIds: ['ui-ux-pro-max', 'vercel-react-best-practices'],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '## Design System: design-pipeline-status\n');
+        fs.writeFileSync(path.join(featureDir, 'accessibility.json'), JSON.stringify({ violationCount: 0 }, null, 2));
+        fs.writeFileSync(path.join(featureDir, 'ui-audit.json'), JSON.stringify({ ok: true }, null, 2));
+        fs.writeFileSync(path.join(featureDir, 'ui-review.md'), '# UI Review: design-pipeline-status\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify(
+                {
+                    status: 'PASS',
+                    generatedAt: '2026-03-17T10:00:00.000Z',
+                    freshness: {
+                        source: 'verify-feature',
+                        reason: 'verify.json is newer than the current UI review receipts.',
+                        evidenceUpdatedAt: '2026-03-17T09:59:00.000Z',
+                    },
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['pipeline-status', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('Design Intelligence')) throw new Error('Missing design intelligence section');
+        if (!output.includes('Routing receipt: present')) throw new Error(`Missing routing receipt summary: ${output}`);
+        if (!output.includes('Design system: present')) throw new Error(`Missing design system summary: ${output}`);
+        if (!output.includes('Accessibility receipt: present')) {
+            throw new Error(`Missing accessibility receipt summary: ${output}`);
+        }
+        if (!output.includes('Browser audit receipt: present')) {
+            throw new Error(`Missing browser audit receipt summary: ${output}`);
+        }
+        if (!output.includes('UI review summary: present')) {
+            throw new Error(`Missing UI review summary: ${output}`);
+        }
+        if (!output.includes('UI review receipt: present')) {
+            throw new Error(`Missing UI review receipt summary: ${output}`);
+        }
+        if (!output.includes('UI review refreshed by: verify-feature')) {
+            throw new Error(`Missing UI review freshness source: ${output}`);
+        }
+        if (!output.includes('UI review generated: 2026-03-17T10:00:00.000Z')) {
+            throw new Error(`Missing UI review timestamp: ${output}`);
+        }
+        if (!output.includes('steroid-react-implementation')) {
+            throw new Error(`Missing routed wrapper skill: ${output}`);
+        }
+        if (!output.includes('design-routing.json')) throw new Error(`Missing design-routing artifact row: ${output}`);
+        if (!output.includes('design-system.md')) throw new Error(`Missing design-system artifact row: ${output}`);
+        if (!output.includes('accessibility.json')) throw new Error(`Missing accessibility artifact row: ${output}`);
+        if (!output.includes('ui-audit.json')) throw new Error(`Missing browser audit artifact row: ${output}`);
+        if (!output.includes('ui-review.md')) throw new Error(`Missing UI review artifact row: ${output}`);
+        if (!output.includes('ui-review.json')) throw new Error(`Missing UI review receipt row: ${output}`);
+    });
+
+    test('design-system with no args exits 1', () => {
+        const result = run(['design-system']);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+    });
+
+    test('design-prep with no args exits 1', () => {
+        const result = run(['design-prep']);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+    });
+
     test('gate passes vibe when context exists even without prompt receipt', () => {
         const feature = 'gate-route-advice';
         const featureDir = path.join(changesDir, feature);
@@ -429,6 +571,127 @@ if (childProcessUnavailableReason) {
         }
     });
 
+    test('gate architect blocks UI features when design artifacts are missing', () => {
+        const feature = 'gate-ui-architect-block';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'research.md'), '# Research\n' + 'line\n'.repeat(12));
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Redesign the dashboard UI with a premium visual system',
+                    recommendedPipeline: 'standard-build',
+                    continuationState: 'fresh-start',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['gate', 'architect', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('DESIGN GATE BLOCKED')) throw new Error(`Missing design gate block: ${output}`);
+        if (!output.includes('design-routing.json')) throw new Error(`Missing design-routing guidance: ${output}`);
+        if (!output.includes('design-system.md')) throw new Error(`Missing design-system guidance: ${output}`);
+    });
+
+    test('gate research auto-bootstraps design artifacts for UI features', () => {
+        const feature = 'gate-ui-research-bootstrap';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        const importedRoot = path.join(tmpBase, 'imported');
+        const importedSkillDir = path.join(importedRoot, 'ui-ux-pro-max');
+        fs.mkdirSync(importedRoot, { recursive: true });
+        fs.cpSync(path.join(__dirname, '..', '..', 'imported', 'ui-ux-pro-max'), importedSkillDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(importedRoot, 'imported-manifest.json'),
+            JSON.stringify(
+                {
+                    sources: [
+                        {
+                            id: 'ui-ux-pro-max',
+                            localPath: 'imported/ui-ux-pro-max',
+                        },
+                    ],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'spec.md'),
+            '# Spec\n' +
+                'Build a premium React dashboard redesign with cleaner hierarchy and responsive layout.\n'.repeat(12),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Build a premium React dashboard redesign',
+                    pipelineHint: 'scan -> vibe -> specify -> research -> architect -> engine -> verify',
+                    recommendedPipeline: 'standard-build',
+                    continuationState: 'fresh-start',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['gate', 'research', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('Research prep:')) throw new Error(`Missing research prep output: ${output}`);
+        if (!fs.existsSync(path.join(featureDir, 'design-routing.json'))) {
+            throw new Error('design-routing.json was not auto-generated');
+        }
+        if (!fs.existsSync(path.join(featureDir, 'design-system.md'))) {
+            throw new Error('design-system.md was not auto-generated');
+        }
+    });
+
+    test('gate engine passes UI features when design artifacts are present', () => {
+        const feature = 'gate-ui-engine-pass';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '# Plan\n' + '- [x] done\n'.repeat(10));
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Refactor the onboarding screen UI',
+                    recommendedPipeline: 'standard-build',
+                    continuationState: 'fresh-start',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    domain: 'react',
+                    stack: 'react',
+                    auditOnly: false,
+                    wrapperSkill: 'steroid-react-implementation',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '## Design System: gate-ui-engine-pass\n');
+
+        const result = run(['gate', 'engine', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('Gate passed')) throw new Error(`Missing gate pass output: ${output}`);
+    });
+
     test('archive preserves prior files during same-stamp collisions', () => {
         const feature = 'archive-collision-proof';
         const featureDir = path.join(changesDir, feature);
@@ -442,6 +705,183 @@ if (childProcessUnavailableReason) {
         if (!source.includes('createArchiveStamp')) throw new Error('archive timestamp helper missing');
         if (!source.includes('-${file}') && !source.includes('archiveStamp')) {
             throw new Error('archive timestamp usage not found');
+        }
+    });
+
+    test('archive blocks when ui-review.json is FAIL', () => {
+        const feature = 'archive-ui-review-block';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify({ feature, status: 'PASS', reviewPassed: true }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify({ feature, status: 'FAIL', previewTarget: 'https://preview.example.com' }, null, 2),
+        );
+
+        const result = run(['archive', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('ARCHIVE BLOCKED: ui-review.json status is FAIL.')) {
+            throw new Error(`Missing ui-review archive block: ${output}`);
+        }
+    });
+
+    test('archive refreshes stale ui-review receipts before enforcing UI quality gate', () => {
+        const feature = 'archive-ui-review-refresh';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'PASS',
+                    reviewPassed: true,
+                    deepRequested: false,
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    primaryIntent: 'refactor',
+                    normalizedSummary: 'Refactor the dashboard UI to feel premium.',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    domain: 'frontend',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
+                    importedSourceIds: ['ui-ux-pro-max', 'vercel-react-best-practices'],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '# Design System\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'accessibility.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    violationCount: 3,
+                    highestImpact: 'serious',
+                    fileCount: 1,
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'ui-review.md'), '# UI Review\n\nLegacy PASS receipt\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'PASS',
+                    findings: [],
+                },
+                null,
+                2,
+            ),
+        );
+        const staleDate = new Date('2026-01-01T00:00:00.000Z');
+        fs.utimesSync(path.join(featureDir, 'ui-review.md'), staleDate, staleDate);
+        fs.utimesSync(path.join(featureDir, 'ui-review.json'), staleDate, staleDate);
+
+        const result = run(['archive', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('Refreshed UI review before archive')) {
+            throw new Error(`Missing UI review refresh message: ${output}`);
+        }
+        if (!output.includes('ARCHIVE BLOCKED: ui-review.json status is FAIL.')) {
+            throw new Error(`Missing refreshed archive block: ${output}`);
+        }
+
+        const refreshedReceipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'ui-review.json'), 'utf-8'));
+        if (refreshedReceipt.status !== 'FAIL') {
+            throw new Error(`Expected refreshed ui-review.json to FAIL, got ${refreshedReceipt.status}`);
+        }
+    });
+
+    test('archive blocks CONDITIONAL ui-review receipts with blocking frontend issues unless --force-ui is used', () => {
+        const feature = 'archive-ui-conditional-block';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'PASS',
+                    reviewPassed: true,
+                    deepRequested: false,
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n');
+        fs.writeFileSync(path.join(featureDir, 'review.md'), '# Review\n');
+        fs.writeFileSync(path.join(featureDir, 'verify.md'), '# Verify\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'CONDITIONAL',
+                    generatedAt: '2026-03-17T12:00:00.000Z',
+                    freshness: {
+                        source: 'verify-feature',
+                        reason: 'verify.json is newer than the current UI review receipts.',
+                    },
+                    findings: [
+                        {
+                            severity: 'medium',
+                            title: 'Accessibility violations detected',
+                            detail: '2 moderate issues across 1 HTML target.',
+                        },
+                    ],
+                    evidence: {
+                        accesslint: { present: true, status: 'WARN' },
+                        browserAudit: { present: false, status: 'SKIP' },
+                    },
+                },
+                null,
+                2,
+            ),
+        );
+
+        const blocked = run(['archive', feature]);
+        if (blocked.status !== 1) throw new Error(`Expected exit 1, got ${blocked.status}`);
+        const blockedOutput = `${blocked.stdout}${blocked.stderr}`;
+        if (!blockedOutput.includes('ARCHIVE BLOCKED: ui-review.json is CONDITIONAL with blocking frontend issues.')) {
+            throw new Error(`Missing conditional archive block: ${blockedOutput}`);
+        }
+        if (!blockedOutput.includes('--force-ui')) {
+            throw new Error(`Missing --force-ui guidance: ${blockedOutput}`);
+        }
+
+        const forced = run(['archive', feature, '--force-ui']);
+        if (forced.status !== 0) throw new Error(`Expected forced archive to pass, got ${forced.status}`);
+        const forcedOutput = `${forced.stdout}${forced.stderr}`;
+        if (!forcedOutput.includes('--force-ui override used')) {
+            throw new Error(`Missing --force-ui override message: ${forcedOutput}`);
         }
     });
 
@@ -495,6 +935,178 @@ if (childProcessUnavailableReason) {
         }
     });
 
+    test('report generate includes frontend quality from ui-review.json', () => {
+        const feature = 'report-ui-quality';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n\nThen the landing page feels premium\n');
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Refresh hero\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    primaryIntent: 'refactor',
+                    normalizedSummary: 'Refactor the landing page UI.',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    domain: 'frontend',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
+                    importedSourceIds: ['ui-ux-pro-max'],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'ui-review.md'), '# UI Review\n\nFrontend quality summary\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'CONDITIONAL',
+                    verifyStatus: 'CONDITIONAL',
+                    generatedAt: '2026-03-17T12:00:00.000Z',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
+                    freshness: {
+                        source: 'review ui',
+                        reason: 'Manual frontend review refresh requested.',
+                        evidenceUpdatedAt: '2026-03-17T11:55:00.000Z',
+                        evidenceUpdatedFrom: 'ui-audit.json',
+                    },
+                    findings: [
+                        {
+                            severity: 'medium',
+                            title: 'Browser audit found polish issues',
+                            detail: '2 console warning(s).',
+                        },
+                    ],
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['report', 'generate', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const report = fs.readFileSync(path.join(memoryDir, 'reports', `${feature}.md`), 'utf-8');
+        if (!report.includes('## Frontend Quality')) throw new Error(`Missing frontend quality section: ${report}`);
+        if (!report.includes('UI Review Status: CONDITIONAL')) throw new Error(`Missing UI review status: ${report}`);
+        if (!report.includes('Frontend Release Recommendation: CAUTION')) {
+            throw new Error(`Missing frontend release recommendation: ${report}`);
+        }
+        if (!report.includes('Refreshed By: review ui'))
+            throw new Error(`Missing UI review freshness source: ${report}`);
+        if (!report.includes('Browser audit found polish issues'))
+            throw new Error(`Missing frontend finding: ${report}`);
+    });
+
+    test('report generate refreshes stale active ui-review receipts before writing the handoff report', () => {
+        const feature = 'report-ui-refresh';
+        const featureDir = path.join(changesDir, feature);
+        const archiveDir = path.join(featureDir, 'archive');
+        fs.mkdirSync(archiveDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n\nThen the dashboard feels premium\n');
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Refresh the dashboard shell\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    primaryIntent: 'refactor',
+                    normalizedSummary: 'Refactor the dashboard UI and polish the frontend.',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    domain: 'frontend',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
+                    importedSourceIds: ['ui-ux-pro-max'],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '# Design System\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'accessibility.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    violationCount: 2,
+                    highestImpact: 'serious',
+                    fileCount: 1,
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'ui-review.md'), '# UI Review\n\nLegacy active receipt\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'PASS',
+                    findings: [],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(archiveDir, '2026-03-01T00-00-00-000Z-ui-review.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'CONDITIONAL',
+                    findings: [{ severity: 'medium', title: 'Archived warning', detail: 'Old artifact.' }],
+                },
+                null,
+                2,
+            ),
+        );
+        const staleDate = new Date('2026-01-01T00:00:00.000Z');
+        fs.utimesSync(path.join(featureDir, 'ui-review.md'), staleDate, staleDate);
+        fs.utimesSync(path.join(featureDir, 'ui-review.json'), staleDate, staleDate);
+
+        const result = run(['report', 'generate', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('Refreshed UI review for report generation')) {
+            throw new Error(`Missing report refresh message: ${output}`);
+        }
+
+        const report = fs.readFileSync(path.join(memoryDir, 'reports', `${feature}.md`), 'utf-8');
+        if (!report.includes('UI Review Status: FAIL')) {
+            throw new Error(`Expected refreshed FAIL status in report: ${report}`);
+        }
+        if (!report.includes('Frontend Release Recommendation: HOLD')) {
+            throw new Error(`Expected HOLD recommendation in report: ${report}`);
+        }
+        if (report.includes('Archived warning')) {
+            throw new Error(`Report still used archived ui-review artifact: ${report}`);
+        }
+    });
+
     test('verify-feature treats route-group pages as live routes', () => {
         const feature = 'route-groups-live';
         const featureDir = path.join(changesDir, feature);
@@ -512,12 +1124,23 @@ if (childProcessUnavailableReason) {
             path.join(appDir, 'page.tsx'),
             'export default function Home(){return <><a href="/dashboard">Dash</a><a href="/blueprint">Blueprint</a></>;}',
         );
-        fs.writeFileSync(path.join(appDir, '(app)', 'dashboard', 'page.tsx'), 'export default function Page(){return null;}');
-        fs.writeFileSync(path.join(appDir, '(app)', 'blueprint', 'page.tsx'), 'export default function Page(){return null;}');
+        fs.writeFileSync(
+            path.join(appDir, '(app)', 'dashboard', 'page.tsx'),
+            'export default function Page(){return null;}',
+        );
+        fs.writeFileSync(
+            path.join(appDir, '(app)', 'blueprint', 'page.tsx'),
+            'export default function Page(){return null;}',
+        );
         fs.writeFileSync(
             path.join(knowledgeDir, 'tech-stack.json'),
             JSON.stringify(
-                { language: 'TypeScript', framework: 'Next.js', packageManager: 'npm', _lastUpdated: new Date().toISOString() },
+                {
+                    language: 'TypeScript',
+                    framework: 'Next.js',
+                    packageManager: 'npm',
+                    _lastUpdated: new Date().toISOString(),
+                },
                 null,
                 2,
             ),
@@ -526,7 +1149,10 @@ if (childProcessUnavailableReason) {
         const result = run(['verify-feature', feature]);
         const output = result.stdout.toString();
         if (!output.includes('Dead routes: PASS')) throw new Error(`Dead route check did not pass: ${output}`);
-        if (output.includes('/dashboard (in src\\app\\page.tsx)') || output.includes('/blueprint (in src\\app\\page.tsx)')) {
+        if (
+            output.includes('/dashboard (in src\\app\\page.tsx)') ||
+            output.includes('/blueprint (in src\\app\\page.tsx)')
+        ) {
             throw new Error(`Route groups still flagged as dead: ${output}`);
         }
     });
@@ -556,7 +1182,12 @@ if (childProcessUnavailableReason) {
         fs.writeFileSync(
             path.join(knowledgeDir, 'tech-stack.json'),
             JSON.stringify(
-                { language: 'TypeScript', framework: 'Next.js', packageManager: 'npm', _lastUpdated: new Date().toISOString() },
+                {
+                    language: 'TypeScript',
+                    framework: 'Next.js',
+                    packageManager: 'npm',
+                    _lastUpdated: new Date().toISOString(),
+                },
                 null,
                 2,
             ),
@@ -566,6 +1197,224 @@ if (childProcessUnavailableReason) {
         const output = result.stdout.toString();
         if (!output.includes('Dead routes: PASS')) throw new Error(`Manifest route check did not pass: ${output}`);
         if (output.includes('/manifest-only')) throw new Error(`Manifest-backed route was still flagged: ${output}`);
+    });
+
+    test('verify-feature --deep --url persists preview URL and surfaces the Playwright UI audit step', () => {
+        const feature = 'playwright-ui-audit';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Redesign the dashboard UI with a cleaner hierarchy',
+                    recommendedPipeline: 'standard-build',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    stack: 'react',
+                    auditOnly: false,
+                    wrapperSkill: 'steroid-react-implementation',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const playwrightDir = path.join(tmpBase, 'node_modules', 'playwright');
+        fs.mkdirSync(playwrightDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(playwrightDir, 'index.js'),
+            `
+const fs = require('fs');
+
+exports.chromium = {
+    async launch() {
+        return {
+            async newPage() {
+                return {
+                    on() {},
+                    async goto() {},
+                    async waitForLoadState() {},
+                    async evaluate() {
+                        return {
+                            title: 'Audit Demo',
+                            landmarkCount: 1,
+                            headingCount: 1,
+                            buttonCount: 1,
+                            linkCount: 0,
+                            imageCount: 0,
+                            imageWithoutAltCount: 0,
+                        };
+                    },
+                    async screenshot(options) {
+                        fs.writeFileSync(options.path, 'stub-image');
+                    },
+                    url() {
+                        return 'file:///index.html';
+                    },
+                };
+            },
+            async close() {},
+        };
+    },
+};
+`,
+        );
+
+        const result = run(['verify-feature', feature, '--deep', '--url', 'https://example.test/dashboard']);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const output = result.stdout.toString();
+        if (!output.includes('Deep scan: Playwright UI audit:')) {
+            throw new Error(`Missing Playwright UI audit step output: ${output}`);
+        }
+        const previewReceipt = fs.readFileSync(path.join(featureDir, 'preview-url.txt'), 'utf-8').trim();
+        if (previewReceipt !== 'https://example.test/dashboard') {
+            throw new Error(`Unexpected preview-url.txt contents: ${previewReceipt}`);
+        }
+    });
+
+    test('verify-feature rejects invalid --url values', () => {
+        const feature = 'verify-invalid-url';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const result = run(['verify-feature', feature, '--deep', '--url', 'not-a-url']);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('--url must be a valid http(s) URL or hostname.')) {
+            throw new Error(`Missing invalid --url guidance: ${output}`);
+        }
+    });
+
+    test('verify-feature writes ui-review.md and ui-review.json for UI-intensive features', () => {
+        const feature = 'ui-review-artifact';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Refresh the landing page UI hierarchy',
+                    recommendedPipeline: 'standard-build',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    stack: 'react',
+                    auditOnly: false,
+                    wrapperSkill: 'steroid-react-implementation',
+                    importedSourceIds: ['ui-ux-pro-max', 'anthropic-frontend-design'],
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '## Design System: ui-review-artifact\n');
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const uiReviewPath = path.join(featureDir, 'ui-review.md');
+        const uiReviewReceiptPath = path.join(featureDir, 'ui-review.json');
+        if (!fs.existsSync(uiReviewPath)) throw new Error('ui-review.md was not written');
+        if (!fs.existsSync(uiReviewReceiptPath)) throw new Error('ui-review.json was not written');
+
+        const reviewContent = fs.readFileSync(uiReviewPath, 'utf-8');
+        const reviewReceipt = JSON.parse(fs.readFileSync(uiReviewReceiptPath, 'utf-8'));
+        if (!reviewContent.includes('# UI Review: ui-review-artifact')) {
+            throw new Error(`Missing UI review header: ${reviewContent}`);
+        }
+        if (!reviewContent.includes('## Automated Evidence')) {
+            throw new Error(`Missing UI review evidence section: ${reviewContent}`);
+        }
+        if (!reviewContent.includes('## Key Frontend Risks')) {
+            throw new Error(`Missing UI review risks section: ${reviewContent}`);
+        }
+        if (reviewReceipt.feature !== feature)
+            throw new Error(`Unexpected ui-review.json feature: ${reviewReceipt.feature}`);
+        if (!reviewReceipt.evidence || reviewReceipt.evidence.designSystemPresent !== true) {
+            throw new Error(`Unexpected ui-review.json evidence: ${JSON.stringify(reviewReceipt)}`);
+        }
+        if (reviewReceipt.freshness?.source !== 'verify-feature') {
+            throw new Error(`Expected verify-feature freshness source: ${JSON.stringify(reviewReceipt)}`);
+        }
+    });
+
+    test('verify-feature refreshes ui-review for mixed features without design routing when UI evidence exists', () => {
+        const feature = 'ui-review-mixed-evidence';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-audit.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    finalUrl: 'https://preview.example.com/dashboard',
+                    target: 'https://preview.example.com/dashboard',
+                    consoleMessages: [],
+                    pageErrors: [],
+                    failedRequests: [],
+                    pageTitle: 'Mixed Dashboard',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('UI Review: refreshed from current verification evidence')) {
+            throw new Error(`Missing UI review refresh message: ${output}`);
+        }
+
+        const uiReviewReceiptPath = path.join(featureDir, 'ui-review.json');
+        if (!fs.existsSync(uiReviewReceiptPath))
+            throw new Error('ui-review.json was not written from available UI evidence');
+
+        const reviewReceipt = JSON.parse(fs.readFileSync(uiReviewReceiptPath, 'utf-8'));
+        if (!reviewReceipt.evidence?.browserAudit?.present) {
+            throw new Error(`Expected browser-audit evidence in ui-review.json: ${JSON.stringify(reviewReceipt)}`);
+        }
+        if (reviewReceipt.evidence.designRoutePresent !== false) {
+            throw new Error(`Expected no design-routing evidence: ${JSON.stringify(reviewReceipt)}`);
+        }
+        if (reviewReceipt.freshness?.source !== 'verify-feature') {
+            throw new Error(`Expected verify-feature freshness source: ${JSON.stringify(reviewReceipt)}`);
+        }
     });
 
     // ─── scan --force ───
@@ -593,6 +1442,53 @@ if (childProcessUnavailableReason) {
             if (!data._lastUpdated) throw new Error('tech-stack.json missing _lastUpdated');
         }
         // If no tech-stack.json, that's OK — scan may have written to a different tmpBase path
+    });
+
+    test('dashboard surfaces frontend quality counts from archived feature metrics', () => {
+        const featuresFile = path.join(memoryDir, 'metrics', 'features.json');
+        fs.mkdirSync(path.dirname(featuresFile), { recursive: true });
+        fs.writeFileSync(
+            featuresFile,
+            JSON.stringify(
+                {
+                    landing: {
+                        archived: '2026-03-17T00:00:00.000Z',
+                        filesArchived: 10,
+                        errorCount: 1,
+                        status: 'complete',
+                        uiReviewStatus: 'PASS',
+                        uiReviewRefreshSource: 'verify-feature',
+                        uiReviewRecommendation: 'READY',
+                    },
+                    dashboard: {
+                        archived: '2026-03-17T00:00:00.000Z',
+                        filesArchived: 8,
+                        errorCount: 2,
+                        status: 'complete',
+                        uiReviewStatus: 'CONDITIONAL',
+                        uiReviewRefreshSource: 'review ui',
+                        uiReviewRecommendation: 'CAUTION',
+                    },
+                    _lastUpdated: '2026-03-17T00:00:00.000Z',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['dashboard']);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+        const output = result.stdout.toString();
+        if (!output.includes('UI PASS')) throw new Error(`Missing per-feature UI status: ${output}`);
+        if (!output.includes('Frontend quality: 1 PASS, 1 CONDITIONAL, 0 FAIL')) {
+            throw new Error(`Missing frontend quality aggregate: ${output}`);
+        }
+        if (!output.includes('Frontend freshness: 1 verify-feature, 1 review ui')) {
+            throw new Error(`Missing frontend freshness aggregate: ${output}`);
+        }
+        if (!output.includes('Frontend release recommendation: 1 READY, 1 CAUTION')) {
+            throw new Error(`Missing frontend recommendation aggregate: ${output}`);
+        }
     });
 
     // ─── Cleanup ───
@@ -628,6 +1524,10 @@ test('source contains pipe and redirection guards', () => {
 test('source contains prompt intelligence commands', () => {
     const source = fs.readFileSync(steroidRun, 'utf-8');
     if (!source.includes('normalize-prompt')) throw new Error('normalize-prompt support not found in source');
+    if (!source.includes('design-prep')) throw new Error('design-prep support not found in source');
+    if (!source.includes('design-route')) throw new Error('design-route support not found in source');
+    if (!source.includes('design-system')) throw new Error('design-system support not found in source');
+    if (!source.includes('review ui <feature>')) throw new Error('review ui support not found in source');
     if (!source.includes('prompt-health')) throw new Error('prompt-health support not found in source');
     if (!source.includes('session-detect')) throw new Error('session-detect support not found in source');
     if (!source.includes('prompt.json')) throw new Error('prompt.json support not found in source');
@@ -639,12 +1539,64 @@ test('source contains prompt-aware pipeline status and fix-path verification sup
     const source = fs.readFileSync(steroidRun, 'utf-8');
     if (!source.includes('Prompt Intelligence')) throw new Error('pipeline-status prompt section not found');
     if (!source.includes('Route Guidance')) throw new Error('pipeline-status route guidance not found');
+    if (!source.includes('Design Intelligence')) throw new Error('pipeline-status design section not found');
+    if (!source.includes('design-system.md')) throw new Error('design-system artifact support not found');
+    if (!source.includes('Accessibility (AccessLint)')) throw new Error('AccessLint verification support not found');
+    if (!source.includes('ui-audit.json')) throw new Error('browser audit artifact support not found');
+    if (!source.includes('ui-review.md')) throw new Error('ui-review artifact support not found');
+    if (!source.includes('ui-review.json')) throw new Error('ui-review receipt support not found');
+    if (!source.includes('ARCHIVE BLOCKED: ui-review.json status is FAIL.')) {
+        throw new Error('ui-review archive gate support not found');
+    }
+    if (!source.includes('Deep scan: Playwright UI audit')) throw new Error('Playwright UI audit deep scan not found');
+    if (!source.includes('preview-url.txt')) throw new Error('preview-url support not found');
+    if (!source.includes('resolvePreviewUrlFromProjectFiles')) {
+        throw new Error('project preview receipt discovery not found');
+    }
+    if (!source.includes('resolvePreviewUrlFromPackageMetadata')) {
+        throw new Error('package metadata preview discovery not found');
+    }
+    if (!source.includes('--url <preview>')) throw new Error('verify-feature --url support not found');
+    if (!source.includes('DESIGN GATE BLOCKED')) throw new Error('design gate enforcement not found');
+    if (!source.includes('DESIGN PREP FAILED')) throw new Error('research design prep enforcement not found');
     if (!source.includes('not used by')) throw new Error('route-aware pipeline skip text not found');
     if (!source.includes('Route guidance:')) throw new Error('gate route guidance not found');
     if (!source.includes('No plan.md or diagnosis.md found')) {
         throw new Error('fix-pipeline verification fallback not found');
     }
     if (!source.includes('Execution Source')) throw new Error('verify.md execution source field not found');
+});
+
+test('source contains frontend design-system guidance', () => {
+    const cliSource = fs.readFileSync(path.join(__dirname, '..', '..', 'bin', 'cli.js'), 'utf-8');
+    const readmeSource = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf-8');
+    const researchSource = fs.readFileSync(
+        path.join(__dirname, '..', '..', 'skills', 'steroid-research', 'SKILL.md'),
+        'utf-8',
+    );
+    const architectSource = fs.readFileSync(
+        path.join(__dirname, '..', '..', 'skills', 'steroid-architect', 'SKILL.md'),
+        'utf-8',
+    );
+    const engineSource = fs.readFileSync(
+        path.join(__dirname, '..', '..', 'skills', 'steroid-engine', 'SKILL.md'),
+        'utf-8',
+    );
+
+    if (!cliSource.includes('ui-ux-pro-max')) throw new Error('CLI guidance missing ui-ux-pro-max pairing');
+    if (!cliSource.includes('imported/')) throw new Error('CLI missing imported systems install guidance');
+    if (!readmeSource.includes('Internalized Frontend Systems')) {
+        throw new Error('README missing internalized frontend systems guidance');
+    }
+    if (!researchSource.includes('## Design Intelligence')) {
+        throw new Error('Research skill missing design intelligence section');
+    }
+    if (!architectSource.includes('## Frontend Design Quality')) {
+        throw new Error('Architect skill missing frontend design quality checklist');
+    }
+    if (!engineSource.includes('## Frontend Design Discipline')) {
+        throw new Error('Engine skill missing frontend design discipline rules');
+    }
 });
 
 console.log(`  ${passed} passed, ${failed} failed`);
