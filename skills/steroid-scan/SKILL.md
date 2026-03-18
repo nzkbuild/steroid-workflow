@@ -7,6 +7,20 @@ description: The codebase awareness skill for Steroid-Workflow. This skill scans
 
 This skill runs **before** vibe capture. It builds a `context.md` snapshot of the existing codebase so all downstream phases know what already exists. Without this, the AI works blind — proposing architectures that conflict with existing code, missing available libraries, and duplicating logic.
 
+## Governed Baseline
+
+The live governed authority for this phase is:
+
+- `governed/scan-system/MODULE.yaml`
+- `governed/scan-system/LIVE-MAPPING.md`
+
+In the live repo, this skill is the execution surface for the governed `steroid-scan-system`.
+
+The governed live scan artifacts are:
+
+- `.memory/changes/<feature>/request.json`
+- `.memory/changes/<feature>/context.md`
+
 This skill is adapted from the GSD Codebase Mapper (see `src/forks/gsd/agents/gsd-codebase-mapper.md`) and the Ralph AGENTS.md system (see `src/forks/ralph/AGENTS.md`).
 
 ## The Circuit Breaker Mandate
@@ -28,6 +42,19 @@ This skill triggers automatically when the user expresses intent to build, fix, 
 If `.memory/changes/<feature>/context.md` already exists and is less than 24 hours old, skip the scan and report: "✅ Context already captured for this feature."
 
 ## The Scan Process
+
+### Step 0: Capture Request Receipt
+
+Before writing `context.md`, create `.memory/changes/<feature>/request.json`.
+
+This is the governed live `feature_request` artifact for the scan slice. It should minimally record:
+
+- `feature`
+- `source: scan`
+- `requested_at`
+- `summary`
+
+The summary may be brief if the raw user request is sparse. The point of this receipt is durable intake identity for the scan phase, not full prompt interpretation.
 
 ### Step 1: Detect Tech Stack
 

@@ -1,0 +1,100 @@
+kind: module
+contract_version: "1.0"
+
+identity:
+  id: steroid-scan-system
+  status: active
+  layer: module
+  domain: scan
+
+responsibility:
+  summary: Convert the initial live feature request into the canonical structured codebase map.
+  includes:
+    - consume feature_request
+    - produce codebase_map
+    - preserve file-path-heavy structured mapping output
+  excludes:
+    - research synthesis
+    - implementation planning
+    - execution routing
+    - secrets remediation
+    - concern triage beyond structured mapping output
+
+artifacts:
+  consumes:
+    - feature_request
+  owns:
+    - codebase_map
+  emits: []
+
+signals:
+  consumes: []
+  emits: []
+
+state:
+  reads: []
+  writes: []
+  forbidden_writes: []
+
+dependencies:
+  modules: []
+  lib: []
+  adapters: []
+  policies: []
+
+policy_hooks:
+  emits: []
+  consumes: []
+
+invariants:
+  - codebase_map must not exist without feature_request
+  - codebase_map must preserve file-path-heavy structured output
+  - codebase_map must remain the durable live scan artifact
+
+observability:
+  events:
+    - scan.started
+    - scan.completed
+  logs:
+    - codebase_map_summary
+  metrics:
+    - scan_latency_ms
+  trace:
+    correlation_id_required: true
+
+failure_modes:
+  - id: missing_feature_request
+    severity: error
+  - id: invalid_codebase_map
+    severity: error
+
+verification:
+  contract:
+    - live_mapping_defined
+    - structured_mapping_output
+    - durable_scan_surface_defined
+  parity:
+    - request-to-scan-ordering
+    - codebase-map-structure
+    - file-path-heavy-output
+
+performance:
+  latency_budget_ms: 5000
+  max_context_tokens: 10000
+
+replaceability:
+  strategy: internal_swap
+  constraints:
+    - feature_request identity must remain stable in .memory/changes/<feature>/request.json
+    - codebase_map identity must remain stable in .memory/changes/<feature>/context.md
+    - structured mapping semantics must remain intact
+
+provenance:
+  intake_modes:
+    - extracted-native-capability
+  live_mapping: governed/scan-system/LIVE-MAPPING.md
+  provenance_receipt: governed/scan-system/PROVENANCE.md
+
+compatibility:
+  minimum_kernel_version: "1.0"
+  deprecated_fields: []

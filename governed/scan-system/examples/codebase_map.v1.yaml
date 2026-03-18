@@ -1,0 +1,18 @@
+artifact: codebase_map
+version: "1.0"
+feature_id: sample-feature
+stack:
+  - path: src/app.ts
+    note: Main application entry point
+architecture:
+  - path: src/modules/spec/index.ts
+    note: Spec module boundary
+conventions:
+  - path: src/contracts/
+    note: Contract-first artifact and policy declarations
+testing:
+  - path: tests/contract/
+    note: Contract-level validation location
+concerns:
+  - path: src/runtime/
+    note: Runtime layer must not absorb module-specific behavior

@@ -1,0 +1,100 @@
+kind: module
+contract_version: "1.0"
+
+identity:
+  id: steroid-research-system
+  status: active
+  layer: module
+  domain: research
+
+responsibility:
+  summary: Convert the governed codebase map into the canonical durable research summary.
+  includes:
+    - consume codebase_map
+    - produce research_summary
+    - preserve phase-aware durable research output
+    - preserve confidence and gaps
+  excludes:
+    - design synthesis
+    - implementation planning
+    - multi-artifact synthesis expansion
+    - reuse branching beyond the durable summary artifact
+
+artifacts:
+  consumes:
+    - codebase_map
+  owns:
+    - research_summary
+  emits: []
+
+signals:
+  consumes: []
+  emits: []
+
+state:
+  reads: []
+  writes: []
+  forbidden_writes: []
+
+dependencies:
+  modules: []
+  lib: []
+  adapters: []
+  policies: []
+
+policy_hooks:
+  emits: []
+  consumes: []
+
+invariants:
+  - research_summary must not exist without codebase_map
+  - research_summary must include confidence and gaps
+  - research_summary must remain the durable live research artifact
+
+observability:
+  events:
+    - research.started
+    - research.completed
+  logs:
+    - research_summary_log
+  metrics:
+    - research_latency_ms
+  trace:
+    correlation_id_required: true
+
+failure_modes:
+  - id: missing_codebase_map
+    severity: error
+  - id: invalid_research_summary
+    severity: error
+
+verification:
+  contract:
+    - live_mapping_defined
+    - confidence_and_gap_output
+    - durable_research_surface_defined
+  parity:
+    - scan-to-research-ordering
+    - research-summary-structure
+    - confidence-and-gaps
+
+performance:
+  latency_budget_ms: 5000
+  max_context_tokens: 10000
+
+replaceability:
+  strategy: internal_swap
+  constraints:
+    - codebase_map identity must remain stable in .memory/changes/<feature>/context.md
+    - research_summary identity must remain stable in .memory/changes/<feature>/research.md
+    - confidence and gap reporting semantics must remain intact
+
+provenance:
+  intake_modes:
+    - extracted-native-capability
+  live_mapping: governed/research-system/LIVE-MAPPING.md
+  provenance_receipt: governed/research-system/PROVENANCE.md
+
+compatibility:
+  minimum_kernel_version: "1.0"
+  deprecated_fields: []

@@ -60,7 +60,7 @@ graph LR
 
 | Phase            | What Happens                                                                             | Output                     |
 | ---------------- | ---------------------------------------------------------------------------------------- | -------------------------- |
-| **Scan**         | Detects tech stack, project structure, test infra                                        | `context.md`               |
+| **Scan**         | Detects tech stack, project structure, test infra                                        | `request.json`, `context.md` |
 | **Vibe Capture** | Translates your idea into a structured brief                                             | `vibe.md`                  |
 | **Specify**      | Converts the brief into user stories with acceptance criteria                            | `spec.md`                  |
 | **Research**     | Investigates tech choices, security, deployment, architecture                            | `research.md`              |
@@ -227,6 +227,8 @@ The governed live baseline for transplanted subsystems lives under `governed/`, 
 - `governed/review-and-verify/`
 - `governed/progress-memory/`
 - `governed/core-runtime/`
+- `governed/scan-system/`
+- `governed/research-system/`
 
 ## License
 

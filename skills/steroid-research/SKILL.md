@@ -7,11 +7,26 @@ description: This skill should be used after steroid-specify has written .memory
 
 This skill reads the spec from `.memory/changes/<feature>/spec.md` and investigates the best technical approach before the Architect commits to a plan.
 
+## Governed Baseline
+
+The live governed authority for this phase is:
+
+- `governed/research-system/MODULE.yaml`
+- `governed/research-system/LIVE-MAPPING.md`
+
+In the live repo, this skill is the execution surface for the governed `steroid-research-system`.
+
+The governed live research artifacts are:
+
+- `.memory/changes/<feature>/context.md`
+- `.memory/changes/<feature>/research.md`
+
 Forked from: `src/forks/gsd/agents/gsd-phase-researcher.md` (Get-Shit-Done, MIT License) — simplified from 556 to ~150 lines for the Steroid non-technical context.
 
 ## When To Use
 
 Activate immediately after `@steroid-specify` completes. Do not wait for user invocation. The spec.md file must already exist in `.memory/changes/<feature>/`.
+Also read `.memory/changes/<feature>/context.md` as the governed upstream codebase map from scan.
 
 ## Instructions
 

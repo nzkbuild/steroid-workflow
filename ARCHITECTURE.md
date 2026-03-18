@@ -125,12 +125,14 @@ The live repo now carries governed baseline transplants under `governed/`. `gove
 `governed/review-and-verify/` is authoritative for the live `steroid-review-and-verify` mapping and its review/verification artifact surface.
 `governed/progress-memory/` is authoritative for the live `steroid-progress-memory` mapping and its append-only progress artifact surface.
 `governed/core-runtime/` is authoritative for the live `steroid-core-runtime` mapping and its completion artifact surface.
+`governed/scan-system/` is authoritative for the live `steroid-scan-system` mapping and its request/context artifact surface.
+`governed/research-system/` is authoritative for the live `steroid-research-system` mapping and its durable research artifact surface.
 
 ### Build Intent (Full Pipeline)
 
 | #   | Skill                  | Input                     | Output                                   |
 | --- | ---------------------- | ------------------------- | ---------------------------------------- |
-| 0   | `steroid-scan`         | Project codebase          | `.memory/changes/<feature>/context.md`   |
+| 0   | `steroid-scan`         | Project codebase          | `.memory/changes/<feature>/request.json`, `.memory/changes/<feature>/context.md`   |
 | 1   | `steroid-vibe-capture` | User's natural language   | `.memory/changes/<feature>/vibe.md`      |
 | 2   | `steroid-specify`      | `vibe.md`                 | `.memory/changes/<feature>/spec.md`      |
 | 3   | `steroid-research`     | `spec.md`                 | `.memory/changes/<feature>/research.md`  |
@@ -209,6 +211,7 @@ your-project/
 │   │   └── features.json          ← Feature completion data
 │   └── changes/
 │       └── <feature>/
+│           ├── request.json       ← Machine-readable scan-time feature request receipt
 │           ├── context.md         ← Codebase scan results (v3.0)
 │           ├── prompt.json        ← Machine-readable prompt interpretation receipt (v6.2.0)
 │           ├── prompt.md          ← Human-readable prompt brief (v6.2.0)
@@ -248,6 +251,10 @@ Live repo governance notes for contributors:
 - `governed/progress-memory/LIVE-MAPPING.md` defines how governed progress artifacts map onto current runtime files
 - `governed/core-runtime/MODULE.yaml` is the live law surface for the transplanted core runtime system
 - `governed/core-runtime/LIVE-MAPPING.md` defines how governed completion artifacts map onto current runtime files
+- `governed/scan-system/MODULE.yaml` is the live law surface for the transplanted scan system
+- `governed/scan-system/LIVE-MAPPING.md` defines how governed scan artifacts map onto current runtime files
+- `governed/research-system/MODULE.yaml` is the live law surface for the transplanted research system
+- `governed/research-system/LIVE-MAPPING.md` defines how governed research artifacts map onto current runtime files
 - skill files remain implementation surfaces, not the top authority
 
 ## Fork Credits
