@@ -73,6 +73,27 @@ function writeGovernedPlan(featureDir, title = 'Governed Plan', checklist = ['- 
     );
 }
 
+function writeGovernedSpec(featureDir, title = 'Governed Spec') {
+    fs.writeFileSync(
+        path.join(featureDir, 'spec.md'),
+        [
+            `# Specification: ${title}`,
+            '',
+            '## User Stories',
+            '',
+            '### Story 1',
+            '- As a user, I want a clear workflow',
+            '**Acceptance Criteria:**',
+            '- Given valid input, when the workflow runs, then the expected artifact is produced',
+            '',
+            '## Success Criteria',
+            '',
+            '- Primary flow completes without missing required artifacts',
+            '',
+        ].join('\n'),
+    );
+}
+
 console.log('[unit] v6-commands.test.cjs');
 
 if (childProcessUnavailableReason) {
@@ -649,6 +670,21 @@ if (childProcessUnavailableReason) {
         }
         if (!output.includes('Suggested next step: scan')) {
             throw new Error(`Missing suggested next step: ${output}`);
+        }
+    });
+
+    test('gate engine blocks malformed diagnosis.md on the fix pipeline', () => {
+        const feature = 'gate-malformed-diagnosis';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'diagnosis.md'), '# Diagnosis\n\n- [x] Fix it\n'.repeat(8));
+
+        const result = run(['gate', 'engine', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('diagnosis.md is missing governed structure')) {
+            throw new Error(`Missing governed diagnosis block: ${output}`);
         }
     });
 
@@ -1427,10 +1463,7 @@ if (childProcessUnavailableReason) {
         const feature = 'report-wording-fix';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(
-            path.join(featureDir, 'spec.md'),
-            '# Spec\n\nScenario: Founder sees dashboard\nGiven a founder\nWhen they sign in\nThen they see KPIs\n',
-        );
+        writeGovernedSpec(featureDir, 'Founder Dashboard');
         writeGovernedPlan(featureDir, 'Scaffold', ['- [x] Scaffold']);
 
         const result = run(['report', 'generate', feature]);
@@ -1445,11 +1478,26 @@ if (childProcessUnavailableReason) {
         }
     });
 
+    test('report generate blocks malformed governed plan artifacts', () => {
+        const feature = 'report-malformed-plan';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        writeGovernedSpec(featureDir, 'Malformed Plan Report');
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '# Plan\n\n- [x] Shortcut\n');
+
+        const result = run(['report', 'generate', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('REPORT BLOCKED: plan.md is missing governed structure.')) {
+            throw new Error(`Missing report governed block: ${output}`);
+        }
+    });
+
     test('report generate includes frontend quality from ui-review.json', () => {
         const feature = 'report-ui-quality';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n\nThen the landing page feels premium\n');
+        writeGovernedSpec(featureDir, 'Landing Page Premium');
         writeGovernedPlan(featureDir, 'Refresh Hero', ['- [x] Refresh hero']);
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
@@ -1527,7 +1575,7 @@ if (childProcessUnavailableReason) {
         const featureDir = path.join(changesDir, feature);
         const archiveDir = path.join(featureDir, 'archive');
         fs.mkdirSync(archiveDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n\nThen the dashboard feels premium\n');
+        writeGovernedSpec(featureDir, 'Dashboard Premium');
         writeGovernedPlan(featureDir, 'Refresh Dashboard Shell', ['- [x] Refresh the dashboard shell']);
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
@@ -1997,6 +2045,24 @@ exports.chromium = {
         const output = `${result.stdout}${result.stderr}`;
         if (!output.includes('plan.md is missing governed structure')) {
             throw new Error(`Missing governed plan block: ${output}`);
+        }
+    });
+
+    test('verify-feature blocks malformed governed diagnosis artifacts on the fix path', () => {
+        const feature = 'verify-malformed-governed-diagnosis';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'diagnosis.md'), '# Diagnosis\n\n- [x] Fix it\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('diagnosis.md is missing governed structure')) {
+            throw new Error(`Missing governed diagnosis block: ${output}`);
         }
     });
 

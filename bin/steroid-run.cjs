@@ -1846,6 +1846,24 @@ function validateGovernedPhaseArtifact(fileName, content) {
         };
     }
 
+    if (fileName === 'diagnosis.md') {
+        const checks = [
+            { ok: /^# Diagnosis:/m.test(text), label: '# Diagnosis:' },
+            { ok: /^\*\*Status:\*\*\s*(ROOT_CAUSE_FOUND|NEEDS_MORE_DATA|ARCHITECTURAL_ISSUE)/m.test(text), label: '**Status:** <ROOT_CAUSE_FOUND|NEEDS_MORE_DATA|ARCHITECTURAL_ISSUE>' },
+            { ok: /^## Problem Statement$/m.test(text), label: '## Problem Statement' },
+            { ok: /^## Root Cause$/m.test(text), label: '## Root Cause' },
+            { ok: /^## Evidence$/m.test(text), label: '## Evidence' },
+            { ok: /^## Fix Plan$/m.test(text), label: '## Fix Plan' },
+            { ok: /^## Regression Test$/m.test(text), label: '## Regression Test' },
+            { ok: /^## Files Affected$/m.test(text), label: '## Files Affected' },
+        ];
+        const missing = checks.filter((check) => !check.ok).map((check) => check.label);
+        return {
+            ok: missing.length === 0,
+            reason: missing.length ? `Missing governed diagnosis structure: ${missing.join(', ')}` : null,
+        };
+    }
+
     return { ok: true, reason: null };
 }
 
@@ -5082,8 +5100,16 @@ if (args[0] === 'gate') {
     if (!primaryExists && gate.alt) {
         const altFile = path.join(featureDir, gate.alt.requires);
         if (fs.existsSync(altFile)) {
-            const altLines = fs.readFileSync(altFile, 'utf-8').split('\n').length;
+            const altContent = fs.readFileSync(altFile, 'utf-8');
+            const altLines = altContent.split('\n').length;
             if (altLines >= gate.alt.minLines) {
+                const altGovernedShape = validateGovernedPhaseArtifact(gate.alt.requires, altContent);
+                if (!altGovernedShape.ok) {
+                    console.error(`[steroid-run] 🚫 GATE BLOCKED: ${gate.alt.requires} is missing governed structure.`);
+                    console.error(`  ${altGovernedShape.reason}`);
+                    console.error(friendlyHint('gate-incomplete'));
+                    process.exit(1);
+                }
                 console.log(
                     `[steroid-run] ✅ Gate passed (alt): ${gate.alt.requires} exists (${altLines} lines). Proceeding to ${phase} via fix pipeline.`,
                 );
@@ -6662,6 +6688,22 @@ if (args[0] === 'verify-feature') {
             });
         }
     } else {
+        const governedDiagnosisShape = validateGovernedPhaseArtifact('diagnosis.md', executionContent);
+        if (!governedDiagnosisShape.ok) {
+            results.push({
+                step: 'Diagnosis structure',
+                status: 'FAIL',
+                detail: `diagnosis.md is missing governed structure. ${governedDiagnosisShape.reason}`,
+            });
+            hasFailure = true;
+        } else {
+            results.push({
+                step: 'Diagnosis structure',
+                status: 'PASS',
+                detail: 'diagnosis.md preserves the governed targeted-fix structure',
+            });
+        }
+
         const total = (executionContent.match(/^- \[[ x/]\]/gm) || []).length;
         const done = (executionContent.match(/^- \[x\]/gm) || []).length;
         if (total === 0) {
@@ -7584,6 +7626,18 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
         }
 
         const featureDir = path.join(changesDir, feature);
+        for (const governedArtifact of ['spec.md', 'plan.md']) {
+            const artifactContent = readLatestFeatureArtifact(featureDir, governedArtifact);
+            if (!artifactContent) continue;
+            const governedShape = validateGovernedPhaseArtifact(governedArtifact, artifactContent);
+            if (!governedShape.ok) {
+                console.error(
+                    `[steroid-run] 🚫 REPORT BLOCKED: ${governedArtifact} is missing governed structure.`,
+                );
+                console.error(`  ${governedShape.reason}`);
+                process.exit(1);
+            }
+        }
         const refreshedUiReview = ensureCurrentUiReviewArtifacts(feature, featureDir, {
             refreshSource: 'report generate',
         });
