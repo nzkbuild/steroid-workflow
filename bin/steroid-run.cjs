@@ -2158,6 +2158,39 @@ function saveVerifyReceipt(featureDir, receipt) {
 }
 
 /**
+ * Writes feature request receipt state.
+ *
+ * @param {string} featureDir
+ * @param {{ feature: string, requestedAt?: string, source?: string, summary?: string }} receipt
+ */
+function saveRequestReceipt(featureDir, receipt) {
+    writeJsonFile(path.join(featureDir, 'request.json'), {
+        feature: receipt.feature,
+        requestedAt: receipt.requestedAt || new Date().toISOString(),
+        source: receipt.source || 'scan',
+        summary: receipt.summary || 'Feature initialized for governed scan context capture.',
+    });
+}
+
+/**
+ * Writes completion receipt state.
+ *
+ * @param {string} featureDir
+ * @param {{ feature: string, status: string, sourceArtifacts?: string[], nextActions?: string[], updatedAt?: string, source?: string, summary?: string }} receipt
+ */
+function saveCompletionReceipt(featureDir, receipt) {
+    writeJsonFile(path.join(featureDir, 'completion.json'), {
+        feature: receipt.feature,
+        status: receipt.status,
+        sourceArtifacts: Array.isArray(receipt.sourceArtifacts) ? receipt.sourceArtifacts : [],
+        nextActions: Array.isArray(receipt.nextActions) ? receipt.nextActions : [],
+        updatedAt: receipt.updatedAt || new Date().toISOString(),
+        source: receipt.source || 'completion.json',
+        summary: receipt.summary || 'Verification completed. Feature is ready for completion handling.',
+    });
+}
+
+/**
  * Normalizes whitespace in prompt-like input.
  *
  * @param {string} value
@@ -2873,13 +2906,13 @@ Usage:
   Pipeline Enforcement:
     node steroid-run.cjs init-feature <slug>               Create feature folder structure
     node steroid-run.cjs gate <phase> <feature>            Check phase prerequisites
-    node steroid-run.cjs scan <feature>                    Run codebase scan (writes context.md)
+    node steroid-run.cjs scan <feature>                    Run codebase scan (writes request.json + context.md)
     node steroid-run.cjs commit <message>                  Atomic git commit in steroid format
     node steroid-run.cjs log <feature> <message>           Append to progress log
     node steroid-run.cjs check-plan <feature>              Count remaining tasks in plan
-    node steroid-run.cjs archive <feature>                 Archive completed feature (requires verify.json)
+    node steroid-run.cjs archive <feature>                 Archive completed feature (requires verify.json + completion.json)
                                                           Use --force-ui to override blocking CONDITIONAL frontend risk
-    node steroid-run.cjs verify-feature <feature> [--deep] [--url <preview>] Run verification (writes verify.md + verify.json)
+    node steroid-run.cjs verify-feature <feature> [--deep] [--url <preview>] Run verification (writes verify.md + verify.json + completion.json)
 
   Stories:
     node steroid-run.cjs stories <feature>                 List prioritized stories (P1/P2/P3)
@@ -4836,7 +4869,7 @@ if (args[0] === 'stories') {
     process.exit(1);
 }
 
-/** CMD: archive — Archive completed feature to .memory/archive/ */
+/** CMD: archive — Archive completed feature to .memory/archive/ with verify and completion receipts */
 // --- Archive Command (Ported from Ralph ralph.sh archive pattern) ---
 // Source: src/forks/ralph/ralph.sh lines 50-63 (archive previous run)
 if (args[0] === 'archive') {
@@ -4870,6 +4903,16 @@ if (args[0] === 'archive') {
             process.exit(1);
         }
         console.log(`[steroid-run] ⚠️  --force flag used. Archiving without verification.`);
+    }
+
+    const completionReceiptPath = path.join(featureDir, 'completion.json');
+    if (!args.includes('--force')) {
+        const completionReceipt = readJsonFile(completionReceiptPath);
+        if (!completionReceipt || completionReceipt.feature !== feature) {
+            console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: No completion.json receipt found.`);
+            console.error(`  Run: node steroid-run.cjs verify-feature ${feature}`);
+            process.exit(1);
+        }
     }
 
     const uiReviewRefresh = ensureCurrentUiReviewArtifacts(feature, featureDir, {
@@ -4925,14 +4968,18 @@ if (args[0] === 'archive') {
     const archiveStamp = createArchiveStamp();
     const filesToArchive = [
         'context.md',
+        'request.json',
         'prompt.json',
         'prompt.md',
         'vibe.md',
         'spec.md',
         'research.md',
         'plan.md',
+        'tasks.md',
+        'execution.json',
         'verify.md',
         'verify.json',
+        'completion.json',
         'ui-review.md',
         'ui-review.json',
         'diagnosis.md',
@@ -4996,7 +5043,7 @@ if (args[0] === 'archive') {
 // ============================================================
 
 /** CMD: scan — Bootstrap codebase context (writes context.md) */
-// --- Scan Command (Bootstraps context.md — adapted from GSD codebase-mapper) ---
+// --- Scan Command (Bootstraps request.json + context.md — adapted from GSD codebase-mapper) ---
 // Source: src/forks/gsd/agents/gsd-codebase-mapper.md
 if (args[0] === 'scan') {
     const feature = args[1];
@@ -5014,17 +5061,27 @@ if (args[0] === 'scan') {
     }
 
     const contextFile = path.join(featureDir, 'context.md');
+    const requestFile = path.join(featureDir, 'request.json');
+    const requestSummary = 'Feature initialized for governed scan context capture.';
 
     // Check for --force flag (v6.0.0: bypass freshness check after scaffold)
     const forceFlag = args.includes('--force');
 
     // Check for existing context.md that's less than 24h old
     if (fs.existsSync(contextFile)) {
+        if (!fs.existsSync(requestFile)) {
+            saveRequestReceipt(featureDir, {
+                feature,
+                source: 'scan',
+                summary: requestSummary,
+            });
+        }
         const stats = fs.statSync(contextFile);
         const ageMs = Date.now() - stats.mtimeMs;
         const ageHours = ageMs / (1000 * 60 * 60);
         if (ageHours < 24 && !forceFlag) {
             console.log(`[steroid-run] ✅ Context already captured (${Math.round(ageHours)}h ago). Skipping scan.`);
+            console.log(`[steroid-run]    Request receipt: .memory/changes/${feature}/request.json`);
             console.log(`[steroid-run]    Use --force to bypass freshness check.`);
             process.exit(0);
         }
@@ -5047,6 +5104,12 @@ if (args[0] === 'scan') {
     }
 
     // Auto-detect basic project info and bootstrap context.md
+    saveRequestReceipt(featureDir, {
+        feature,
+        source: 'scan',
+        summary: requestSummary,
+    });
+
     let language = 'Unknown';
     let framework = 'Unknown';
     let packageManager = 'Unknown';
@@ -5242,6 +5305,7 @@ if (args[0] === 'scan') {
     };
     fs.writeFileSync(techStackFile, JSON.stringify(techStackData, null, 2));
     console.log(`[steroid-run]    Knowledge: tech-stack.json updated.`);
+    console.log(`[steroid-run]    Request receipt: .memory/changes/${feature}/request.json`);
 
     // Enrich progress.md with codebase patterns
     if (!fs.existsSync(progressFile)) {
@@ -6509,6 +6573,24 @@ if (args[0] === 'verify-feature') {
         deepCompleted: deepMode,
     });
 
+    const completionReceiptPath = path.join(featureDir, 'completion.json');
+    if (hasFailure) {
+        if (fs.existsSync(completionReceiptPath)) {
+            fs.unlinkSync(completionReceiptPath);
+        }
+    } else {
+        saveCompletionReceipt(featureDir, {
+            feature,
+            status: verifyStatus,
+            sourceArtifacts: ['verify.json', 'review.json'],
+            nextActions: ['archive'],
+            summary:
+                verifyStatus === 'CONDITIONAL'
+                    ? 'Verification completed with cautions. Completion flow may continue with explicit acceptance of remaining risk.'
+                    : 'Verification completed successfully. Feature is ready for completion handling.',
+        });
+    }
+
     const uiReviewRefresh = ensureCurrentUiReviewArtifacts(feature, featureDir, {
         verifyStatus,
         deepMode,
@@ -6518,6 +6600,9 @@ if (args[0] === 'verify-feature') {
 
     console.log(`  Report: .memory/changes/${feature}/verify.md`);
     console.log(`  Receipt: .memory/changes/${feature}/verify.json`);
+    if (!hasFailure) {
+        console.log(`  Completion: .memory/changes/${feature}/completion.json`);
+    }
     if (uiReviewRefresh.attempted && uiReviewRefresh.refreshed) {
         console.log(`  UI Review: refreshed from current verification evidence`);
     } else if (uiReviewRefresh.attempted && !uiReviewRefresh.ok && !uiReviewRefresh.skipped) {

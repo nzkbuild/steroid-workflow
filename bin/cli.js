@@ -194,12 +194,12 @@ This is a non-negotiable physical constraint. The wrapper tracks errors and will
 ## Pipeline Enforcement Commands (MUST USE)
 The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs init-feature <slug>\\\` — Create feature folder (validates kebab-case)
-- \\\`node steroid-run.cjs scan <feature>\\\` — Bootstrap codebase context (writes context.md)
+- \\\`node steroid-run.cjs scan <feature>\\\` — Bootstrap codebase context (writes request.json + context.md)
 - \\\`node steroid-run.cjs gate <phase> <feature>\\\` — Check phase prerequisites before proceeding
 - \\\`node steroid-run.cjs commit "<message>"\\\` — Atomic git commit in steroid format
 - \\\`node steroid-run.cjs log <feature> "<message>"\\\` — Append to progress log
 - \\\`node steroid-run.cjs check-plan <feature>\\\` — Check if all tasks are done
-- \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (optional \\\`--deep\\\` adds scanners)
+- \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (writes verify.md + verify.json + completion.json; optional \\\`--deep\\\` adds scanners)
 - \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature (\\\`--force-ui\\\` is available if blocking frontend cautions are explicitly accepted)
 - \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
 - \\\`node steroid-run.cjs normalize-prompt "<message>"\\\` — Normalize a raw user prompt into a structured brief

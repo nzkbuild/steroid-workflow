@@ -211,8 +211,18 @@ check(
     'package.json files array should include integrations/ so internalized integrations ship with Steroid.',
 );
 check(
-    runtimeSource.includes('archive <feature>                 Archive completed feature (requires verify.json)'),
-    'bin/steroid-run.cjs help text should mention archive requires verify.json.',
+    runtimeSource.includes('archive <feature>                 Archive completed feature (requires verify.json + completion.json)'),
+    'bin/steroid-run.cjs help text should mention archive requires verify.json + completion.json.',
+);
+check(
+    runtimeSource.includes('scan <feature>                    Run codebase scan (writes request.json + context.md)'),
+    'bin/steroid-run.cjs help text should mention scan writes request.json + context.md.',
+);
+check(
+    runtimeSource.includes(
+        'verify-feature <feature> [--deep] [--url <preview>] Run verification (writes verify.md + verify.json + completion.json)',
+    ),
+    'bin/steroid-run.cjs help text should mention verify-feature writes completion.json.',
 );
 check(
     runtimeSource.includes('review status <feature>           Show review stage status and sync review.json'),
