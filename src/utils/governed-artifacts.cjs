@@ -10,6 +10,35 @@ const GOVERNED_COMPLETION_OPTIONS = [
 const GOVERNED_COMPLETION_SOURCE_ARTIFACTS = ['verify.json', 'progress.md'];
 
 /**
+ * Removes fenced code blocks before markdown checklist parsing so examples
+ * do not inflate task counts.
+ *
+ * @param {string} content
+ * @returns {string}
+ */
+function stripFencedCodeBlocks(content) {
+    return (content || '').replace(/```[\s\S]*?```/g, '');
+}
+
+/**
+ * Parses markdown checklist statistics from a document.
+ *
+ * @param {string} content
+ * @returns {{ total: number, done: number, remaining: number, percent: number, deferred: string[] }}
+ */
+function parseChecklistStats(content) {
+    const sanitized = stripFencedCodeBlocks(content);
+    const checklistLines = sanitized.match(/^- \[[ x]\].+$/gm) || [];
+    const doneLines = sanitized.match(/^- \[x\].+$/gm) || [];
+    const deferred = sanitized.match(/^- \[ \].+$/gm) || [];
+    const total = checklistLines.length;
+    const done = doneLines.length;
+    const remaining = total - done;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, remaining, percent, deferred };
+}
+
+/**
  * Validates the minimum governed structure for durable phase artifacts.
  *
  * @param {string} fileName
@@ -89,5 +118,6 @@ function validateGovernedPhaseArtifact(fileName, content) {
 module.exports = {
     GOVERNED_COMPLETION_OPTIONS,
     GOVERNED_COMPLETION_SOURCE_ARTIFACTS,
+    parseChecklistStats,
     validateGovernedPhaseArtifact,
 };
