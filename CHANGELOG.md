@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.3.0-beta.3] "Install Footprint and Product Clarity" - 2026-03-18
+
+### Changed
+- **README rewrite** — repositioned Steroid as a product-facing guarded AI coding runtime instead of leading with internal governance details
+- **Beta install clarity** — documentation now explains stable vs beta usage more clearly and describes the current artifact-driven runtime model in lighter language
+
+### Fixed
+- **Install footprint drift** — `init` now adds `imported/` and `integrations/` to `.gitignore` by default so users do not suddenly see thousands of tracked runtime asset files after install
+- **User-facing first impression** — the README now emphasizes what Steroid does for users before diving into advanced architecture material
+
 ## [6.3.0-beta.2] "Governed Runtime Hardening" - 2026-03-18
 
 ### Added

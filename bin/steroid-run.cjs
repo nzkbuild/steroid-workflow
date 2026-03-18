@@ -8,7 +8,7 @@
  * unit testing, but this file is the canonical source of truth for distribution.
  *
  * @module steroid-run
- * @version 6.3.0-beta.2
+ * @version 6.3.0-beta.3
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -3453,7 +3453,7 @@ function formatPromptMarkdown(feature, analysis, sessionState) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.3.0-beta.2';
+let SW_VERSION = '6.3.0-beta.3';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');

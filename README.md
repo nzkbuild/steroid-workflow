@@ -121,7 +121,9 @@ Steroid is designed for real repos, not just toy greenfield demos. It helps redu
 
 Feature building and debugging are different jobs. Steroid gives them different paths.
 
-## Frontend Support
+## Internalized Frontend Systems
+
+### Frontend Support
 
 Steroid has built-in frontend flows for UI-heavy work.
 
