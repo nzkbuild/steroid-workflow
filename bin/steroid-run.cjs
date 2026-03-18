@@ -2374,6 +2374,63 @@ function loadCompletionReceipt(feature, featureDir) {
 }
 
 /**
+ * Loads execution receipt state and normalizes the governed machine-readable fields.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @returns {{ feature: string, status: string|null, consumedArtifacts: string[], updatedAt: string|null, source: string, summary: string|null }}
+ */
+function loadExecutionReceipt(feature, featureDir) {
+    const executionJsonPath = path.join(featureDir, 'execution.json');
+    const existing = readJsonFile(executionJsonPath);
+
+    if (existing && existing.feature === feature) {
+        const receipt = {
+            feature,
+            status: normalizeAllowedStatus(existing.status, ['COMPLETE', 'BLOCKED'], null),
+            consumedArtifacts: Array.isArray(existing.consumed_artifacts)
+                ? existing.consumed_artifacts.filter((v) => typeof v === 'string')
+                : Array.isArray(existing.consumedArtifacts)
+                  ? existing.consumedArtifacts.filter((v) => typeof v === 'string')
+                  : [],
+            updatedAt: existing.updatedAt || null,
+            source: typeof existing.source === 'string' ? existing.source : 'execution.json',
+            summary: typeof existing.summary === 'string' ? existing.summary : null,
+        };
+
+        if (
+            receipt.status &&
+            (existing.status !== receipt.status ||
+                existing.source !== receipt.source ||
+                existing.updatedAt !== receipt.updatedAt ||
+                existing.summary !== receipt.summary ||
+                JSON.stringify(existing.consumed_artifacts || existing.consumedArtifacts || []) !==
+                    JSON.stringify(receipt.consumedArtifacts))
+        ) {
+            writeJsonFile(executionJsonPath, {
+                feature: receipt.feature,
+                status: receipt.status,
+                consumed_artifacts: receipt.consumedArtifacts,
+                updatedAt: receipt.updatedAt,
+                source: receipt.source,
+                summary: receipt.summary,
+            });
+        }
+
+        return receipt;
+    }
+
+    return {
+        feature,
+        status: null,
+        consumedArtifacts: [],
+        updatedAt: null,
+        source: 'none',
+        summary: null,
+    };
+}
+
+/**
  * Normalizes whitespace in prompt-like input.
  *
  * @param {string} value
@@ -6090,6 +6147,7 @@ if (args[0] === 'verify-feature') {
 
     const featureDir = path.join(changesDir, feature);
     const planFile = path.join(featureDir, 'plan.md');
+    const tasksFile = path.join(featureDir, 'tasks.md');
     const diagnosisFile = path.join(featureDir, 'diagnosis.md');
     const executionFile = fs.existsSync(planFile) ? planFile : fs.existsSync(diagnosisFile) ? diagnosisFile : null;
     const executionLabel = executionFile === diagnosisFile ? 'diagnosis.md' : 'plan.md';
@@ -6114,6 +6172,48 @@ if (args[0] === 'verify-feature') {
     let hasFailure = false;
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
     const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const executionReceipt = executionLabel === 'plan.md' ? loadExecutionReceipt(feature, featureDir) : null;
+
+    if (executionLabel === 'plan.md') {
+        const missingConsumedArtifacts = ['plan.md', 'tasks.md'].filter(
+            (artifact) => !executionReceipt.consumedArtifacts.includes(artifact),
+        );
+        if (!fs.existsSync(tasksFile)) {
+            results.push({
+                step: 'Execution artifacts',
+                status: 'FAIL',
+                detail: 'tasks.md is missing for the governed engine path',
+            });
+            hasFailure = true;
+        } else if (!executionReceipt.status) {
+            results.push({
+                step: 'Execution artifacts',
+                status: 'FAIL',
+                detail: 'execution.json is missing or malformed for the governed engine path',
+            });
+            hasFailure = true;
+        } else if (executionReceipt.status !== 'COMPLETE') {
+            results.push({
+                step: 'Execution artifacts',
+                status: 'FAIL',
+                detail: `execution.json requires status COMPLETE before verification (got ${executionReceipt.status})`,
+            });
+            hasFailure = true;
+        } else if (missingConsumedArtifacts.length > 0) {
+            results.push({
+                step: 'Execution artifacts',
+                status: 'FAIL',
+                detail: `execution.json must record consumed_artifacts plan.md and tasks.md (missing ${missingConsumedArtifacts.join(', ')})`,
+            });
+            hasFailure = true;
+        } else {
+            results.push({
+                step: 'Execution artifacts',
+                status: 'PASS',
+                detail: 'tasks.md and execution.json are present for the governed engine path',
+            });
+        }
+    }
 
     // ── Step 0: Review gate ──
     const reviewReceipt = loadReviewReceipt(feature, featureDir);

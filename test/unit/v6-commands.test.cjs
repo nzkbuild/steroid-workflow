@@ -48,6 +48,24 @@ function run(args, cwd) {
     });
 }
 
+function writeGovernedExecutionArtifacts(featureDir, feature, options = {}) {
+    fs.writeFileSync(path.join(featureDir, 'tasks.md'), options.tasksContent || '- [x] Completed task\n');
+    fs.writeFileSync(
+        path.join(featureDir, 'execution.json'),
+        JSON.stringify(
+            {
+                feature,
+                status: options.status || 'COMPLETE',
+                source: 'execution.json',
+                consumed_artifacts: options.consumedArtifacts || ['plan.md', 'tasks.md'],
+                summary: options.summary || 'Execution completed successfully.',
+            },
+            null,
+            2,
+        ),
+    );
+}
+
 console.log('[unit] v6-commands.test.cjs');
 
 if (childProcessUnavailableReason) {
@@ -1314,6 +1332,7 @@ if (childProcessUnavailableReason) {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1364,6 +1383,7 @@ if (childProcessUnavailableReason) {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1406,6 +1426,7 @@ if (childProcessUnavailableReason) {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1493,6 +1514,7 @@ exports.chromium = {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1506,11 +1528,30 @@ exports.chromium = {
         }
     });
 
+    test('verify-feature blocks when governed execution artifacts are missing on the plan path', () => {
+        const feature = 'verify-missing-execution-artifacts';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('tasks.md is missing for the governed engine path')) {
+            throw new Error(`Missing governed execution artifact block: ${output}`);
+        }
+    });
+
     test('verify-feature writes ui-review.md and ui-review.json for UI-intensive features', () => {
         const feature = 'ui-review-artifact';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1575,6 +1616,7 @@ exports.chromium = {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1624,6 +1666,7 @@ exports.chromium = {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1644,6 +1687,7 @@ exports.chromium = {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'FAIL', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
