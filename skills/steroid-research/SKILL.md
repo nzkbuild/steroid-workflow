@@ -13,6 +13,8 @@ The live governed authority for this phase is:
 
 - `governed/research-system/MODULE.yaml`
 - `governed/research-system/LIVE-MAPPING.md`
+- `governed/research-system/PROVENANCE.md`
+- `governed/research-system/PARITY.md`
 
 In the live repo, this skill is the execution surface for the governed `steroid-research-system`.
 

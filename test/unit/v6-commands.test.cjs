@@ -66,6 +66,13 @@ function writeGovernedExecutionArtifacts(featureDir, feature, options = {}) {
     );
 }
 
+function writeGovernedPlan(featureDir, title = 'Governed Plan', checklist = ['- [x] Completed task']) {
+    fs.writeFileSync(
+        path.join(featureDir, 'plan.md'),
+        [`# Implementation Plan: ${title}`, '', '## Tech Stack', '- Runtime: node', '', '## Execution Checklist', '', ...checklist, ''].join('\n'),
+    );
+}
+
 console.log('[unit] v6-commands.test.cjs');
 
 if (childProcessUnavailableReason) {
@@ -1244,6 +1251,62 @@ if (childProcessUnavailableReason) {
         }
     });
 
+    test('archive blocks when deep verification was requested but browser evidence is missing', () => {
+        const feature = 'archive-deep-verification-missing-browser-evidence';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify({ feature, status: 'CONDITIONAL', reviewPassed: true, deepRequested: true }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify(
+                { feature, status: 'CONDITIONAL', sourceArtifacts: ['verify.json', 'progress.md'], nextActions: ['archive'] },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    primaryIntent: 'refactor',
+                    normalizedSummary: 'Refresh the dashboard frontend and validate the browser experience.',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    domain: 'frontend',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
+                    source: 'design-route',
+                    updatedAt: '2026-03-18T00:00:00.000Z',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '# Design System\n');
+
+        const result = run(['archive', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('ARCHIVE BLOCKED: ui-review.json is CONDITIONAL with blocking frontend issues.')) {
+            throw new Error(`Missing deep verification archive block: ${output}`);
+        }
+        if (!output.includes('Deep verification was requested, but browser runtime evidence is still missing.')) {
+            throw new Error(`Missing deep verification reason: ${output}`);
+        }
+    });
+
     test('archive blocks when completion.json status does not match verify.json', () => {
         const feature = 'archive-completion-status-mismatch';
         const featureDir = path.join(changesDir, feature);
@@ -1344,7 +1407,7 @@ if (childProcessUnavailableReason) {
             path.join(featureDir, 'spec.md'),
             '# Spec\n\nScenario: Founder sees dashboard\nGiven a founder\nWhen they sign in\nThen they see KPIs\n',
         );
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Scaffold\n');
+        writeGovernedPlan(featureDir, 'Scaffold', ['- [x] Scaffold']);
 
         const result = run(['report', 'generate', feature]);
         if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
@@ -1363,7 +1426,7 @@ if (childProcessUnavailableReason) {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n\nThen the landing page feels premium\n');
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Refresh hero\n');
+        writeGovernedPlan(featureDir, 'Refresh Hero', ['- [x] Refresh hero']);
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
             JSON.stringify(
@@ -1441,7 +1504,7 @@ if (childProcessUnavailableReason) {
         const archiveDir = path.join(featureDir, 'archive');
         fs.mkdirSync(archiveDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n\nThen the dashboard feels premium\n');
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Refresh the dashboard shell\n');
+        writeGovernedPlan(featureDir, 'Refresh Dashboard Shell', ['- [x] Refresh the dashboard shell']);
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
             JSON.stringify(
@@ -1534,7 +1597,7 @@ if (childProcessUnavailableReason) {
         const feature = 'route-groups-live';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1585,7 +1648,7 @@ if (childProcessUnavailableReason) {
         const feature = 'manifest-routes-live';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1628,7 +1691,7 @@ if (childProcessUnavailableReason) {
         const feature = 'playwright-ui-audit';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1716,7 +1779,7 @@ exports.chromium = {
         const feature = 'verify-invalid-url';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1735,7 +1798,7 @@ exports.chromium = {
         const feature = 'verify-missing-execution-artifacts';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
             JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
@@ -1753,7 +1816,7 @@ exports.chromium = {
         const feature = 'ui-review-artifact';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1818,7 +1881,7 @@ exports.chromium = {
         const feature = 'ui-review-mixed-evidence';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1868,7 +1931,7 @@ exports.chromium = {
         const feature = 'verify-completion-receipt';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),
@@ -1883,13 +1946,41 @@ exports.chromium = {
         const receipt = JSON.parse(fs.readFileSync(completionPath, 'utf-8'));
         if (receipt.feature !== feature) throw new Error(`Unexpected completion.json feature: ${receipt.feature}`);
         if (receipt.status !== 'PASS') throw new Error(`Unexpected completion.json status: ${receipt.status}`);
+        if (JSON.stringify(receipt.sourceArtifacts) !== JSON.stringify(['verify.json', 'progress.md'])) {
+            throw new Error(`Unexpected completion.json sourceArtifacts: ${JSON.stringify(receipt)}`);
+        }
+        if (
+            JSON.stringify(receipt.options) !==
+            JSON.stringify(['merge_back_locally', 'push_and_create_review', 'keep_workspace', 'discard_work'])
+        ) {
+            throw new Error(`Unexpected completion.json options: ${JSON.stringify(receipt)}`);
+        }
+    });
+
+    test('verify-feature blocks malformed governed plan artifacts even when execution receipts exist', () => {
+        const feature = 'verify-malformed-governed-plan';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '# Plan\n\n- [x] Completed task\n');
+        writeGovernedExecutionArtifacts(featureDir, feature);
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('plan.md is missing governed structure')) {
+            throw new Error(`Missing governed plan block: ${output}`);
+        }
     });
 
     test('verify-feature removes stale completion.json on failed verification', () => {
         const feature = 'verify-clears-stale-completion';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        writeGovernedPlan(featureDir);
         writeGovernedExecutionArtifacts(featureDir, feature);
         fs.writeFileSync(
             path.join(featureDir, 'review.json'),

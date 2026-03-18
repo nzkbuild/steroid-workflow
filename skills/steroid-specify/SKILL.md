@@ -13,6 +13,8 @@ The live governed authority for this phase is:
 
 - `governed/spec-system/MODULE.yaml`
 - `governed/spec-system/LIVE-MAPPING.md`
+- `governed/spec-system/PROVENANCE.md`
+- `governed/spec-system/PARITY.md`
 
 In the live repo, this skill implements the `spec_md` part of the governed `steroid-spec-system`. The downstream `plan_md` part is implemented by `skills/steroid-architect/SKILL.md`.
 

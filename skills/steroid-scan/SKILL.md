@@ -13,6 +13,8 @@ The live governed authority for this phase is:
 
 - `governed/scan-system/MODULE.yaml`
 - `governed/scan-system/LIVE-MAPPING.md`
+- `governed/scan-system/PROVENANCE.md`
+- `governed/scan-system/PARITY.md`
 
 In the live repo, this skill is the execution surface for the governed `steroid-scan-system`.
 

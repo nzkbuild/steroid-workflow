@@ -15,6 +15,13 @@ The governed live outputs for this skill are:
 - `.memory/changes/<feature>/verify.json`
 - `.memory/changes/<feature>/completion.json`
 
+The live governed authority chain for this phase is:
+
+- `governed/review-and-verify/MODULE.yaml`
+- `governed/review-and-verify/LIVE-MAPPING.md`
+- `governed/review-and-verify/PROVENANCE.md`
+- `governed/review-and-verify/PARITY.md`
+
 Adapted from:
 
 - **GSD Verifier** (see `src/forks/gsd/agents/gsd-verifier.md`) — Goal-backward verification, 3-level artifact checks, anti-pattern scanning

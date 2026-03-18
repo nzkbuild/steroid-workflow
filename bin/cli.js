@@ -173,13 +173,13 @@ If the task affects UI, UX, visual hierarchy, landing pages, dashboards, respons
 
 | # | Skill | Input | Output |
 |---|-------|-------|--------|
-| 0 | steroid-scan | Project codebase | .memory/changes/<feature>/context.md |
+| 0 | steroid-scan | Project codebase | .memory/changes/<feature>/request.json + context.md |
 | 1 | steroid-vibe-capture | User's natural language | .memory/changes/<feature>/vibe.md |
 | 2 | steroid-specify | vibe.md | .memory/changes/<feature>/spec.md |
 | 3 | steroid-research | spec.md | .memory/changes/<feature>/research.md |
 | 4 | steroid-architect | spec.md + research.md | .memory/changes/<feature>/plan.md |
-| 5 | steroid-engine | plan.md | Working code (TDD, loop until done) |
-| 6 | steroid-verify | Completed code | .memory/changes/<feature>/verify.md |
+| 5 | steroid-engine | plan.md | Working code + .memory/changes/<feature>/tasks.md + .memory/changes/<feature>/execution.json |
+| 6 | steroid-verify | Completed code | .memory/changes/<feature>/review.md + review.json + verify.md + verify.json + completion.json |
 | 7 | steroid-diagnose | Bug/error report | .memory/changes/<feature>/diagnosis.md |
 
 Skills 0-6 flow automatically for build intent. Skill 7 is used only for fix/debug intent.
@@ -199,7 +199,7 @@ The AI MUST use these physical commands — they cannot be skipped:
 - \\\`node steroid-run.cjs commit "<message>"\\\` — Atomic git commit in steroid format
 - \\\`node steroid-run.cjs log <feature> "<message>"\\\` — Append to progress log
 - \\\`node steroid-run.cjs check-plan <feature>\\\` — Check if all tasks are done
-- \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (writes verify.md + verify.json + completion.json; optional \\\`--deep\\\` adds scanners)
+- \\\`node steroid-run.cjs verify-feature <feature> [--deep]\\\` — Core verification gate (writes review.md + review.json + verify.md + verify.json + completion.json; optional \\\`--deep\\\` adds scanners)
 - \\\`node steroid-run.cjs archive <feature>\\\` — Archive completed feature (\\\`--force-ui\\\` is available if blocking frontend cautions are explicitly accepted)
 - \\\`node steroid-run.cjs detect-intent "<message>"\\\` — Classify user intent
 - \\\`node steroid-run.cjs normalize-prompt "<message>"\\\` — Normalize a raw user prompt into a structured brief

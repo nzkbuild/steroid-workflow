@@ -13,6 +13,8 @@ The live governed authority for the planning surface is:
 
 - `governed/spec-system/MODULE.yaml`
 - `governed/spec-system/LIVE-MAPPING.md`
+- `governed/spec-system/PROVENANCE.md`
+- `governed/spec-system/PARITY.md`
 
 In the live repo, this skill implements the `plan_md` part of the governed `steroid-spec-system` after the specification artifact has been locked.
 

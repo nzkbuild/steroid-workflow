@@ -393,8 +393,30 @@ function normalizeDesignRoutingReceipt(receipt) {
             ? receipt.importedSourcePaths.filter((value) => typeof value === 'string')
             : importedSourceIds.map((id) => resolveImportedSourcePath(id)).filter(Boolean),
         prompt: typeof receipt.prompt === 'string' ? receipt.prompt : '',
-        promptSource: typeof receipt.promptSource === 'string' ? receipt.promptSource : null,
-        generatedAt: typeof receipt.generatedAt === 'string' ? receipt.generatedAt : null,
+        promptSource:
+            typeof receipt.promptSource === 'string'
+                ? receipt.promptSource
+                : typeof receipt.source === 'string'
+                  ? receipt.source
+                  : null,
+        generatedAt:
+            typeof receipt.generatedAt === 'string'
+                ? receipt.generatedAt
+                : typeof receipt.updatedAt === 'string'
+                  ? receipt.updatedAt
+                  : null,
+        source:
+            typeof receipt.source === 'string'
+                ? receipt.source
+                : typeof receipt.promptSource === 'string'
+                  ? receipt.promptSource
+                  : null,
+        updatedAt:
+            typeof receipt.updatedAt === 'string'
+                ? receipt.updatedAt
+                : typeof receipt.generatedAt === 'string'
+                  ? receipt.generatedAt
+                  : null,
     };
 }
 
@@ -1818,6 +1840,45 @@ function isWithinTargetDir(resolvedPath) {
     return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+const GOVERNED_COMPLETION_OPTIONS = [
+    'merge_back_locally',
+    'push_and_create_review',
+    'keep_workspace',
+    'discard_work',
+];
+
+const GOVERNED_COMPLETION_SOURCE_ARTIFACTS = ['verify.json', 'progress.md'];
+
+/**
+ * Resolves a path relative to the project root and blocks paths that escape the
+ * project boundary, including through existing symlinked ancestors.
+ *
+ * @param {string} candidatePath
+ * @param {{ mustExist?: boolean }} [options]
+ * @returns {string|null}
+ */
+function resolvePathWithinTargetDir(candidatePath, options = {}) {
+    const resolved = path.resolve(targetDir, candidatePath);
+    if (!isWithinTargetDir(resolved)) return null;
+
+    let probePath = resolved;
+    while (!fs.existsSync(probePath)) {
+        const parentPath = path.dirname(probePath);
+        if (parentPath === probePath) break;
+        probePath = parentPath;
+    }
+
+    try {
+        const realProbePath = fs.realpathSync(probePath);
+        if (!isWithinTargetDir(realProbePath)) return null;
+    } catch {
+        return null;
+    }
+
+    if (options.mustExist && !fs.existsSync(resolved)) return null;
+    return resolved;
+}
+
 /**
  * Walks files/directories recursively and invokes a visitor for each entry.
  *
@@ -2316,7 +2377,7 @@ function parseVerifyMarkdownStatus(content) {
  *
  * @param {string} feature
  * @param {string} featureDir
- * @returns {{ feature: string, status: string|null, reviewPassed: boolean, checks: Record<string, any>, updatedAt: string|null, source: string }}
+ * @returns {{ feature: string, status: string|null, reviewPassed: boolean, checks: Record<string, any>, deepRequested: boolean, deepCompleted: boolean, updatedAt: string|null, source: string }}
  */
 function loadVerifyReceipt(feature, featureDir) {
     const verifyJsonPath = path.join(featureDir, 'verify.json');
@@ -2329,6 +2390,8 @@ function loadVerifyReceipt(feature, featureDir) {
             status: normalizeAllowedStatus(existing.status, ['PASS', 'FAIL', 'CONDITIONAL'], null),
             reviewPassed: !!existing.reviewPassed,
             checks: existing.checks && typeof existing.checks === 'object' && !Array.isArray(existing.checks) ? existing.checks : {},
+            deepRequested: !!existing.deepRequested,
+            deepCompleted: !!existing.deepCompleted,
             updatedAt: existing.updatedAt || null,
             source: existing.source || 'verify.json',
         };
@@ -2338,14 +2401,10 @@ function loadVerifyReceipt(feature, featureDir) {
             existing.checks !== receipt.checks ||
             existing.source !== receipt.source ||
             existing.updatedAt !== receipt.updatedAt ||
-            existing.deepRequested !== !!existing.deepRequested ||
-            existing.deepCompleted !== !!existing.deepCompleted
+            existing.deepRequested !== receipt.deepRequested ||
+            existing.deepCompleted !== receipt.deepCompleted
         ) {
-            writeJsonFile(verifyJsonPath, {
-                ...receipt,
-                deepRequested: !!existing.deepRequested,
-                deepCompleted: !!existing.deepCompleted,
-            });
+            writeJsonFile(verifyJsonPath, receipt);
         }
         return receipt;
     }
@@ -2358,6 +2417,8 @@ function loadVerifyReceipt(feature, featureDir) {
                 status,
                 reviewPassed: false,
                 checks: {},
+                deepRequested: false,
+                deepCompleted: false,
                 updatedAt: new Date().toISOString(),
                 source: 'verify.md',
             };
@@ -2371,6 +2432,8 @@ function loadVerifyReceipt(feature, featureDir) {
         status: null,
         reviewPassed: false,
         checks: {},
+        deepRequested: false,
+        deepCompleted: false,
         updatedAt: null,
         source: 'none',
     };
@@ -2451,14 +2514,16 @@ function loadRequestReceipt(feature, featureDir) {
  * Writes completion receipt state.
  *
  * @param {string} featureDir
- * @param {{ feature: string, status: string, sourceArtifacts?: string[], nextActions?: string[], updatedAt?: string, source?: string, summary?: string }} receipt
+ * @param {{ feature: string, status: string, sourceArtifacts?: string[], nextActions?: string[], options?: string[], updatedAt?: string, source?: string, summary?: string }} receipt
  */
 function saveCompletionReceipt(featureDir, receipt) {
     writeJsonFile(path.join(featureDir, 'completion.json'), {
         feature: receipt.feature,
         status: receipt.status,
         sourceArtifacts: Array.isArray(receipt.sourceArtifacts) ? receipt.sourceArtifacts : [],
+        source_artifacts: Array.isArray(receipt.sourceArtifacts) ? receipt.sourceArtifacts : [],
         nextActions: Array.isArray(receipt.nextActions) ? receipt.nextActions : [],
+        options: Array.isArray(receipt.options) ? receipt.options : [...GOVERNED_COMPLETION_OPTIONS],
         updatedAt: receipt.updatedAt || new Date().toISOString(),
         source: receipt.source || 'completion.json',
         summary: receipt.summary || 'Verification completed. Feature is ready for completion handling.',
@@ -2470,7 +2535,7 @@ function saveCompletionReceipt(featureDir, receipt) {
  *
  * @param {string} feature
  * @param {string} featureDir
- * @returns {{ feature: string, status: string|null, sourceArtifacts: string[], nextActions: string[], updatedAt: string|null, source: string, summary: string|null }}
+ * @returns {{ feature: string, status: string|null, sourceArtifacts: string[], nextActions: string[], options: string[], updatedAt: string|null, source: string, summary: string|null }}
  */
 function loadCompletionReceipt(feature, featureDir) {
     const completionJsonPath = path.join(featureDir, 'completion.json');
@@ -2482,8 +2547,13 @@ function loadCompletionReceipt(feature, featureDir) {
             status: normalizeAllowedStatus(existing.status, ['PASS', 'CONDITIONAL'], null),
             sourceArtifacts: Array.isArray(existing.sourceArtifacts)
                 ? existing.sourceArtifacts.filter((v) => typeof v === 'string')
+                : Array.isArray(existing.source_artifacts)
+                  ? existing.source_artifacts.filter((v) => typeof v === 'string')
                 : [],
             nextActions: Array.isArray(existing.nextActions) ? existing.nextActions.filter((v) => typeof v === 'string') : [],
+            options: Array.isArray(existing.options)
+                ? existing.options.filter((v) => typeof v === 'string')
+                : [...GOVERNED_COMPLETION_OPTIONS],
             updatedAt: existing.updatedAt || null,
             source: existing.source || 'completion.json',
             summary: typeof existing.summary === 'string' ? existing.summary : null,
@@ -2495,10 +2565,15 @@ function loadCompletionReceipt(feature, featureDir) {
                 existing.source !== receipt.source ||
                 existing.updatedAt !== receipt.updatedAt ||
                 existing.summary !== receipt.summary ||
-                JSON.stringify(existing.sourceArtifacts || []) !== JSON.stringify(receipt.sourceArtifacts) ||
-                JSON.stringify(existing.nextActions || []) !== JSON.stringify(receipt.nextActions))
+                JSON.stringify(existing.sourceArtifacts || existing.source_artifacts || []) !==
+                    JSON.stringify(receipt.sourceArtifacts) ||
+                JSON.stringify(existing.nextActions || []) !== JSON.stringify(receipt.nextActions) ||
+                JSON.stringify(existing.options || []) !== JSON.stringify(receipt.options))
         ) {
-            writeJsonFile(completionJsonPath, receipt);
+            writeJsonFile(completionJsonPath, {
+                ...receipt,
+                source_artifacts: receipt.sourceArtifacts,
+            });
         }
 
         return receipt;
@@ -2509,6 +2584,7 @@ function loadCompletionReceipt(feature, featureDir) {
         status: null,
         sourceArtifacts: [],
         nextActions: [],
+        options: [],
         updatedAt: null,
         source: 'none',
         summary: null,
@@ -4347,7 +4423,11 @@ if (args[0] === 'fs-mkdir') {
         console.error('[steroid-run] Usage: npx steroid-run fs-mkdir <path>');
         process.exit(1);
     }
-    const resolved = path.resolve(targetDir, dirPath);
+    const resolved = resolvePathWithinTargetDir(dirPath);
+    if (!resolved) {
+        console.error('[steroid-run] 🚫 SAFETY: fs-mkdir path must stay inside the current project root.');
+        process.exit(1);
+    }
     fs.mkdirSync(resolved, { recursive: true });
     console.log(`[steroid-run] ✅ Created: ${path.relative(targetDir, resolved)}/`);
     process.exit(0);
@@ -4360,7 +4440,11 @@ if (args[0] === 'fs-rm') {
         console.error('[steroid-run] Usage: npx steroid-run fs-rm <path>');
         process.exit(1);
     }
-    const resolved = path.resolve(targetDir, rmPath);
+    const resolved = resolvePathWithinTargetDir(rmPath);
+    if (!resolved) {
+        console.error('[steroid-run] 🚫 SAFETY: fs-rm path must stay inside the current project root.');
+        process.exit(1);
+    }
 
     // Safety guard: refuse to delete critical paths
     const safePaths = ['.git', '.memory', 'steroid-run.cjs', 'node_modules'];
@@ -4389,8 +4473,12 @@ if (args[0] === 'fs-cp') {
         console.error('[steroid-run] Usage: npx steroid-run fs-cp <src> <dest>');
         process.exit(1);
     }
-    const resolvedSrc = path.resolve(targetDir, src);
-    const resolvedDest = path.resolve(targetDir, dest);
+    const resolvedSrc = resolvePathWithinTargetDir(src, { mustExist: true });
+    const resolvedDest = resolvePathWithinTargetDir(dest);
+    if (!resolvedSrc || !resolvedDest) {
+        console.error('[steroid-run] 🚫 SAFETY: fs-cp paths must stay inside the current project root.');
+        process.exit(1);
+    }
 
     if (!fs.existsSync(resolvedSrc)) {
         console.error(`[steroid-run] ❌ Source does not exist: ${src}`);
@@ -4442,8 +4530,12 @@ if (args[0] === 'fs-mv') {
         console.error('[steroid-run] Usage: npx steroid-run fs-mv <src> <dest>');
         process.exit(1);
     }
-    const resolvedSrc = path.resolve(targetDir, src);
-    const resolvedDest = path.resolve(targetDir, dest);
+    const resolvedSrc = resolvePathWithinTargetDir(src, { mustExist: true });
+    const resolvedDest = resolvePathWithinTargetDir(dest);
+    if (!resolvedSrc || !resolvedDest) {
+        console.error('[steroid-run] 🚫 SAFETY: fs-mv paths must stay inside the current project root.');
+        process.exit(1);
+    }
 
     if (!fs.existsSync(resolvedSrc)) {
         console.error(`[steroid-run] ❌ Source does not exist: ${src}`);
@@ -4497,7 +4589,8 @@ if (args[0] === 'fs-cat') {
     let chosenPath = null;
     let resolvedPath = null;
     for (const candidate of candidatePaths) {
-        const resolved = path.resolve(targetDir, candidate);
+        const resolved = resolvePathWithinTargetDir(candidate, { mustExist: true });
+        if (!resolved) continue;
         if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
             chosenPath = candidate;
             resolvedPath = resolved;
@@ -4577,8 +4670,8 @@ if (args[0] === 'fs-find') {
     const results = [];
 
     for (const root of roots) {
-        const resolvedRoot = path.resolve(targetDir, root);
-        if (!isWithinTargetDir(resolvedRoot) || !fs.existsSync(resolvedRoot)) continue;
+        const resolvedRoot = resolvePathWithinTargetDir(root, { mustExist: true });
+        if (!resolvedRoot || !fs.existsSync(resolvedRoot)) continue;
 
         const stop = walkPathEntries(resolvedRoot, { maxDepth, skipRoot: false }, (entry) => {
             if (results.length >= limit) return true;
@@ -4696,8 +4789,8 @@ if (args[0] === 'fs-grep') {
     };
 
     for (const root of roots) {
-        const resolvedRoot = path.resolve(targetDir, root);
-        if (!isWithinTargetDir(resolvedRoot) || !fs.existsSync(resolvedRoot)) continue;
+        const resolvedRoot = resolvePathWithinTargetDir(root, { mustExist: true });
+        if (!resolvedRoot || !fs.existsSync(resolvedRoot)) continue;
 
         if (fs.statSync(resolvedRoot).isFile()) {
             if (searchFile(resolvedRoot)) break;
@@ -4726,7 +4819,11 @@ if (args[0] === 'fs-grep') {
 /** CMD: fs-ls — List directory contents as tree (v6.0.0) */
 if (args[0] === 'fs-ls') {
     const lsPath = args[1] || '.';
-    const resolved = path.resolve(targetDir, lsPath);
+    const resolved = resolvePathWithinTargetDir(lsPath, { mustExist: true });
+    if (!resolved) {
+        console.error('[steroid-run] 🚫 SAFETY: fs-ls path must stay inside the current project root.');
+        process.exit(1);
+    }
 
     if (!fs.existsSync(resolved)) {
         console.error(`[steroid-run] ❌ Path does not exist: ${lsPath}`);
@@ -5359,7 +5456,6 @@ if (args[0] === 'archive') {
         console.log(`[steroid-run] ⚠️  --force flag used. Archiving without verification.`);
     }
 
-    const completionReceiptPath = path.join(featureDir, 'completion.json');
     if (!args.includes('--force')) {
         const completionReceipt = loadCompletionReceipt(feature, featureDir);
         if (!completionReceipt.status) {
@@ -6452,6 +6548,22 @@ if (args[0] === 'verify-feature') {
     // ── Step 1: Execution source completeness ──
     const executionContent = fs.readFileSync(executionFile, 'utf-8');
     if (executionLabel === 'plan.md') {
+        const governedPlanShape = validateGovernedPhaseArtifact('plan.md', executionContent);
+        if (!governedPlanShape.ok) {
+            results.push({
+                step: 'Plan structure',
+                status: 'FAIL',
+                detail: `plan.md is missing governed structure. ${governedPlanShape.reason}`,
+            });
+            hasFailure = true;
+        } else {
+            results.push({
+                step: 'Plan structure',
+                status: 'PASS',
+                detail: 'plan.md preserves the governed implementation plan structure',
+            });
+        }
+
         const { total, done } = parseChecklistStats(executionContent);
         if (done < total) {
             results.push({
@@ -7077,30 +7189,31 @@ if (args[0] === 'verify-feature') {
         deepCompleted: deepMode,
     });
 
-    const completionReceiptPath = path.join(featureDir, 'completion.json');
-    if (hasFailure) {
-        if (fs.existsSync(completionReceiptPath)) {
-            fs.unlinkSync(completionReceiptPath);
-        }
-    } else {
-        saveCompletionReceipt(featureDir, {
-            feature,
-            status: verifyStatus,
-            sourceArtifacts: ['verify.json', 'review.json'],
-            nextActions: ['archive'],
-            summary:
-                verifyStatus === 'CONDITIONAL'
-                    ? 'Verification completed with cautions. Completion flow may continue with explicit acceptance of remaining risk.'
-                    : 'Verification completed successfully. Feature is ready for completion handling.',
-        });
-    }
-
     const uiReviewRefresh = ensureCurrentUiReviewArtifacts(feature, featureDir, {
         verifyStatus,
         deepMode,
         previewUrl: previewTarget,
         refreshSource: 'verify-feature',
     });
+
+    if (hasFailure) {
+        const staleCompletionReceiptPath = path.join(featureDir, 'completion.json');
+        if (fs.existsSync(staleCompletionReceiptPath)) {
+            fs.unlinkSync(staleCompletionReceiptPath);
+        }
+    } else {
+        saveCompletionReceipt(featureDir, {
+            feature,
+            status: verifyStatus,
+            sourceArtifacts: [...GOVERNED_COMPLETION_SOURCE_ARTIFACTS],
+            nextActions: ['archive'],
+            options: [...GOVERNED_COMPLETION_OPTIONS],
+            summary:
+                verifyStatus === 'CONDITIONAL'
+                    ? 'Verification completed with cautions. Completion flow may continue with explicit acceptance of remaining risk.'
+                    : 'Verification completed successfully. Feature is ready for completion handling.',
+        });
+    }
 
     console.log(`  Report: .memory/changes/${feature}/verify.md`);
     console.log(`  Receipt: .memory/changes/${feature}/verify.json`);
@@ -7594,7 +7707,11 @@ if (args[0] === 'verify') {
     }
 
     const minLines = parseInt(minLinesArg.split('=')[1], 10);
-    const fullPath = path.resolve(targetDir, targetFile);
+    const fullPath = resolvePathWithinTargetDir(targetFile, { mustExist: true });
+    if (!fullPath) {
+        console.error('[STEROID-VERIFY ERROR]: File path must stay inside the current project root.');
+        process.exit(1);
+    }
 
     if (!fs.existsSync(fullPath)) {
         console.error(`[STEROID-VERIFY ERROR]: File does not exist at ${fullPath}`);
@@ -7630,7 +7747,7 @@ if (args[0] === 'run') {
                 console.error("[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> '<command>'");
                 process.exit(1);
             }
-            executionCwd = path.resolve(targetDir, requestedCwd);
+            executionCwd = resolvePathWithinTargetDir(requestedCwd, { mustExist: true });
             cwdProvided = true;
         } else {
             executionArgs.push(arg);
@@ -7641,7 +7758,7 @@ if (args[0] === 'run') {
         console.error("[steroid-run] Usage: node steroid-run.cjs run --cwd=<path> '<command>'");
         process.exit(1);
     }
-    if (!isWithinTargetDir(executionCwd)) {
+    if (!executionCwd || !isWithinTargetDir(executionCwd)) {
         console.error('[steroid-run] 🚫 SAFETY: --cwd must stay inside the current project root.');
         process.exit(1);
     }

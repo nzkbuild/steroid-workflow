@@ -13,6 +13,8 @@ The live governed authority for this phase is:
 
 - `governed/execution-engine/MODULE.yaml`
 - `governed/execution-engine/LIVE-MAPPING.md`
+- `governed/execution-engine/PROVENANCE.md`
+- `governed/execution-engine/PARITY.md`
 
 In the live repo, this skill is the execution entry point for the governed `steroid-execution-engine`. The current runtime emits standalone live equivalents for `tasks_md` and `execution_receipts` at `.memory/changes/<feature>/tasks.md` and `.memory/changes/<feature>/execution.json`.
 In the live repo, this skill is also one of the runtime surfaces for the governed `steroid-progress-memory`. `.memory/progress.md` is the durable append-only progress artifact.

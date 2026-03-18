@@ -3,11 +3,13 @@
 Date: 2026-03-18
 Status: Draft `v1` live governed baseline frozen
 
-## Governed Core
+## Governed Baseline
 
-The live governed core is now frozen under `governed/` for these transplanted subsystems:
+The live governed baseline is now frozen under `governed/` for these transplanted subsystems:
 
+- `governed/scan-system/`
 - `governed/spec-system/`
+- `governed/research-system/`
 - `governed/execution-engine/`
 - `governed/review-and-verify/`
 - `governed/progress-memory/`
@@ -15,7 +17,7 @@ The live governed core is now frozen under `governed/` for these transplanted su
 
 ## Authority
 
-For the governed live core, authority order is:
+For the governed live baseline, authority order is:
 
 1. `governed/<slice>/MODULE.yaml`
 2. `governed/<slice>/LIVE-MAPPING.md`
@@ -28,16 +30,18 @@ For the governed live core, authority order is:
 This freeze means:
 
 - the governed migration map for the live core is complete
-- the governed core slices are structurally aligned
-- the governed core slices are parity-aligned
-- the governed core slices are migration-closed
+- the governed baseline slices are structurally aligned
+- the governed baseline slices are parity-aligned
+- the governed baseline slices are migration-closed
 - future work should implement or extend from this baseline rather than reopen architecture design
 
 ## Governed Live Artifacts
 
-The current live governed core depends on these durable runtime surfaces:
+The current live governed baseline depends on these durable runtime surfaces:
 
+- `.memory/changes/<feature>/request.json`
 - `.memory/changes/<feature>/spec.md`
+- `.memory/changes/<feature>/research.md`
 - `.memory/changes/<feature>/plan.md`
 - `.memory/changes/<feature>/tasks.md`
 - `.memory/changes/<feature>/execution.json`
@@ -52,6 +56,6 @@ The current live governed core depends on these durable runtime surfaces:
 
 The next phase is not additional core slice design. The next phase is:
 
-1. keep the live governed core stable
-2. commit the governed-core milestone
+1. keep the live governed baseline stable
+2. commit the governed-baseline milestone
 3. choose a second-wave transplant set or enforcement-hardening pass
