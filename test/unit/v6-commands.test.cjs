@@ -398,6 +398,10 @@ if (childProcessUnavailableReason) {
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'context.md'), '# Context\n');
         fs.writeFileSync(
+            path.join(featureDir, 'request.json'),
+            JSON.stringify({ feature, requestedAt: new Date().toISOString(), source: 'scan' }, null, 2),
+        );
+        fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
             JSON.stringify(
                 {
@@ -530,6 +534,10 @@ if (childProcessUnavailableReason) {
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'context.md'), '# Context\nLine 2\nLine 3\nLine 4\nLine 5\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'request.json'),
+            JSON.stringify({ feature, requestedAt: new Date().toISOString(), source: 'scan' }, null, 2),
+        );
 
         const result = run(['gate', 'vibe', feature]);
         if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
@@ -537,6 +545,24 @@ if (childProcessUnavailableReason) {
         const output = result.stdout.toString();
         if (!output.includes('Gate passed')) {
             throw new Error(`Missing gate pass confirmation: ${output}`);
+        }
+    });
+
+    test('gate vibe blocks when request.json is missing even if context.md exists', () => {
+        const feature = 'gate-missing-request-receipt';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'context.md'), '# Context\nLine 2\nLine 3\nLine 4\nLine 5\n');
+
+        const result = run(['gate', 'vibe', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('governed scan receipt is incomplete')) {
+            throw new Error(`Missing request receipt block: ${output}`);
+        }
+        if (!output.includes('request.json')) {
+            throw new Error(`Missing request.json guidance: ${output}`);
         }
     });
 

@@ -2212,6 +2212,43 @@ function saveRequestReceipt(featureDir, receipt) {
 }
 
 /**
+ * Loads feature request receipt state and normalizes valid machine-readable fields.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @returns {{ feature: string, requestedAt: string|null, source: string, summary: string|null }}
+ */
+function loadRequestReceipt(feature, featureDir) {
+    const requestJsonPath = path.join(featureDir, 'request.json');
+    const existing = readJsonFile(requestJsonPath);
+
+    if (existing && existing.feature === feature) {
+        const receipt = {
+            feature,
+            requestedAt: typeof existing.requestedAt === 'string' ? existing.requestedAt : null,
+            source: typeof existing.source === 'string' ? existing.source : 'request.json',
+            summary: typeof existing.summary === 'string' ? existing.summary : null,
+        };
+        if (
+            receipt.requestedAt &&
+            (existing.requestedAt !== receipt.requestedAt ||
+                existing.source !== receipt.source ||
+                existing.summary !== receipt.summary)
+        ) {
+            writeJsonFile(requestJsonPath, receipt);
+        }
+        return receipt;
+    }
+
+    return {
+        feature,
+        requestedAt: null,
+        source: 'none',
+        summary: null,
+    };
+}
+
+/**
  * Writes completion receipt state.
  *
  * @param {string} featureDir
@@ -2576,8 +2613,8 @@ function buildPromptHealth(analysis) {
 }
 
 function suggestNextPhase(analysis, artifacts) {
-    if (!artifacts.context) {
-        return { phase: 'scan', reason: 'context.md is missing' };
+    if (!artifacts.request || !artifacts.context) {
+        return { phase: 'scan', reason: !artifacts.request ? 'request.json is missing' : 'context.md is missing' };
     }
     if (!artifacts.prompt) {
         return { phase: 'normalize-prompt', reason: 'prompt.json is missing' };
@@ -2715,7 +2752,10 @@ function summarizeRouteProgress(analysis, artifacts) {
 }
 
 function buildFeatureArtifactState(featureDir) {
+    const feature = path.basename(featureDir);
+    const requestReceipt = loadRequestReceipt(feature, featureDir);
     return {
+        request: !!requestReceipt.requestedAt,
         context: fs.existsSync(path.join(featureDir, 'context.md')),
         prompt: fs.existsSync(path.join(featureDir, 'prompt.json')),
         designRoute: fs.existsSync(path.join(featureDir, 'design-routing.json')),
@@ -4529,6 +4569,7 @@ if (args[0] === 'gate') {
     const artifactState = buildFeatureArtifactState(featureDir);
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
     const routeSummary = promptReceipt ? summarizeRouteProgress(promptReceipt, artifactState) : null;
+    const requestReceipt = loadRequestReceipt(feature, featureDir);
     const gates = {
         vibe: { requires: 'context.md', minLines: 5, label: 'Codebase scan' },
         specify: { requires: 'vibe.md', minLines: 5, label: 'Vibe capture' },
@@ -4552,6 +4593,14 @@ if (args[0] === 'gate') {
     const gate = gates[phase];
     if (!gate) {
         console.error(`[steroid-run] ❌ Unknown phase: "${phase}". Valid phases: ${Object.keys(gates).join(', ')}`);
+        process.exit(1);
+    }
+
+    if (['vibe', 'diagnose'].includes(phase) && !requestReceipt.requestedAt) {
+        console.error(`[steroid-run] 🚫 GATE BLOCKED: governed scan receipt is incomplete.`);
+        console.error(`  Missing: .memory/changes/${feature}/request.json`);
+        console.error(`  The "${phase}" phase cannot start until request.json and context.md both exist.`);
+        console.error(`  Run: node steroid-run.cjs scan ${feature}`);
         process.exit(1);
     }
 
