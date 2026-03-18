@@ -364,12 +364,63 @@ function routeDesignSystems(prompt, options = {}) {
     };
 }
 
+/**
+ * Normalizes a design routing receipt into the governed runtime shape.
+ *
+ * @param {Record<string, any>|null|undefined} receipt
+ * @returns {Record<string, any>|null}
+ */
+function normalizeDesignRoutingReceipt(receipt) {
+    if (!receipt || typeof receipt !== 'object') return null;
+
+    const stack = typeof receipt.stack === 'string' ? receipt.stack : 'web';
+    const wrapperSkill = typeof receipt.wrapperSkill === 'string' ? receipt.wrapperSkill : null;
+    const importedSourceIds = Array.isArray(receipt.importedSourceIds)
+        ? receipt.importedSourceIds.filter((value) => typeof value === 'string')
+        : [];
+    const domain = typeof receipt.domain === 'string' ? receipt.domain : stack;
+
+    if (!['none', 'web', 'react', 'react-native'].includes(domain)) return null;
+    if (!['web', 'react', 'react-native'].includes(stack)) return null;
+
+    return {
+        domain,
+        stack,
+        auditOnly: !!receipt.auditOnly,
+        wrapperSkill,
+        importedSourceIds,
+        importedSourcePaths: Array.isArray(receipt.importedSourcePaths)
+            ? receipt.importedSourcePaths.filter((value) => typeof value === 'string')
+            : importedSourceIds.map((id) => resolveImportedSourcePath(id)).filter(Boolean),
+        prompt: typeof receipt.prompt === 'string' ? receipt.prompt : '',
+        promptSource: typeof receipt.promptSource === 'string' ? receipt.promptSource : null,
+        generatedAt: typeof receipt.generatedAt === 'string' ? receipt.generatedAt : null,
+    };
+}
+
+/**
+ * Loads the active design routing receipt and normalizes it when valid.
+ *
+ * @param {string} featureDir
+ * @returns {Record<string, any>|null}
+ */
+function loadDesignRoutingReceipt(featureDir) {
+    const routeReceiptPath = path.join(featureDir, 'design-routing.json');
+    const existing = readJsonFile(routeReceiptPath);
+    const normalized = normalizeDesignRoutingReceipt(existing);
+    if (!normalized) return null;
+    if (JSON.stringify(existing) !== JSON.stringify(normalized)) {
+        writeJsonFile(routeReceiptPath, normalized);
+    }
+    return normalized;
+}
+
 function hasText(value) {
     return typeof value === 'string' && value.trim().length > 0;
 }
 
 function resolveFeaturePromptForDesign(featureDir) {
-    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     if (hasText(designReceipt?.prompt)) {
         return designReceipt.prompt.trim();
     }
@@ -504,7 +555,7 @@ function readFeatureArtifactText(featureDir, fileName) {
 }
 
 function detectUiFeatureForGate(featureDir, promptReceipt = null) {
-    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     if (designReceipt && designReceipt.domain !== 'none' && !designReceipt.auditOnly) {
         return true;
     }
@@ -534,7 +585,7 @@ function getMissingDesignArtifactsForPhase(featureDir, phase, promptReceipt = nu
     }
 
     const missing = [];
-    if (!fs.existsSync(path.join(featureDir, 'design-routing.json'))) {
+    if (!loadDesignRoutingReceipt(featureDir)) {
         missing.push('design-routing.json');
     }
     if (!fs.existsSync(path.join(featureDir, 'design-system.md'))) {
@@ -1238,7 +1289,7 @@ function buildAccesslintResultFromReceipt(receipt) {
 
 function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
-    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     const accesslintReceipt = readJsonFile(path.join(featureDir, 'accessibility.json'));
     const browserAuditReceipt = readJsonFile(path.join(featureDir, 'ui-audit.json'));
     const verifyReceipt = loadVerifyReceipt(feature, featureDir);
@@ -2999,11 +3050,12 @@ function summarizeRouteProgress(analysis, artifacts) {
 function buildFeatureArtifactState(featureDir) {
     const feature = path.basename(featureDir);
     const requestReceipt = loadRequestReceipt(feature, featureDir);
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     return {
         request: !!requestReceipt.requestedAt,
         context: fs.existsSync(path.join(featureDir, 'context.md')),
         prompt: fs.existsSync(path.join(featureDir, 'prompt.json')),
-        designRoute: fs.existsSync(path.join(featureDir, 'design-routing.json')),
+        designRoute: !!designReceipt,
         vibe: fs.existsSync(path.join(featureDir, 'vibe.md')),
         spec: fs.existsSync(path.join(featureDir, 'spec.md')),
         research: fs.existsSync(path.join(featureDir, 'research.md')),
@@ -3027,7 +3079,7 @@ function getRouteDisplayPhases(route) {
 function getPipelineStatusEntries(featureDir, promptReceipt) {
     const route = promptReceipt ? promptReceipt.recommendedPipeline || 'standard-build' : 'standard-build';
     const expectedPhases = new Set(getRouteDisplayPhases(route));
-    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     const verifyReceipt = readJsonFile(path.join(featureDir, 'verify.json'));
     const designHint = `${promptReceipt?.normalizedSummary || ''} ${designReceipt?.prompt || ''}`.trim();
     const designRouteExpected = Boolean(designReceipt) || detectUiTask(designHint);
@@ -3708,7 +3760,7 @@ if (args[0] === 'pipeline-status') {
         console.log('');
     }
 
-    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     const uiReviewReceipt = loadUiReviewReceipt(feature, featureDir);
     const designExpected =
         artifactState.designRoute || artifactState.designSystem || detectUiTask(promptReceipt?.normalizedSummary || '');
@@ -5947,7 +5999,7 @@ if (args[0] === 'design-prep') {
             process.exit(1);
         }
 
-        routeSummary = readJsonFile(path.join(featureDir, 'design-routing.json')) || bootstrap.route;
+        routeSummary = loadDesignRoutingReceipt(featureDir) || bootstrap.route;
     } else {
         routeSummary = routeDesignSystems(message, { stack });
         if (routeSummary.domain !== 'none' && !routeSummary.auditOnly) {
@@ -6313,7 +6365,7 @@ if (args[0] === 'verify-feature') {
     const results = [];
     let hasFailure = false;
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
-    const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
+    const designReceipt = loadDesignRoutingReceipt(featureDir);
     const executionReceipt = executionLabel === 'plan.md' ? loadExecutionReceipt(feature, featureDir) : null;
 
     if (executionLabel === 'plan.md') {

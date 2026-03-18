@@ -675,6 +675,70 @@ if (childProcessUnavailableReason) {
         if (!output.includes('design-system.md')) throw new Error(`Missing design-system guidance: ${output}`);
     });
 
+    test('gate architect treats malformed design-routing.json as missing', () => {
+        const feature = 'gate-ui-architect-malformed-route';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'research.md'),
+            [
+                '# Research: Malformed Route',
+                '',
+                '**Researched**: 2026-03-18',
+                '**Spec Source**: .memory/changes/gate-ui-architect-malformed-route/spec.md',
+                '**Overall Confidence**: MEDIUM',
+                '',
+                '## Summary',
+                '',
+                'UI work is present.',
+                '',
+                '## Standard Stack',
+                '',
+                '### Core',
+                '',
+                '| Library | Version | Purpose | Confidence |',
+                '| ------- | ------- | ------- | ---------- |',
+                '| React | 19 | UI | HIGH |',
+                '',
+                '## Architecture Patterns',
+                '',
+                '### Recommended Project Structure',
+                '',
+                'src/',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    normalizedSummary: 'Redesign the dashboard UI with a premium visual system',
+                    recommendedPipeline: 'standard-build',
+                    continuationState: 'fresh-start',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    domain: 'broken',
+                    stack: 'invalid',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['gate', 'architect', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+
+        const output = `${result.stderr}${result.stdout}`;
+        if (!output.includes('DESIGN GATE BLOCKED')) throw new Error(`Missing malformed design gate block: ${output}`);
+        if (!output.includes('design-routing.json')) throw new Error(`Missing malformed routing guidance: ${output}`);
+    });
+
     test('gate research auto-bootstraps design artifacts for UI features', () => {
         const feature = 'gate-ui-research-bootstrap';
         const featureDir = path.join(changesDir, feature);
