@@ -601,7 +601,34 @@ if (childProcessUnavailableReason) {
         const feature = 'gate-ui-architect-block';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'research.md'), '# Research\n' + 'line\n'.repeat(12));
+        fs.writeFileSync(
+            path.join(featureDir, 'research.md'),
+            [
+                '# Research: UI Architect Block',
+                '',
+                '**Researched**: 2026-03-18',
+                '**Spec Source**: .memory/changes/gate-ui-architect-block/spec.md',
+                '**Overall Confidence**: MEDIUM',
+                '',
+                '## Summary',
+                '',
+                'UI-intensive research is present.',
+                '',
+                '## Standard Stack',
+                '',
+                '### Core',
+                '',
+                '| Library | Version | Purpose | Confidence |',
+                '| ------- | ------- | ------- | ---------- |',
+                '| React | 19 | UI | HIGH |',
+                '',
+                '## Architecture Patterns',
+                '',
+                '### Recommended Project Structure',
+                '',
+                'src/',
+            ].join('\n'),
+        );
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
             JSON.stringify(
@@ -649,8 +676,39 @@ if (childProcessUnavailableReason) {
         );
         fs.writeFileSync(
             path.join(featureDir, 'spec.md'),
-            '# Spec\n' +
-                'Build a premium React dashboard redesign with cleaner hierarchy and responsive layout.\n'.repeat(12),
+            [
+                '# Specification: UI Research Bootstrap',
+                '',
+                '**Created**: 2026-03-18',
+                '**Source**: .memory/changes/gate-ui-research-bootstrap/vibe.md',
+                '**Status**: Ready for Research',
+                '',
+                '## Scope Boundary',
+                '',
+                '### In Scope (v1)',
+                '- premium dashboard hierarchy',
+                '',
+                '### Out of Scope (not v1)',
+                '- backend changes',
+                '',
+                '## User Stories',
+                '',
+                '### Story 1: Premium dashboard shell (Priority: P1)',
+                '',
+                'The dashboard should feel premium and clearer to scan.',
+                '',
+                '**Acceptance Criteria:**',
+                '',
+                '1. **Given** the dashboard loads, **When** the user sees the shell, **Then** hierarchy feels cleaner.',
+                '',
+                '## Edge Cases',
+                '',
+                '- Missing data state still preserves hierarchy.',
+                '',
+                '## Success Criteria',
+                '',
+                '- **SC-001**: Dashboard shell is visually clearer.',
+            ].join('\n'),
         );
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
@@ -683,7 +741,28 @@ if (childProcessUnavailableReason) {
         const feature = 'gate-ui-engine-pass';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        fs.writeFileSync(path.join(featureDir, 'plan.md'), '# Plan\n' + '- [x] done\n'.repeat(10));
+        fs.writeFileSync(
+            path.join(featureDir, 'plan.md'),
+            [
+                '# Implementation Plan: UI Engine Pass',
+                '',
+                '**Source**: .memory/changes/gate-ui-engine-pass/spec.md + research.md',
+                '**Created**: 2026-03-18',
+                '',
+                '## Tech Stack',
+                '',
+                '- Frontend: React',
+                '- Backend: None',
+                '- Database: None',
+                '- Styling: Tailwind CSS',
+                '',
+                '## Execution Checklist',
+                '',
+                '- [x] Create dashboard shell',
+                '- [x] Add responsive layout states',
+                '- [x] Validate design-system alignment',
+            ].join('\n'),
+        );
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
             JSON.stringify(
@@ -716,6 +795,48 @@ if (childProcessUnavailableReason) {
 
         const output = result.stdout.toString();
         if (!output.includes('Gate passed')) throw new Error(`Missing gate pass output: ${output}`);
+    });
+
+    test('gate research blocks malformed spec.md even when line count is high', () => {
+        const feature = 'gate-malformed-spec';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n' + 'line\n'.repeat(20));
+
+        const result = run(['gate', 'research', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('spec.md is missing governed structure')) {
+            throw new Error(`Missing governed spec block: ${output}`);
+        }
+    });
+
+    test('gate architect blocks malformed research.md even when line count is high', () => {
+        const feature = 'gate-malformed-research';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'research.md'), '# Research\n' + 'line\n'.repeat(20));
+
+        const result = run(['gate', 'architect', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('research.md is missing governed structure')) {
+            throw new Error(`Missing governed research block: ${output}`);
+        }
+    });
+
+    test('gate engine blocks malformed plan.md even when line count is high', () => {
+        const feature = 'gate-malformed-plan';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '# Plan\n' + '- [x] done\n'.repeat(20));
+
+        const result = run(['gate', 'engine', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('plan.md is missing governed structure')) {
+            throw new Error(`Missing governed plan block: ${output}`);
+        }
     });
 
     test('archive preserves prior files during same-stamp collisions', () => {

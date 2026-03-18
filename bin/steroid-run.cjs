@@ -1552,6 +1552,63 @@ function parseChecklistStats(content) {
 }
 
 /**
+ * Validates the minimum governed structure for phase artifacts that should not be
+ * treated as complete based on line count alone.
+ *
+ * @param {string} fileName
+ * @param {string} content
+ * @returns {{ ok: boolean, reason: string|null }}
+ */
+function validateGovernedPhaseArtifact(fileName, content) {
+    const text = String(content || '');
+
+    if (fileName === 'spec.md') {
+        const checks = [
+            { ok: /^# Specification:/m.test(text), label: '# Specification:' },
+            { ok: /^## User Stories$/m.test(text), label: '## User Stories' },
+            { ok: /^## Success Criteria$/m.test(text), label: '## Success Criteria' },
+            { ok: /^### Story /m.test(text), label: 'at least one story section' },
+            { ok: /\*\*Acceptance Criteria:\*\*/m.test(text), label: '**Acceptance Criteria:**' },
+        ];
+        const missing = checks.filter((check) => !check.ok).map((check) => check.label);
+        return {
+            ok: missing.length === 0,
+            reason: missing.length ? `Missing governed spec structure: ${missing.join(', ')}` : null,
+        };
+    }
+
+    if (fileName === 'research.md') {
+        const checks = [
+            { ok: /^# Research:/m.test(text), label: '# Research:' },
+            { ok: /^## Summary$/m.test(text), label: '## Summary' },
+            { ok: /^## Standard Stack$/m.test(text), label: '## Standard Stack' },
+            { ok: /^## Architecture Patterns$/m.test(text), label: '## Architecture Patterns' },
+        ];
+        const missing = checks.filter((check) => !check.ok).map((check) => check.label);
+        return {
+            ok: missing.length === 0,
+            reason: missing.length ? `Missing governed research structure: ${missing.join(', ')}` : null,
+        };
+    }
+
+    if (fileName === 'plan.md') {
+        const checks = [
+            { ok: /^# Implementation Plan:/m.test(text), label: '# Implementation Plan:' },
+            { ok: /^## Tech Stack$/m.test(text), label: '## Tech Stack' },
+            { ok: /^## Execution Checklist$/m.test(text), label: '## Execution Checklist' },
+            { ok: /^- \[[ x]\] /m.test(text), label: 'at least one checklist item' },
+        ];
+        const missing = checks.filter((check) => !check.ok).map((check) => check.label);
+        return {
+            ok: missing.length === 0,
+            reason: missing.length ? `Missing governed plan structure: ${missing.join(', ')}` : null,
+        };
+    }
+
+    return { ok: true, reason: null };
+}
+
+/**
  * Reads the active or latest archived artifact for a feature.
  *
  * @param {string} featureDir
@@ -4678,6 +4735,14 @@ if (args[0] === 'gate') {
                 console.error(`  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}`);
             }
         }
+        console.error(friendlyHint('gate-incomplete'));
+        process.exit(1);
+    }
+
+    const governedShape = validateGovernedPhaseArtifact(gate.requires, fs.readFileSync(requiredFile, 'utf-8'));
+    if (!governedShape.ok) {
+        console.error(`[steroid-run] 🚫 GATE BLOCKED: ${gate.requires} is missing governed structure.`);
+        console.error(`  ${governedShape.reason}`);
         console.error(friendlyHint('gate-incomplete'));
         process.exit(1);
     }
