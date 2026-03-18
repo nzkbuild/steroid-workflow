@@ -1,0 +1,115 @@
+kind: module
+contract_version: "1.0"
+
+identity:
+  id: steroid-review-and-verify
+  status: active
+  layer: module
+  domain: verification
+
+responsibility:
+  summary: Convert governed task and execution evidence into durable live review and verification artifacts.
+  includes:
+    - consume tasks_md
+    - produce review_report
+    - consume execution_receipts
+    - produce verification_verdict
+    - preserve evidence-before-claims discipline
+    - preserve two-stage review before final verification
+  excludes:
+    - frontend audit evidence synthesis
+    - browser or accessibility adapter execution
+    - release decisions
+    - feedback handling
+
+artifacts:
+  consumes:
+    - tasks_md
+    - execution_receipts
+  owns:
+    - review_report
+    - verification_verdict
+  emits: []
+
+signals:
+  consumes: []
+  emits: []
+
+state:
+  reads: []
+  writes: []
+  forbidden_writes: []
+
+dependencies:
+  modules: []
+  lib: []
+  adapters: []
+  policies: []
+
+policy_hooks:
+  emits: []
+  consumes: []
+
+invariants:
+  - review_report must not exist without tasks_md
+  - review_report must preserve severity-based findings
+  - verification_verdict must not exist without execution_receipts
+  - verification_verdict must preserve evidence-before-claims semantics
+  - live review and verification outputs must remain durable artifacts
+
+observability:
+  events:
+    - review.completed
+    - verification.started
+    - verification.completed
+  logs:
+    - review_summary
+    - verification_summary
+  metrics:
+    - review_latency_ms
+    - verification_latency_ms
+  trace:
+    correlation_id_required: true
+
+failure_modes:
+  - id: missing_tasks_md
+    severity: error
+  - id: invalid_review_report
+    severity: error
+  - id: missing_execution_receipts
+    severity: error
+  - id: invalid_verification_verdict
+    severity: error
+
+verification:
+  contract:
+    - live_mapping_defined
+    - review_output_alignment
+    - verification_output_alignment
+    - evidence_before_claims
+  parity:
+    - tasks-to-review-ordering
+    - review-report-structure
+    - execution-to-verification-ordering
+    - verification-verdict-structure
+
+performance:
+  latency_budget_ms: 5000
+  max_context_tokens: 12000
+
+replaceability:
+  strategy: internal_swap
+  constraints:
+    - review_report identity must remain stable in .memory/changes/<feature>/review.json with review.md companion output
+    - verification_verdict identity must remain stable in .memory/changes/<feature>/verify.json with verify.md companion output
+    - evidence-before-claims semantics must remain intact
+
+provenance:
+  intake_modes:
+    - extracted-native-capability
+  live_mapping: governed/review-and-verify/LIVE-MAPPING.md
+  provenance_receipt: governed/review-and-verify/PROVENANCE.md
+
+compatibility:
+  minimum_kernel_version: "1.0"
+  deprecated_fields: []

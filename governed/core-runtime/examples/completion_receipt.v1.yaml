@@ -1,0 +1,12 @@
+artifact: completion_receipt
+version: "1.0"
+feature_id: sample-feature
+source_artifacts:
+  - verification_verdict
+  - progress_log
+options:
+  - merge_back_locally
+  - push_and_create_review
+  - keep_workspace
+  - discard_work
+summary: Completion choices prepared after governed verification and progress capture.

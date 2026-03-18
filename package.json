@@ -8,6 +8,7 @@
   "main": "bin/cli.js",
   "files": [
     "bin/",
+    "governed/",
     "imported/",
     "integrations/",
     "skills/",

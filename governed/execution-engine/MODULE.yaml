@@ -1,0 +1,108 @@
+kind: module
+contract_version: "1.0"
+
+identity:
+  id: steroid-execution-engine
+  status: active
+  layer: module
+  domain: execution
+
+responsibility:
+  summary: Convert an approved implementation plan into executable checklist work and drive bounded execution against that checklist.
+  includes:
+    - consume plan_md
+    - produce tasks_md
+    - produce execution_receipts
+    - execute ordered checklist work
+    - preserve blocker handling discipline
+    - preserve execution guardrails
+  excludes:
+    - plan generation
+    - review and verification
+    - release decisions
+    - standalone subagent platform design
+
+artifacts:
+  consumes:
+    - plan_md
+  owns:
+    - tasks_md
+    - execution_receipts
+  emits: []
+
+signals:
+  consumes: []
+  emits:
+    - blocker_signal
+
+state:
+  reads: []
+  writes: []
+  forbidden_writes: []
+
+dependencies:
+  modules: []
+  lib: []
+  adapters: []
+  policies: []
+
+policy_hooks:
+  emits:
+    - blocker_signal
+  consumes: []
+
+invariants:
+  - execution must not start without plan_md
+  - tasks_md must be derived from plan_md before the first execution step
+  - execution_receipts must be written for blocked or completed execution
+  - execution must follow explicit checklist order
+  - execution must preserve blocker handling and guarded command discipline
+
+observability:
+  events:
+    - execution.started
+    - execution.completed
+    - execution.blocked
+  logs:
+    - execution_summary
+  metrics:
+    - execution_latency_ms
+  trace:
+    correlation_id_required: true
+
+failure_modes:
+  - id: missing_plan_md
+    severity: error
+  - id: execution_blocked
+    severity: error
+
+verification:
+  contract:
+    - live_mapping_defined
+    - execution_guardrails_preserved
+  parity:
+    - plan-to-execution-ordering
+    - task-checklist-structure
+    - blocker-handling-discipline
+
+performance:
+  latency_budget_ms: 8000
+  max_context_tokens: 12000
+
+replaceability:
+  strategy: internal_swap
+  constraints:
+    - live execution entry point remains skills/steroid-engine/SKILL.md
+    - tasks_md identity must remain stable in .memory/changes/<feature>/tasks.md
+    - execution_receipts identity must remain stable in .memory/changes/<feature>/execution.json
+    - plan-driven execution semantics must remain intact
+
+provenance:
+  intake_modes:
+    - extracted-native-capability
+  live_mapping: governed/execution-engine/LIVE-MAPPING.md
+  provenance_receipt: governed/execution-engine/PROVENANCE.md
+
+compatibility:
+  minimum_kernel_version: "1.0"
+  deprecated_fields: []

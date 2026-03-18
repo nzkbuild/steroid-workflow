@@ -1,0 +1,103 @@
+kind: module
+contract_version: "1.0"
+
+identity:
+  id: steroid-core-runtime
+  status: active
+  layer: module
+  domain: runtime
+
+responsibility:
+  summary: Convert verified feature state into the durable live completion receipt with fixed completion options.
+  includes:
+    - consume verification_verdict
+    - consume progress_log
+    - produce completion_receipt
+    - preserve fixed completion option structure
+  excludes:
+    - archive execution
+    - merge or push execution
+    - destructive confirmation handling
+    - workspace cleanup
+    - release decisions
+
+artifacts:
+  consumes:
+    - verification_verdict
+    - progress_log
+  owns:
+    - completion_receipt
+  emits: []
+
+signals:
+  consumes: []
+  emits: []
+
+state:
+  reads: []
+  writes: []
+  forbidden_writes: []
+
+dependencies:
+  modules: []
+  lib: []
+  adapters: []
+  policies: []
+
+policy_hooks:
+  emits: []
+  consumes: []
+
+invariants:
+  - completion_receipt must not exist without verification_verdict
+  - completion_receipt must not exist without progress_log
+  - completion_receipt must preserve fixed completion option structure
+  - completion_receipt must remain the durable live completion artifact
+
+observability:
+  events:
+    - completion.prepared
+  logs:
+    - completion_receipt_summary
+  metrics:
+    - completion_preparation_latency_ms
+  trace:
+    correlation_id_required: true
+
+failure_modes:
+  - id: missing_verification_verdict
+    severity: error
+  - id: missing_progress_log
+    severity: error
+  - id: invalid_completion_receipt
+    severity: error
+
+verification:
+  contract:
+    - live_mapping_defined
+    - fixed_completion_options
+    - completion_output_alignment
+  parity:
+    - verification-before-completion-ordering
+    - completion-receipt-structure
+    - fixed-completion-choice-structure
+
+performance:
+  latency_budget_ms: 3000
+  max_context_tokens: 8000
+
+replaceability:
+  strategy: internal_swap
+  constraints:
+    - completion_receipt identity must remain stable in .memory/changes/<feature>/completion.json
+    - fixed completion option semantics must remain intact
+
+provenance:
+  intake_modes:
+    - extracted-native-capability
+  live_mapping: governed/core-runtime/LIVE-MAPPING.md
+  provenance_receipt: governed/core-runtime/PROVENANCE.md
+
+compatibility:
+  minimum_kernel_version: "1.0"
+  deprecated_fields: []

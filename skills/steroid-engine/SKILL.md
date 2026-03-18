@@ -7,6 +7,16 @@ description: The autonomous execution orchestrator for Steroid-Workflow. This sk
 
 This skill autonomously executes the checklist in `.memory/changes/<feature>/plan.md`. It uses the Subagent-Driven Development model forked from `obra/superpowers` (see `src/forks/superpowers/subagent.md` and `src/forks/superpowers/tdd.md`) combined with the autonomous loop pattern from Ralph (see `src/forks/ralph/prompt.md`).
 
+## Governed Baseline
+
+The live governed authority for this phase is:
+
+- `governed/execution-engine/MODULE.yaml`
+- `governed/execution-engine/LIVE-MAPPING.md`
+
+In the live repo, this skill is the execution entry point for the governed `steroid-execution-engine`. The current runtime emits standalone live equivalents for `tasks_md` and `execution_receipts` at `.memory/changes/<feature>/tasks.md` and `.memory/changes/<feature>/execution.json`.
+In the live repo, this skill is also one of the runtime surfaces for the governed `steroid-progress-memory`. `.memory/progress.md` is the durable append-only progress artifact.
+
 If `.memory/changes/<feature>/prompt.json` exists, read it before the first task. Treat its assumptions, non-goals, continuation state, and recommended route as execution guardrails. They do not replace `plan.md` or `diagnosis.md`, but they explain why the current plan is shaped the way it is.
 
 ## The Circuit Breaker Mandate
@@ -108,6 +118,28 @@ Also inspect whether this feature is coming from:
 - `diagnosis.md` for the targeted fix path
 
 If the feature came from a `split-work` route, complete one clearly scoped sub-problem or story at a time instead of mixing separate intents in the same execution burst.
+
+## Live Execution Artifacts
+
+This live repo must persist two execution artifacts for governed closure:
+
+- `.memory/changes/<feature>/tasks.md` — the durable task artifact derived from the execution checklist in `plan.md`
+- `.memory/changes/<feature>/execution.json` — the durable execution receipt for the current engine run
+
+Before the first task starts:
+
+1. Derive `.memory/changes/<feature>/tasks.md` from the checklist in `plan.md`
+2. Preserve task ordering and checkbox state
+3. Treat `tasks.md` as the live execution task surface for the rest of the engine phase
+
+During execution:
+
+- whenever a task is marked complete in `plan.md`, mirror that state into `tasks.md`
+- if execution blocks, write `.memory/changes/<feature>/execution.json` with blocked status, blocker summary, and the current task
+
+At completion:
+
+- write `.memory/changes/<feature>/execution.json` with completed status, consumed artifacts, and a short execution summary
 
 ## Frontend Design Discipline
 
@@ -361,6 +393,8 @@ Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-qual
     node steroid-run.cjs log <feature> "<what was implemented — one sentence>"
     ```
 
+    This appends to `.memory/progress.md`, which is the governed live `progress_log` artifact.
+
 5. If you discover reusable patterns, add them to the **Codebase Patterns** section at the TOP of `progress.md`:
 
 ```markdown
@@ -436,13 +470,18 @@ After completing a task, the current sub-agent contexts MUST be terminated. Each
 When `node steroid-run.cjs check-plan <feature>` exits with code 0 (all tasks complete):
 
 1. Output to the user: "🔨 All tasks complete. Running verification..."
-2. **Hand off to the `steroid-verify` skill** (see `skills/steroid-verify/SKILL.md`).
+2. Write `.memory/changes/<feature>/execution.json` with:
+   - `status: COMPLETE`
+   - `source: execution.json`
+   - `consumed_artifacts: ["plan.md", "tasks.md"]`
+   - `summary: <one-sentence execution summary>`
+3. **Hand off to the `steroid-verify` skill** (see `skills/steroid-verify/SKILL.md`).
    The verify skill performs the core verification gate, can run optional deep scans, and writes results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<feature>/verify.json`.
-3. If verification **PASSES**:
+4. If verification **PASSES**:
     - Archive the feature: `node steroid-run.cjs archive <feature>` (this now requires a passing `verify.json` receipt)
     - Output: "🎉 The technical blueprint is fully implemented and verified!"
     - Signal completion: `<promise>COMPLETE</promise>`
-4. If verification **FAILS**:
+5. If verification **FAILS**:
     - Output: "⚠️ Verification found issues. Fixing..."
     - Loop back to Step 0 to fix the flagged items
     - Re-verify after fixes

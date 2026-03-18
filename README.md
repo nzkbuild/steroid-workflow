@@ -65,8 +65,8 @@ graph LR
 | **Specify**      | Converts the brief into user stories with acceptance criteria                            | `spec.md`                  |
 | **Research**     | Investigates tech choices, security, deployment, architecture                            | `research.md`              |
 | **Architect**    | Creates atomic execution plan with quality, docs, and deploy tasks                       | `plan.md`                  |
-| **Engine**       | Builds using TDD, commits atomically, captures learnings                                 | Working code               |
-| **Verify**       | Runs core verification by default, with optional deep scans for code smells and licenses | `verify.md`, `verify.json` |
+| **Engine**       | Builds using TDD, commits atomically, captures learnings                                 | Working code, `tasks.md`, `execution.json` |
+| **Verify**       | Runs two-stage review plus core verification by default, with optional deep scans for code smells and licenses | `review.md`, `review.json`, `verify.md`, `verify.json`, `completion.json` |
 | **Diagnose**     | Root cause analysis for bugs (fix intent only)                                           | `diagnosis.md`             |
 
 Each phase hands off to the next. No manual intervention needed.
@@ -219,6 +219,14 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - Prompt intelligence and adaptive route selection
 - Memory system, review system, and analytics dashboard
 - Fork credits and sources
+
+The governed live baseline for transplanted subsystems lives under `governed/`, starting with:
+
+- `governed/spec-system/`
+- `governed/execution-engine/`
+- `governed/review-and-verify/`
+- `governed/progress-memory/`
+- `governed/core-runtime/`
 
 ## License
 

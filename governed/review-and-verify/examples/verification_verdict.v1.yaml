@@ -1,0 +1,8 @@
+artifact: verification_verdict
+version: "1.0"
+feature_id: sample-feature
+evidence_artifact:
+  - execution_receipts
+evidence_fresh: true
+verdict: pass
+summary: Fresh execution evidence supports the governed verification verdict for this slice.

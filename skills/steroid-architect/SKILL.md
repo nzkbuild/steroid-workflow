@@ -7,6 +7,15 @@ description: This skill should be used after steroid-research has written .memor
 
 This skill reads the spec and research from `.memory/changes/<feature>/` and produces a granular, test-ready implementation plan.
 
+## Governed Baseline
+
+The live governed authority for the planning surface is:
+
+- `governed/spec-system/MODULE.yaml`
+- `governed/spec-system/LIVE-MAPPING.md`
+
+In the live repo, this skill implements the `plan_md` part of the governed `steroid-spec-system` after the specification artifact has been locked.
+
 ## When To Use
 
 Activate immediately after `@steroid-research` completes. Do not wait for user invocation.

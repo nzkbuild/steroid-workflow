@@ -1,11 +1,19 @@
 ---
 name: steroid-verify
-description: The verification skill for Steroid-Workflow. This skill runs after the engine completes all tasks, proving the code works before allowing archival. It performs core verification by default and can run optional deep scans. Produces verify.md and verify.json as evidence.
+description: The verification skill for Steroid-Workflow. This skill runs after the engine completes all tasks, proving the code works before allowing archival. It performs core verification by default and can run optional deep scans. Produces review.md/review.json and verify.md/verify.json as durable evidence.
 ---
 
 # Steroid Verify (Proof of Work)
 
 This skill runs **after** the engine completes all tasks in `plan.md`. It proves the AI's code actually works before the feature can be archived. Without verification, the pipeline is just a promise — this skill makes it proof.
+
+The governed live outputs for this skill are:
+
+- `.memory/changes/<feature>/review.md`
+- `.memory/changes/<feature>/review.json`
+- `.memory/changes/<feature>/verify.md`
+- `.memory/changes/<feature>/verify.json`
+- `.memory/changes/<feature>/completion.json`
 
 Adapted from:
 
@@ -88,6 +96,11 @@ If both stages show PASS, proceed to verification. If not:
 
 **The review MUST pass both stages before core verification can pass and before `verify.json` can record a passing result.**
 
+The two-stage review produces the governed review artifacts:
+
+- `.memory/changes/<feature>/review.md` — human-readable review report
+- `.memory/changes/<feature>/review.json` — machine-readable review receipt
+
 Source: `src/forks/superpowers/subagent.md` — "Spec compliance first, then code quality. Never skip reviews."
 
 ## The Verification Process
@@ -98,19 +111,22 @@ Read these files to understand what was built:
 
 1. `.memory/changes/<feature>/spec.md` — The acceptance criteria (what SHOULD be true)
 2. `.memory/changes/<feature>/plan.md` — The task list (what was DONE)
-3. `.memory/changes/<feature>/context.md` — The project context (tech stack, test infra)
-4. `.memory/changes/<feature>/prompt.json` — The normalized user intent, if present
-5. `.memory/changes/<feature>/design-routing.json` — The internal frontend routing receipt, if present
-6. `.memory/changes/<feature>/accessibility.json` — The latest AccessLint receipt, if present
-7. `.memory/changes/<feature>/ui-audit.json` — The latest Playwright-backed browser audit receipt, if present
-8. `.memory/changes/<feature>/preview-url.txt` — An explicit preview target if the browser audit was pointed at one
-9. `.memory/changes/<feature>/ui-review.md` — The consolidated frontend review summary, if present
-10. `.memory/changes/<feature>/ui-review.json` — The machine-readable frontend review receipt, if present
+3. `.memory/changes/<feature>/tasks.md` — The durable live task artifact from execution
+4. `.memory/changes/<feature>/execution.json` — The durable execution receipt from engine
+5. `.memory/changes/<feature>/context.md` — The project context (tech stack, test infra)
+6. `.memory/changes/<feature>/prompt.json` — The normalized user intent, if present
+7. `.memory/changes/<feature>/design-routing.json` — The internal frontend routing receipt, if present
+8. `.memory/changes/<feature>/accessibility.json` — The latest AccessLint receipt, if present
+9. `.memory/changes/<feature>/ui-audit.json` — The latest Playwright-backed browser audit receipt, if present
+10. `.memory/changes/<feature>/preview-url.txt` — An explicit preview target if the browser audit was pointed at one
+11. `.memory/changes/<feature>/ui-review.md` — The consolidated frontend review summary, if present
+12. `.memory/changes/<feature>/ui-review.json` — The machine-readable frontend review receipt, if present
 
 Extract:
 
 - All acceptance scenarios (Given/When/Then) from spec.md
-- All completed tasks from plan.md
+- All completed tasks from plan.md and the live task mirror in tasks.md
+- Fresh execution evidence from execution.json when present
 - Test framework and run command from context.md
 - All success criteria (SC-001, SC-002, etc.) from spec.md
 - Recommended route, assumptions, and non-goals from prompt.json when available
@@ -318,6 +334,15 @@ Report each check in verify.md under `## Infrastructure`.
 
 **CONDITIONAL** — All criteria implemented but Important issues exist or no tests
 
+### Step 6b: Write review.md / review.json
+
+Before final verification verdict output, persist the two-stage review results to:
+
+- `.memory/changes/<feature>/review.md`
+- `.memory/changes/<feature>/review.json`
+
+These files are the durable review artifacts for the governed review-and-verify slice. They must summarize the Stage 1 and Stage 2 findings and preserve severity-based findings.
+
 ### Step 7: Write verify.md / verify.json
 
 Write results to `.memory/changes/<feature>/verify.md` and `.memory/changes/<feature>/verify.json`:
@@ -377,12 +402,39 @@ _Verified: <timestamp>_
 _Verifier: steroid-verify_
 ```
 
+`verify.json` is the machine-readable verification verdict. When `.memory/changes/<feature>/execution.json` exists, the verdict must be attributable to that fresh execution evidence rather than to a completion claim alone.
+
+### Step 7b: Write completion.json
+
+If verification status is `PASS` or `CONDITIONAL`, write `.memory/changes/<feature>/completion.json`.
+
+This is the governed live completion receipt. It must be downstream of:
+
+- `.memory/changes/<feature>/verify.json`
+- `.memory/progress.md`
+
+It must preserve the fixed completion options:
+
+- `merge_back_locally`
+- `push_and_create_review`
+- `keep_workspace`
+- `discard_work`
+
+The receipt should record:
+
+- `feature`
+- `status`
+- `source_artifacts: ["verify.json", "progress.md"]`
+- `options`
+- `summary`
+
 ## After Verification
 
 ### If PASS:
 
 1. Output: "✅ Verification passed. Feature ready to archive."
-2. The archive command will now succeed (gate requires `verify.json` with PASS)
+2. `.memory/changes/<feature>/completion.json` must exist before archive handoff
+3. The archive command will now succeed (gate requires `verify.json` with PASS)
 
 ### If FAIL:
 
@@ -393,7 +445,8 @@ _Verifier: steroid-verify_
 ### If CONDITIONAL:
 
 1. Output: "⚠️ Verification conditional. Feature works but has <count> Important issues."
-2. Ask the user: "Archive now or fix first?"
+2. `.memory/changes/<feature>/completion.json` must exist before archive handoff
+3. Ask the user: "Archive now or fix first?"
 
 ## The Silence Directive
 

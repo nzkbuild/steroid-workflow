@@ -118,6 +118,14 @@ All AI terminal commands are routed through this CLI wrapper.
 
 ## The 8-Skill Pipeline (v3.0)
 
+### Governed Baseline
+
+The live repo now carries governed baseline transplants under `governed/`. `governed/spec-system/` is authoritative for the live `steroid-spec-system` mapping and its parity/provenance notes.
+`governed/execution-engine/` is authoritative for the live `steroid-execution-engine` mapping and documents the current runtime task and execution artifacts.
+`governed/review-and-verify/` is authoritative for the live `steroid-review-and-verify` mapping and its review/verification artifact surface.
+`governed/progress-memory/` is authoritative for the live `steroid-progress-memory` mapping and its append-only progress artifact surface.
+`governed/core-runtime/` is authoritative for the live `steroid-core-runtime` mapping and its completion artifact surface.
+
 ### Build Intent (Full Pipeline)
 
 | #   | Skill                  | Input                     | Output                                   |
@@ -127,8 +135,8 @@ All AI terminal commands are routed through this CLI wrapper.
 | 2   | `steroid-specify`      | `vibe.md`                 | `.memory/changes/<feature>/spec.md`      |
 | 3   | `steroid-research`     | `spec.md`                 | `.memory/changes/<feature>/research.md`  |
 | 4   | `steroid-architect`    | `spec.md` + `research.md` | `.memory/changes/<feature>/plan.md`      |
-| 5   | `steroid-engine`       | `plan.md`                 | Working code (TDD loop)                  |
-| 6   | `steroid-verify`       | Completed code            | `.memory/changes/<feature>/verify.md`    |
+| 5   | `steroid-engine`       | `plan.md`                 | Working code + `tasks.md` + `execution.json` |
+| 6   | `steroid-verify`       | Completed code            | `.memory/changes/<feature>/review.md`, `.memory/changes/<feature>/review.json`, `.memory/changes/<feature>/verify.md`, `.memory/changes/<feature>/verify.json`, `.memory/changes/<feature>/completion.json`    |
 | 7   | `steroid-diagnose`     | Bug/error report          | `.memory/changes/<feature>/diagnosis.md` |
 
 ### Intent Routing (v3.0)
@@ -208,10 +216,13 @@ your-project/
 │           ├── spec.md            ← Acceptance criteria
 │           ├── research.md        ← Tech investigation results
 │           ├── plan.md            ← Atomic execution checklist (supports P1/P2/P3 priorities)
+│           ├── tasks.md           ← Live task artifact mirrored from the execution checklist
+│           ├── execution.json     ← Machine-readable execution receipt
 │           ├── review.md          ← Human-readable two-stage review notes
 │           ├── review.json        ← Machine-readable review receipt
 │           ├── verify.md          ← Human-readable verification report
 │           ├── verify.json        ← Machine-readable verification receipt
+│           ├── completion.json    ← Machine-readable completion receipt
 │           ├── diagnosis.md       ← Bug diagnosis (v3.0, fix intent only)
 │           └── archive/           ← Completed features
 ├── .agents/
@@ -224,6 +235,20 @@ your-project/
 ├── .windsurfrules                 ← Maestro rules (Windsurf)
 └── .github/copilot-instructions.md ← Maestro rules (Copilot)
 ```
+
+Live repo governance notes for contributors:
+
+- `governed/spec-system/MODULE.yaml` is the live law surface for the transplanted spec system
+- `governed/spec-system/LIVE-MAPPING.md` defines how governed artifacts map onto current runtime files
+- `governed/execution-engine/MODULE.yaml` is the live law surface for the transplanted execution system
+- `governed/execution-engine/LIVE-MAPPING.md` defines how governed execution artifacts map onto current runtime files
+- `governed/review-and-verify/MODULE.yaml` is the live law surface for the transplanted review and verification system
+- `governed/review-and-verify/LIVE-MAPPING.md` defines how governed review and verification artifacts map onto current runtime files
+- `governed/progress-memory/MODULE.yaml` is the live law surface for the transplanted progress-memory system
+- `governed/progress-memory/LIVE-MAPPING.md` defines how governed progress artifacts map onto current runtime files
+- `governed/core-runtime/MODULE.yaml` is the live law surface for the transplanted core runtime system
+- `governed/core-runtime/LIVE-MAPPING.md` defines how governed completion artifacts map onto current runtime files
+- skill files remain implementation surfaces, not the top authority
 
 ## Fork Credits
 

@@ -1,0 +1,99 @@
+kind: module
+contract_version: "1.0"
+
+identity:
+  id: steroid-progress-memory
+  status: active
+  layer: module
+  domain: memory
+
+responsibility:
+  summary: Persist governed verification outcomes and execution learnings into the canonical append-only live progress log.
+  includes:
+    - consume verification_verdict
+    - produce progress_log
+    - preserve append-only progress behavior
+  excludes:
+    - task planning
+    - task execution
+    - review and verification decisions
+    - project archival
+    - structured knowledge store design
+
+artifacts:
+  consumes:
+    - verification_verdict
+  owns:
+    - progress_log
+  emits: []
+
+signals:
+  consumes: []
+  emits: []
+
+state:
+  reads: []
+  writes: []
+  forbidden_writes: []
+
+dependencies:
+  modules: []
+  lib: []
+  adapters: []
+  policies: []
+
+policy_hooks:
+  emits: []
+  consumes: []
+
+invariants:
+  - progress_log must not exist without verification_verdict in the governed slice
+  - progress_log must remain append-only
+  - progress_log must remain the durable live progress artifact
+
+observability:
+  events:
+    - progress.logged
+    - progress.verification_captured
+  logs:
+    - progress_log_summary
+  metrics:
+    - progress_capture_latency_ms
+  trace:
+    correlation_id_required: true
+
+failure_modes:
+  - id: missing_verification_verdict
+    severity: error
+  - id: invalid_progress_log
+    severity: error
+
+verification:
+  contract:
+    - live_mapping_defined
+    - append_only_progress
+    - durable_progress_surface_defined
+  parity:
+    - verification-to-memory-ordering
+    - progress-log-structure
+    - append-only-progress
+
+performance:
+  latency_budget_ms: 3000
+  max_context_tokens: 8000
+
+replaceability:
+  strategy: internal_swap
+  constraints:
+    - progress_log identity must remain stable in .memory/progress.md
+    - append-only semantics must remain intact
+
+provenance:
+  intake_modes:
+    - extracted-native-capability
+  live_mapping: governed/progress-memory/LIVE-MAPPING.md
+  provenance_receipt: governed/progress-memory/PROVENANCE.md
+
+compatibility:
+  minimum_kernel_version: "1.0"
+  deprecated_fields: []

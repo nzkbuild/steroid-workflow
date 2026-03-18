@@ -7,6 +7,15 @@ description: This skill should be used after steroid-vibe-capture has written .m
 
 This skill reads the user's vibe from `.memory/changes/<feature>/vibe.md` and, when available, `.memory/changes/<feature>/prompt.json`, then produces a formal specification with testable acceptance criteria.
 
+## Governed Baseline
+
+The live governed authority for this phase is:
+
+- `governed/spec-system/MODULE.yaml`
+- `governed/spec-system/LIVE-MAPPING.md`
+
+In the live repo, this skill implements the `spec_md` part of the governed `steroid-spec-system`. The downstream `plan_md` part is implemented by `skills/steroid-architect/SKILL.md`.
+
 Forked from: `src/forks/spec-kit/templates/spec-template.md` (GitHub Spec Kit, MIT License)
 
 ## When To Use
