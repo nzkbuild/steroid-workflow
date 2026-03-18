@@ -436,7 +436,7 @@ console.log('📋 [6/7] Setting up .gitignore...');
 const userGitignore = path.join(targetDir, '.gitignore');
 
 // Base entries (always gitignored)
-const gitignoreEntries = ['.memory/', 'src/forks/', 'steroid-run.cjs', '.agents/'];
+const gitignoreEntries = ['.memory/', 'src/forks/', 'imported/', 'integrations/', 'steroid-run.cjs', '.agents/'];
 
 // Only gitignore IDE config files that were CREATED by us (not pre-existing)
 for (const config of ideConfigs) {
