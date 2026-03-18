@@ -1509,6 +1509,20 @@ function parseReviewMarkdown(content) {
 }
 
 /**
+ * Normalizes a status-like string against an allowlist.
+ *
+ * @param {unknown} value
+ * @param {string[]} allowed
+ * @param {string|null} fallback
+ * @returns {string|null}
+ */
+function normalizeAllowedStatus(value, allowed, fallback) {
+    if (typeof value !== 'string') return fallback;
+    const normalized = value.trim().toUpperCase();
+    return allowed.includes(normalized) ? normalized : fallback;
+}
+
+/**
  * Removes fenced code blocks before markdown checklist parsing so examples
  * do not inflate task counts.
  *
@@ -2011,13 +2025,22 @@ function loadReviewReceipt(feature, featureDir) {
     }
 
     if (existing && existing.feature === feature) {
-        return {
+        const receipt = {
             feature,
-            stage1: existing.stage1 || 'PENDING',
-            stage2: existing.stage2 || 'PENDING',
+            stage1: normalizeAllowedStatus(existing.stage1, ['PASS', 'FAIL', 'PENDING'], 'PENDING'),
+            stage2: normalizeAllowedStatus(existing.stage2, ['PASS', 'FAIL', 'PENDING'], 'PENDING'),
             source: existing.source || 'review.json',
             updatedAt: existing.updatedAt || null,
         };
+        if (
+            existing.stage1 !== receipt.stage1 ||
+            existing.stage2 !== receipt.stage2 ||
+            existing.source !== receipt.source ||
+            existing.updatedAt !== receipt.updatedAt
+        ) {
+            writeJsonFile(reviewJsonPath, receipt);
+        }
+        return receipt;
     }
 
     return {
@@ -2102,14 +2125,30 @@ function loadVerifyReceipt(feature, featureDir) {
     const existing = readJsonFile(verifyJsonPath);
 
     if (existing && existing.feature === feature) {
-        return {
+        const receipt = {
             feature,
-            status: existing.status || null,
+            status: normalizeAllowedStatus(existing.status, ['PASS', 'FAIL', 'CONDITIONAL'], null),
             reviewPassed: !!existing.reviewPassed,
-            checks: existing.checks || {},
+            checks: existing.checks && typeof existing.checks === 'object' && !Array.isArray(existing.checks) ? existing.checks : {},
             updatedAt: existing.updatedAt || null,
             source: existing.source || 'verify.json',
         };
+        if (
+            existing.status !== receipt.status ||
+            existing.reviewPassed !== receipt.reviewPassed ||
+            existing.checks !== receipt.checks ||
+            existing.source !== receipt.source ||
+            existing.updatedAt !== receipt.updatedAt ||
+            existing.deepRequested !== !!existing.deepRequested ||
+            existing.deepCompleted !== !!existing.deepCompleted
+        ) {
+            writeJsonFile(verifyJsonPath, {
+                ...receipt,
+                deepRequested: !!existing.deepRequested,
+                deepCompleted: !!existing.deepCompleted,
+            });
+        }
+        return receipt;
     }
 
     if (fs.existsSync(verifyMdPath)) {
@@ -2188,6 +2227,56 @@ function saveCompletionReceipt(featureDir, receipt) {
         source: receipt.source || 'completion.json',
         summary: receipt.summary || 'Verification completed. Feature is ready for completion handling.',
     });
+}
+
+/**
+ * Loads completion receipt state and normalizes valid machine-readable fields.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @returns {{ feature: string, status: string|null, sourceArtifacts: string[], nextActions: string[], updatedAt: string|null, source: string, summary: string|null }}
+ */
+function loadCompletionReceipt(feature, featureDir) {
+    const completionJsonPath = path.join(featureDir, 'completion.json');
+    const existing = readJsonFile(completionJsonPath);
+
+    if (existing && existing.feature === feature) {
+        const receipt = {
+            feature,
+            status: normalizeAllowedStatus(existing.status, ['PASS', 'CONDITIONAL'], null),
+            sourceArtifacts: Array.isArray(existing.sourceArtifacts)
+                ? existing.sourceArtifacts.filter((v) => typeof v === 'string')
+                : [],
+            nextActions: Array.isArray(existing.nextActions) ? existing.nextActions.filter((v) => typeof v === 'string') : [],
+            updatedAt: existing.updatedAt || null,
+            source: existing.source || 'completion.json',
+            summary: typeof existing.summary === 'string' ? existing.summary : null,
+        };
+
+        if (
+            receipt.status &&
+            (existing.status !== receipt.status ||
+                existing.source !== receipt.source ||
+                existing.updatedAt !== receipt.updatedAt ||
+                existing.summary !== receipt.summary ||
+                JSON.stringify(existing.sourceArtifacts || []) !== JSON.stringify(receipt.sourceArtifacts) ||
+                JSON.stringify(existing.nextActions || []) !== JSON.stringify(receipt.nextActions))
+        ) {
+            writeJsonFile(completionJsonPath, receipt);
+        }
+
+        return receipt;
+    }
+
+    return {
+        feature,
+        status: null,
+        sourceArtifacts: [],
+        nextActions: [],
+        updatedAt: null,
+        source: 'none',
+        summary: null,
+    };
 }
 
 /**
@@ -4907,9 +4996,16 @@ if (args[0] === 'archive') {
 
     const completionReceiptPath = path.join(featureDir, 'completion.json');
     if (!args.includes('--force')) {
-        const completionReceipt = readJsonFile(completionReceiptPath);
-        if (!completionReceipt || completionReceipt.feature !== feature) {
+        const completionReceipt = loadCompletionReceipt(feature, featureDir);
+        if (!completionReceipt.status) {
             console.error(`[steroid-run] 🚫 ARCHIVE BLOCKED: No completion.json receipt found.`);
+            console.error(`  Run: node steroid-run.cjs verify-feature ${feature}`);
+            process.exit(1);
+        }
+        if (completionReceipt.status !== verifyReceipt.status) {
+            console.error(
+                `[steroid-run] 🚫 ARCHIVE BLOCKED: completion.json status ${completionReceipt.status} does not match verify.json status ${verifyReceipt.status}.`,
+            );
             console.error(`  Run: node steroid-run.cjs verify-feature ${feature}`);
             process.exit(1);
         }

@@ -698,6 +698,7 @@ if (childProcessUnavailableReason) {
         const archiveDir = path.join(featureDir, 'archive');
         fs.mkdirSync(archiveDir, { recursive: true });
         fs.writeFileSync(path.join(featureDir, 'verify.json'), '{"status":"PASS"}');
+        fs.writeFileSync(path.join(featureDir, 'completion.json'), '{"feature":"archive-collision-proof","status":"PASS"}');
         fs.writeFileSync(path.join(featureDir, 'verify.md'), '**Status:** PASS');
         fs.writeFileSync(path.join(archiveDir, '2026-03-15T07-01-17-123Z-verify.json'), '{}');
 
@@ -715,6 +716,10 @@ if (childProcessUnavailableReason) {
         fs.writeFileSync(
             path.join(featureDir, 'verify.json'),
             JSON.stringify({ feature, status: 'PASS', reviewPassed: true }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
         );
         fs.writeFileSync(
             path.join(featureDir, 'ui-review.json'),
@@ -745,6 +750,10 @@ if (childProcessUnavailableReason) {
                 null,
                 2,
             ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
         );
         fs.writeFileSync(
             path.join(featureDir, 'prompt.json'),
@@ -836,6 +845,14 @@ if (childProcessUnavailableReason) {
                 2,
             ),
         );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify(
+                { feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] },
+                null,
+                2,
+            ),
+        );
         fs.writeFileSync(path.join(featureDir, 'spec.md'), '# Spec\n');
         fs.writeFileSync(path.join(featureDir, 'review.md'), '# Review\n');
         fs.writeFileSync(path.join(featureDir, 'verify.md'), '# Verify\n');
@@ -882,6 +899,44 @@ if (childProcessUnavailableReason) {
         const forcedOutput = `${forced.stdout}${forced.stderr}`;
         if (!forcedOutput.includes('--force-ui override used')) {
             throw new Error(`Missing --force-ui override message: ${forcedOutput}`);
+        }
+    });
+
+    test('archive blocks when completion.json is missing', () => {
+        const feature = 'archive-missing-completion';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify({ feature, status: 'PASS', reviewPassed: true }, null, 2),
+        );
+
+        const result = run(['archive', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('ARCHIVE BLOCKED: No completion.json receipt found.')) {
+            throw new Error(`Missing completion archive block: ${output}`);
+        }
+    });
+
+    test('archive blocks when completion.json status does not match verify.json', () => {
+        const feature = 'archive-completion-status-mismatch';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify({ feature, status: 'PASS', reviewPassed: true }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify({ feature, status: 'CONDITIONAL', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
+        );
+
+        const result = run(['archive', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('completion.json status CONDITIONAL does not match verify.json status PASS.')) {
+            throw new Error(`Missing completion mismatch archive block: ${output}`);
         }
     });
 
@@ -1414,6 +1469,47 @@ exports.chromium = {
         }
         if (reviewReceipt.freshness?.source !== 'verify-feature') {
             throw new Error(`Expected verify-feature freshness source: ${JSON.stringify(reviewReceipt)}`);
+        }
+    });
+
+    test('verify-feature writes completion.json on successful verification', () => {
+        const feature = 'verify-completion-receipt';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'PASS', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const completionPath = path.join(featureDir, 'completion.json');
+        if (!fs.existsSync(completionPath)) throw new Error('completion.json was not written');
+        const receipt = JSON.parse(fs.readFileSync(completionPath, 'utf-8'));
+        if (receipt.feature !== feature) throw new Error(`Unexpected completion.json feature: ${receipt.feature}`);
+        if (receipt.status !== 'PASS') throw new Error(`Unexpected completion.json status: ${receipt.status}`);
+    });
+
+    test('verify-feature removes stale completion.json on failed verification', () => {
+        const feature = 'verify-clears-stale-completion';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(path.join(featureDir, 'plan.md'), '- [x] Completed task\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'review.json'),
+            JSON.stringify({ feature, stage1: 'FAIL', stage2: 'PASS', updatedAt: new Date().toISOString() }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
+        );
+
+        const result = run(['verify-feature', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        if (fs.existsSync(path.join(featureDir, 'completion.json'))) {
+            throw new Error('stale completion.json was not removed');
         }
     });
 
