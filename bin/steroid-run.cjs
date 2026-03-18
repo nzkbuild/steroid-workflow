@@ -1139,6 +1139,85 @@ function buildUiReviewMarkdown(feature, options) {
     };
 }
 
+/**
+ * Normalizes a UI review receipt into the governed runtime shape.
+ *
+ * @param {Record<string, any>|null|undefined} receipt
+ * @param {string} feature
+ * @returns {Record<string, any>|null}
+ */
+function normalizeUiReviewReceipt(receipt, feature) {
+    if (!receipt || receipt.feature !== feature) return null;
+
+    const status = normalizeAllowedStatus(receipt.status, ['PASS', 'FAIL', 'CONDITIONAL'], null);
+    if (!status) return null;
+
+    const findings = Array.isArray(receipt.findings)
+        ? receipt.findings
+              .filter((finding) => finding && typeof finding === 'object')
+              .map((finding) => ({
+                  severity: typeof finding.severity === 'string' ? finding.severity : 'medium',
+                  title: typeof finding.title === 'string' ? finding.title : 'Untitled finding',
+                  detail: typeof finding.detail === 'string' ? finding.detail : '',
+              }))
+        : [];
+
+    return {
+        feature,
+        status,
+        verifyStatus: typeof receipt.verifyStatus === 'string' ? receipt.verifyStatus : 'Unknown',
+        generatedAt: typeof receipt.generatedAt === 'string' ? receipt.generatedAt : null,
+        stack: typeof receipt.stack === 'string' ? receipt.stack : 'unknown',
+        auditOnly: !!receipt.auditOnly,
+        wrapperSkill: typeof receipt.wrapperSkill === 'string' ? receipt.wrapperSkill : null,
+        importedSourceIds: Array.isArray(receipt.importedSourceIds)
+            ? receipt.importedSourceIds.filter((value) => typeof value === 'string')
+            : [],
+        promptSummary: typeof receipt.promptSummary === 'string' ? receipt.promptSummary : '',
+        previewTarget: typeof receipt.previewTarget === 'string' ? receipt.previewTarget : null,
+        evidence: receipt.evidence && typeof receipt.evidence === 'object' ? receipt.evidence : {},
+        freshness:
+            receipt.freshness && typeof receipt.freshness === 'object'
+                ? {
+                      source: typeof receipt.freshness.source === 'string' ? receipt.freshness.source : 'unknown',
+                      reason: typeof receipt.freshness.reason === 'string' ? receipt.freshness.reason : 'Unknown refresh reason.',
+                      evidenceUpdatedAt:
+                          typeof receipt.freshness.evidenceUpdatedAt === 'string'
+                              ? receipt.freshness.evidenceUpdatedAt
+                              : null,
+                      evidenceUpdatedFrom:
+                          typeof receipt.freshness.evidenceUpdatedFrom === 'string'
+                              ? receipt.freshness.evidenceUpdatedFrom
+                              : null,
+                  }
+                : {
+                      source: 'unknown',
+                      reason: 'Unknown refresh reason.',
+                      evidenceUpdatedAt: null,
+                      evidenceUpdatedFrom: null,
+                  },
+        findings,
+    };
+}
+
+/**
+ * Loads the active UI review receipt and normalizes it when valid.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @returns {Record<string, any>|null}
+ */
+function loadUiReviewReceipt(feature, featureDir) {
+    const uiReviewReceiptPath = path.join(featureDir, 'ui-review.json');
+    const existing = readJsonFile(uiReviewReceiptPath);
+    const normalized = normalizeUiReviewReceipt(existing, feature);
+    if (!normalized) return null;
+    if (JSON.stringify(existing) !== JSON.stringify(normalized)) {
+        writeJsonFile(uiReviewReceiptPath, normalized);
+    }
+    return normalized;
+}
+
 function buildAccesslintResultFromReceipt(receipt) {
     if (!receipt) {
         return {
@@ -1238,6 +1317,7 @@ function ensureCurrentUiReviewArtifacts(feature, featureDir, options = {}) {
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
     const uiReviewArtifact = path.join(featureDir, 'ui-review.md');
     const uiReviewReceiptArtifact = path.join(featureDir, 'ui-review.json');
+    const existingUiReviewReceipt = loadUiReviewReceipt(feature, featureDir);
     const candidateInputs = [
         'prompt.json',
         'design-routing.json',
@@ -1270,14 +1350,14 @@ function ensureCurrentUiReviewArtifacts(feature, featureDir, options = {}) {
             refreshed: false,
             skipped: true,
             reason: 'Feature does not currently look UI-intensive.',
-            receipt: readJsonFile(uiReviewReceiptArtifact),
+            receipt: existingUiReviewReceipt,
         };
     }
 
     const uiReviewMtimes = [getArtifactMtimeMs(uiReviewArtifact), getArtifactMtimeMs(uiReviewReceiptArtifact)].filter(
         (value) => value !== null,
     );
-    const missingUiReviewArtifacts = uiReviewMtimes.length < 2;
+    const missingUiReviewArtifacts = uiReviewMtimes.length < 2 || !existingUiReviewReceipt;
     const newestInput = candidateInputs.reduce(
         (latest, entry) => (!latest || entry.mtimeMs > latest.mtimeMs ? entry : latest),
         null,
@@ -1294,7 +1374,7 @@ function ensureCurrentUiReviewArtifacts(feature, featureDir, options = {}) {
             refreshed: false,
             skipped: false,
             reason: 'UI review artifacts are already current.',
-            receipt: readJsonFile(uiReviewReceiptArtifact),
+            receipt: existingUiReviewReceipt,
         };
     }
 
@@ -1326,7 +1406,7 @@ function ensureCurrentUiReviewArtifacts(feature, featureDir, options = {}) {
         reason: refreshReason,
         evidenceUpdatedAt: newestInput ? new Date(newestInput.mtimeMs).toISOString() : null,
         evidenceUpdatedFrom: newestInput?.name || null,
-        receipt: refreshed.receipt || readJsonFile(uiReviewReceiptArtifact),
+        receipt: refreshed.receipt || loadUiReviewReceipt(feature, featureDir),
     };
 }
 
@@ -1906,7 +1986,7 @@ function generateHandoffReport(feature, featureDir, state, options = {}) {
     const verifyReceipt = readLatestFeatureJsonArtifact(featureDir, 'verify.json');
     const planContent = readLatestFeatureArtifact(featureDir, 'plan.md');
     const reviewContent = readLatestFeatureArtifact(featureDir, 'review.md');
-    const uiReviewReceipt = readLatestFeatureJsonArtifact(featureDir, 'ui-review.json');
+    const uiReviewReceipt = normalizeUiReviewReceipt(readLatestFeatureJsonArtifact(featureDir, 'ui-review.json'), feature);
     const uiArchivePolicy = buildUiArchivePolicy(uiReviewReceipt, {
         deepRequested: !!verifyReceipt?.deepRequested,
     });
@@ -3629,7 +3709,7 @@ if (args[0] === 'pipeline-status') {
     }
 
     const designReceipt = readJsonFile(path.join(featureDir, 'design-routing.json'));
-    const uiReviewReceipt = readJsonFile(path.join(featureDir, 'ui-review.json'));
+    const uiReviewReceipt = loadUiReviewReceipt(feature, featureDir);
     const designExpected =
         artifactState.designRoute || artifactState.designSystem || detectUiTask(promptReceipt?.normalizedSummary || '');
     if (designReceipt || designExpected) {
@@ -5253,7 +5333,7 @@ if (args[0] === 'archive') {
         console.log(`[steroid-run] 🔄 Refreshed UI review before archive: ${uiReviewRefresh.reason}`);
     }
 
-    const uiReviewReceipt = uiReviewRefresh.receipt || readJsonFile(path.join(featureDir, 'ui-review.json'));
+    const uiReviewReceipt = uiReviewRefresh.receipt || loadUiReviewReceipt(feature, featureDir);
     const uiArchivePolicy = buildUiArchivePolicy(uiReviewReceipt, {
         deepRequested: !!verifyReceipt.deepRequested,
     });
@@ -7050,7 +7130,7 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         console.log(`[steroid-run] 📋 Review Status for "${feature}":`);
         console.log(`  ${icons[specStatus]} Stage 1 (Spec Compliance): ${specStatus}`);
         console.log(`  ${icons[qualityStatus]} Stage 2 (Code Quality): ${qualityStatus}`);
-        const uiReviewReceipt = readJsonFile(path.join(featureDir, 'ui-review.json'));
+        const uiReviewReceipt = loadUiReviewReceipt(feature, featureDir);
         if (uiReviewReceipt?.status) {
             const uiStatus = uiReviewReceipt.status;
             console.log(`  ${icons[uiStatus] || '○'} UI Review: ${uiStatus}`);

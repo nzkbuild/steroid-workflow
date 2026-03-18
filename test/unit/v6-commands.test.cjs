@@ -488,13 +488,19 @@ if (childProcessUnavailableReason) {
             path.join(featureDir, 'ui-review.json'),
             JSON.stringify(
                 {
+                    feature,
                     status: 'PASS',
+                    verifyStatus: 'PASS',
                     generatedAt: '2026-03-17T10:00:00.000Z',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
                     freshness: {
                         source: 'verify-feature',
                         reason: 'verify.json is newer than the current UI review receipts.',
                         evidenceUpdatedAt: '2026-03-17T09:59:00.000Z',
+                        evidenceUpdatedFrom: 'verify.json',
                     },
+                    findings: [],
                 },
                 null,
                 2,
@@ -990,6 +996,96 @@ if (childProcessUnavailableReason) {
         const refreshedReceipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'ui-review.json'), 'utf-8'));
         if (refreshedReceipt.status !== 'FAIL') {
             throw new Error(`Expected refreshed ui-review.json to FAIL, got ${refreshedReceipt.status}`);
+        }
+    });
+
+    test('archive refreshes malformed ui-review receipts before enforcing UI quality gate', () => {
+        const feature = 'archive-ui-review-malformed';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'verify.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'PASS',
+                    reviewPassed: true,
+                    deepRequested: false,
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'completion.json'),
+            JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'prompt.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    primaryIntent: 'refactor',
+                    normalizedSummary: 'Refresh the dashboard UI hierarchy.',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(
+            path.join(featureDir, 'design-routing.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    domain: 'frontend',
+                    stack: 'react',
+                    wrapperSkill: 'steroid-react-implementation',
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'design-system.md'), '# Design System\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'accessibility.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    violationCount: 2,
+                    highestImpact: 'serious',
+                    fileCount: 1,
+                },
+                null,
+                2,
+            ),
+        );
+        fs.writeFileSync(path.join(featureDir, 'ui-review.md'), '# UI Review\n\nMalformed receipt companion\n');
+        fs.writeFileSync(
+            path.join(featureDir, 'ui-review.json'),
+            JSON.stringify(
+                {
+                    feature,
+                    status: 'BROKEN',
+                    findings: 'not-an-array',
+                },
+                null,
+                2,
+            ),
+        );
+
+        const result = run(['archive', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('Refreshed UI review before archive')) {
+            throw new Error(`Missing malformed refresh message: ${output}`);
+        }
+        if (!output.includes('ARCHIVE BLOCKED: ui-review.json status is FAIL.')) {
+            throw new Error(`Missing refreshed malformed archive block: ${output}`);
+        }
+
+        const refreshedReceipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'ui-review.json'), 'utf-8'));
+        if (refreshedReceipt.status !== 'FAIL') {
+            throw new Error(`Expected malformed ui-review.json to be refreshed to FAIL, got ${refreshedReceipt.status}`);
         }
     });
 
