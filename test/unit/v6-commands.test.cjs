@@ -1133,6 +1133,49 @@ if (childProcessUnavailableReason) {
         }
     });
 
+    test('check-plan syncs tasks.md from the governed checklist', () => {
+        const feature = 'check-plan-syncs-tasks';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'plan.md'),
+            ['# Implementation Plan: Sync Tasks', '', '## Execution Checklist', '', '- [x] First task', '- [ ] Second task', '']
+                .join('\n'),
+        );
+
+        const result = run(['check-plan', feature]);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+
+        const tasksPath = path.join(featureDir, 'tasks.md');
+        if (!fs.existsSync(tasksPath)) throw new Error('tasks.md was not written');
+        const tasks = fs.readFileSync(tasksPath, 'utf-8');
+        if (!tasks.includes('# Tasks: check-plan-syncs-tasks')) throw new Error(`Missing tasks heading: ${tasks}`);
+        if (!tasks.includes('- [x] First task')) throw new Error(`Missing completed task mirror: ${tasks}`);
+        if (!tasks.includes('- [ ] Second task')) throw new Error(`Missing remaining task mirror: ${tasks}`);
+    });
+
+    test('check-plan writes execution.json when all tasks are complete', () => {
+        const feature = 'check-plan-complete-execution';
+        const featureDir = path.join(changesDir, feature);
+        fs.mkdirSync(featureDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(featureDir, 'plan.md'),
+            ['# Implementation Plan: Complete Execution', '', '## Execution Checklist', '', '- [x] Finish task', ''].join('\n'),
+        );
+
+        const result = run(['check-plan', feature]);
+        if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
+
+        const executionPath = path.join(featureDir, 'execution.json');
+        if (!fs.existsSync(executionPath)) throw new Error('execution.json was not written');
+        const receipt = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+        if (receipt.feature !== feature) throw new Error(`Unexpected execution.json feature: ${receipt.feature}`);
+        if (receipt.status !== 'COMPLETE') throw new Error(`Unexpected execution.json status: ${receipt.status}`);
+        if (!Array.isArray(receipt.consumed_artifacts) || !receipt.consumed_artifacts.includes('plan.md')) {
+            throw new Error(`Missing consumed_artifacts in execution.json: ${JSON.stringify(receipt)}`);
+        }
+    });
+
     test('report generate says criteria recorded instead of implemented from spec-only input', () => {
         const feature = 'report-wording-fix';
         const featureDir = path.join(changesDir, feature);

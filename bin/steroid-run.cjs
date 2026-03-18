@@ -1552,6 +1552,17 @@ function parseChecklistStats(content) {
 }
 
 /**
+ * Extracts governed checklist lines from plan-like markdown.
+ *
+ * @param {string} content
+ * @returns {string[]}
+ */
+function extractChecklistLines(content) {
+    const sanitized = stripFencedCodeBlocks(content);
+    return sanitized.match(/^- \[[ x/]\].+$/gm) || [];
+}
+
+/**
  * Validates the minimum governed structure for phase artifacts that should not be
  * treated as complete based on line count alone.
  *
@@ -2428,6 +2439,46 @@ function loadExecutionReceipt(feature, featureDir) {
         source: 'none',
         summary: null,
     };
+}
+
+/**
+ * Writes the live task artifact derived from the execution checklist.
+ *
+ * @param {string} feature
+ * @param {string} featureDir
+ * @param {string} planContent
+ */
+function syncTasksArtifact(feature, featureDir, planContent) {
+    const checklistLines = extractChecklistLines(planContent);
+    const tasksContent = [
+        `# Tasks: ${feature}`,
+        '',
+        `**Source**: .memory/changes/${feature}/plan.md`,
+        `**Updated**: ${new Date().toISOString()}`,
+        '',
+        '## Execution Checklist',
+        '',
+        ...(checklistLines.length > 0 ? checklistLines : ['- [ ] No checklist items found in plan.md']),
+        '',
+    ].join('\n');
+    fs.writeFileSync(path.join(featureDir, 'tasks.md'), tasksContent);
+}
+
+/**
+ * Writes the governed execution receipt.
+ *
+ * @param {string} featureDir
+ * @param {{ feature: string, status: string, consumedArtifacts?: string[], updatedAt?: string, source?: string, summary?: string }} receipt
+ */
+function saveExecutionReceipt(featureDir, receipt) {
+    writeJsonFile(path.join(featureDir, 'execution.json'), {
+        feature: receipt.feature,
+        status: receipt.status,
+        consumed_artifacts: Array.isArray(receipt.consumedArtifacts) ? receipt.consumedArtifacts : [],
+        updatedAt: receipt.updatedAt || new Date().toISOString(),
+        source: receipt.source || 'execution.json',
+        summary: receipt.summary || 'Execution receipt recorded.',
+    });
 }
 
 /**
@@ -4996,8 +5047,12 @@ if (args[0] === 'check-plan') {
 
     const content = fs.readFileSync(planFile, 'utf-8');
     const { total, done, remaining, percent } = parseChecklistStats(content);
+    const featureDir = path.join(changesDir, feature);
+
+    syncTasksArtifact(feature, featureDir, content);
 
     console.log(`[steroid-run] 📊 Plan: ${done}/${total} tasks complete (${percent}%)`);
+    console.log(`[steroid-run]    Tasks: .memory/changes/${feature}/tasks.md`);
 
     // v4.0: If plan has priorities, show breakdown
     const sanitized = stripFencedCodeBlocks(content);
@@ -5011,7 +5066,14 @@ if (args[0] === 'check-plan') {
     }
 
     if (remaining === 0 && total > 0) {
-        console.log('[steroid-run] ✅ All tasks complete! Ready to archive.');
+        saveExecutionReceipt(featureDir, {
+            feature,
+            status: 'COMPLETE',
+            consumedArtifacts: ['plan.md', 'tasks.md'],
+            summary: 'Execution checklist is fully complete and ready for verification.',
+        });
+        console.log('[steroid-run] ✅ All tasks complete! Ready to verify.');
+        console.log(`[steroid-run]    Execution receipt: .memory/changes/${feature}/execution.json`);
         process.exit(0);
     } else {
         console.log(`[steroid-run] ⏳ ${remaining} tasks remaining.`);
