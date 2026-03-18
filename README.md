@@ -5,9 +5,9 @@
 [![node](https://img.shields.io/node/v/steroid-workflow)](https://nodejs.org)
 [![CI](https://github.com/nzkbuild/steroid-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/nzkbuild/steroid-workflow/actions/workflows/ci.yml)
 
-**AI coding guardrails that enforce a structured pipeline — so the AI can't cut corners, skip steps, or hallucinate solutions.**
+**AI coding guardrails with a governed runtime artifact spine — so the AI can't silently skip phases, fake receipts, or hand-wave completion.**
 
-Steroid-Workflow wraps your AI coding assistant in an 8-phase pipeline with physical enforcement. Every idea flows through codebase scanning, specification, research, architecture, TDD implementation, and verification — producing enterprise-grade output with documentation, CI/CD, error handling, and deployment guidance.
+Steroid-Workflow now operates as a governed workflow runtime, not just a prompt-and-skill pack. The live repo enforces durable artifacts like `request.json`, `tasks.md`, `execution.json`, `verify.json`, and `completion.json`, and the runtime gates archive/report/verify behavior on those receipts instead of trusting loose markdown or assistant narration.
 
 ## The Problem
 
@@ -24,17 +24,63 @@ Steroid-Workflow makes these failures **physically impossible** through git hook
 ## Quick Start
 
 ```bash
-# 1. Inside any project with git init
+# Stable
 npx steroid-workflow init
 
-# 2. Tell your AI what to build
+# Beta
+npx steroid-workflow@beta init
+
+# Inside any project with git init, tell your AI what to build
 > "Build me a habit tracker like Apple Health"
 
-# 3. The AI automatically follows the pipeline
-#    If it doesn't, say: "Use the steroid pipeline."
+# If it drifts, say: "Use the steroid pipeline."
 ```
 
-No config. No dependencies. Works with any AI-powered IDE.
+No config. Works with any AI-powered IDE. Beta is where the governed runtime hardening lands first.
+
+## What Steroid Is Now
+
+Steroid currently has three layers:
+
+1. **Runtime enforcement**
+   - `bin/steroid-run.cjs` physically enforces gates, receipts, archive rules, and command safety
+2. **Governed live baseline**
+   - `governed/` defines the live contract surfaces for transplanted subsystems
+3. **Skills and IDE wiring**
+   - `skills/` and generated agent instruction files teach assistants how to operate inside the runtime
+
+The important shift is that the runtime now expects real artifacts, not just “the model said it did the step.”
+
+## Current Live Artifact Spine
+
+The main live governed path now produces and consumes these durable artifacts under `.memory/changes/<feature>/`:
+
+- `request.json`
+- `context.md`
+- `prompt.json`
+- `prompt.md`
+- `vibe.md`
+- `spec.md`
+- `research.md`
+- `plan.md`
+- `tasks.md`
+- `execution.json`
+- `review.md`
+- `review.json`
+- `verify.md`
+- `verify.json`
+- `completion.json`
+
+For UI-intensive features, Steroid can also govern:
+
+- `design-routing.json`
+- `design-system.md`
+- `accessibility.json`
+- `ui-audit.json`
+- `ui-review.md`
+- `ui-review.json`
+
+These artifacts are not just logs. They drive gate, verify, report, and archive behavior.
 
 ## How It Works
 
@@ -65,11 +111,11 @@ graph LR
 | **Specify**      | Converts the brief into user stories with acceptance criteria                            | `spec.md`                  |
 | **Research**     | Investigates tech choices, security, deployment, architecture                            | `research.md`              |
 | **Architect**    | Creates atomic execution plan with quality, docs, and deploy tasks                       | `plan.md`                  |
-| **Engine**       | Builds using TDD, commits atomically, captures learnings                                 | Working code, `tasks.md`, `execution.json` |
-| **Verify**       | Runs two-stage review plus core verification by default, with optional deep scans for code smells and licenses | `review.md`, `review.json`, `verify.md`, `verify.json`, `completion.json` |
+| **Engine**       | Builds using TDD, syncs task artifacts, and emits governed execution receipts            | Working code, `tasks.md`, `execution.json` |
+| **Verify**       | Runs review + verification, refreshes UI evidence when relevant, and emits completion state | `review.md`, `review.json`, `verify.md`, `verify.json`, `completion.json` |
 | **Diagnose**     | Root cause analysis for bugs (fix intent only)                                           | `diagnosis.md`             |
 
-Each phase hands off to the next. No manual intervention needed.
+Each phase hands off to the next through artifacts. The important runtime rule is: later commands now block on missing or malformed governed artifacts instead of assuming previous work happened.
 
 ### Smart Intent Routing
 
@@ -122,6 +168,28 @@ For runtime orchestration, use:
 
 For UI-intensive features, verification also writes `.memory/changes/<feature>/ui-review.md` and `.memory/changes/<feature>/ui-review.json`, frontend-focused summary artifacts that combine design-system alignment, accessibility evidence, browser-audit evidence, and the top UI risks in one place. The receipt records who refreshed it and which evidence triggered the refresh, and `pipeline-status`, handoff reports, and dashboard output surface that freshness data. If `ui-review.json` is `FAIL`, archive will stay blocked. `CONDITIONAL` frontend reviews now split into caution vs hold: polish-only issues warn, but accessibility violations or missing deep browser evidence after a deep verify request block archive unless you explicitly run `node steroid-run.cjs archive <feature> --force-ui`. `archive <feature>` and `report generate <feature>` also auto-refresh stale UI review receipts when newer frontend evidence exists, and `gate research` / `gate architect` / `gate engine` enforce the `design-routing.json` + `design-system.md` path for UI-intensive work.
 
+## Governed Baseline
+
+The live repo now carries governed baseline transplants under `governed/`. These are the law surfaces for the subsystems that have already been migrated out of pure markdown/skill authority:
+
+- `governed/scan-system/`
+- `governed/spec-system/`
+- `governed/research-system/`
+- `governed/execution-engine/`
+- `governed/review-and-verify/`
+- `governed/progress-memory/`
+- `governed/core-runtime/`
+
+Each governed slice includes:
+
+- `MODULE.yaml`
+- `LIVE-MAPPING.md`
+- `PROVENANCE.md`
+- `PARITY.md`
+- example fixtures where needed
+
+In other words: Steroid is no longer only “follow these docs.” Parts of it are now explicitly migrated into governed contract form.
+
 ## What You Get
 
 ### Your AI Can't Skip Steps
@@ -161,6 +229,20 @@ Protections specifically designed for non-technical users:
 - **Anti-Loop Directive** — stops the AI from guessing the same broken fix repeatedly
 - **Optional Deep Verification** — `verify-feature --deep` can run a Playwright-backed browser audit plus `knip`, `madge`, `gitleaks`, and license checks when the required local tools are available. Steroid will try `--url`, deploy env vars, common `.env*` files, project preview receipts, feature preview receipts, `package.json` preview metadata, and local HTML targets in that order.
 - **Command Allowlist** — only known dev commands can execute through the circuit breaker
+- **Governed Receipt Enforcement** — archive/report/verify now block on missing or malformed runtime receipts rather than trusting assistant claims
+
+## Beta Status
+
+`6.3.x beta` is the governed runtime hardening line.
+
+That beta work includes:
+
+- governed live baseline transplants
+- stronger runtime receipt enforcement
+- safer command execution and project-boundary confinement
+- extracted, directly tested runtime helper modules under `src/utils/`
+
+Use the beta if you want the more explicit artifact model and stricter runtime behavior earlier than stable.
 
 ## Language Support
 
@@ -197,6 +279,9 @@ All configs are auto-generated during install.
 
 ```bash
 npx steroid-workflow@latest update
+
+# or beta
+npx steroid-workflow@beta update
 ```
 
 Your project state (`.memory/`) is preserved. Only skills, configs, and enforcement layers are refreshed.
@@ -218,17 +303,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for:
 - Intent routing internals
 - Prompt intelligence and adaptive route selection
 - Memory system, review system, and analytics dashboard
+- Governed baseline and live artifact mapping
 - Fork credits and sources
-
-The governed live baseline for transplanted subsystems lives under `governed/`, starting with:
-
-- `governed/spec-system/`
-- `governed/execution-engine/`
-- `governed/review-and-verify/`
-- `governed/progress-memory/`
-- `governed/core-runtime/`
-- `governed/scan-system/`
-- `governed/research-system/`
 
 ## License
 
