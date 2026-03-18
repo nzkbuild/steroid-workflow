@@ -1,5 +1,24 @@
 # Changelog
 
+## [6.3.0-beta.2] "Governed Runtime Hardening" - 2026-03-18
+
+### Added
+- **Live governed baseline** — transplanted and closed the governed core in the live repo for `spec-system`, `execution-engine`, `review-and-verify`, `progress-memory`, and `core-runtime`
+- **Second-wave governed baselines** — added governed live baselines for `scan-system` and `research-system`
+- **Governed runtime artifacts** — runtime now emits and manages `request.json`, `tasks.md`, `execution.json`, and `completion.json` as first-class live artifacts
+- **Shared utility mirrors** — extracted directly tested helpers for governed receipts, path guards, command guards, receipt loaders, UI archive policy, handoff report assembly, and frontend receipt loaders under `src/utils/`
+
+### Changed
+- **Runtime enforcement** — archive, verify, scan, check-plan, gate, and report flows now enforce governed artifact presence and normalized receipt shape instead of trusting loose file existence or line counts
+- **Execution confinement** — `run` no longer uses `shell: true`, blocks direct shell-style filesystem commands, blocks inline interpreter eval, and enforces tighter project-root path handling
+- **Frontend receipt handling** — active `design-routing.json` and `ui-review.json` receipts are normalized before status, archive, and reporting decisions
+- **Completion governance** — `completion.json` now aligns with the governed core-runtime model and is emitted after the UI review refresh path
+
+### Fixed
+- **Deep verification drift** — `deepRequested` and `deepCompleted` now survive verify receipt reloads, so archive/frontend decisions can correctly enforce deep verification intent
+- **Downstream validation gaps** — malformed governed `spec.md`, `research.md`, `plan.md`, and `diagnosis.md` now block downstream report and verify paths instead of slipping through phase-local checks
+- **Consistency drift** — live baseline docs, CLI help, governed mappings, and receipt behavior were reconciled against the reset-lab baseline and checked through the consistency pass
+
 ## [6.3.0-beta.1] "Frontend Internalization Beta" - 2026-03-18
 
 ### Added
