@@ -241,7 +241,7 @@ check(
     !smokeSource.includes('command guard blocks: rm (unknown command)'),
     'Smoke tests still describe rm as an unknown blocked command.',
 );
-check(unitSource.includes('allowlist allows rm command'), 'Unit tests should assert rm remains allowlisted.');
+check(unitSource.includes('run blocks direct rm command'), 'Unit tests should assert direct rm is blocked in favor of fs-rm.');
 
 check(readmeSource.includes('Optional Deep Verification'), 'README.md should describe optional deep verification.');
 check(readmeSource.includes('verify.json'), 'README.md should mention machine-readable verification receipts.');

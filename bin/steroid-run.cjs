@@ -225,6 +225,83 @@ function tokenizeCommand(input) {
     return tokens;
 }
 
+const DISALLOWED_DIRECT_COMMANDS = new Map([
+    ['rm', 'Use node steroid-run.cjs fs-rm <path> instead.'],
+    ['rmdir', 'Use node steroid-run.cjs fs-rm <path> instead.'],
+    ['del', 'Use node steroid-run.cjs fs-rm <path> instead.'],
+    ['rd', 'Use node steroid-run.cjs fs-rm <path> instead.'],
+    ['cp', 'Use node steroid-run.cjs fs-cp <src> <dest> instead.'],
+    ['copy', 'Use node steroid-run.cjs fs-cp <src> <dest> instead.'],
+    ['xcopy', 'Use node steroid-run.cjs fs-cp <src> <dest> instead.'],
+    ['mv', 'Use node steroid-run.cjs fs-mv <src> <dest> instead.'],
+    ['move', 'Use node steroid-run.cjs fs-mv <src> <dest> instead.'],
+    ['mkdir', 'Use node steroid-run.cjs fs-mkdir <path> instead.'],
+    ['cat', 'Use node steroid-run.cjs fs-cat <file> instead.'],
+    ['type', 'Use node steroid-run.cjs fs-cat <file> instead.'],
+    ['ls', 'Use node steroid-run.cjs fs-ls [path] instead.'],
+    ['dir', 'Use node steroid-run.cjs fs-ls [path] instead.'],
+    ['grep', 'Use node steroid-run.cjs fs-grep <pattern> [path] instead.'],
+    ['findstr', 'Use node steroid-run.cjs fs-grep <pattern> [path] instead.'],
+]);
+
+/**
+ * Validates tokenized execution commands before process spawning.
+ *
+ * @param {string[]} commandTokens
+ * @returns {{ ok: boolean, message?: string }}
+ */
+function validateExecutionCommandTokens(commandTokens) {
+    const baseCommand = (commandTokens[0] || '').replace(/^['"]|['"]$/g, '').toLowerCase();
+    const directCommandHint = DISALLOWED_DIRECT_COMMANDS.get(baseCommand);
+    if (directCommandHint) {
+        return {
+            ok: false,
+            message: `[STEROID-COMMAND-GUARD] 🛑 BLOCKED: Direct ${baseCommand} usage is not allowed through run.\n  ${directCommandHint}`,
+        };
+    }
+
+    if (baseCommand === 'node') {
+        const hasInlineEval = commandTokens.some((token) => ['-e', '--eval', '-p', '--print', '-'].includes(token));
+        if (hasInlineEval) {
+            return {
+                ok: false,
+                message:
+                    '[STEROID-COMMAND-GUARD] 🛑 BLOCKED: node inline evaluation is not allowed through run.\n  Run a script file inside the project instead.',
+            };
+        }
+    }
+
+    if (baseCommand === 'python' || baseCommand === 'python3') {
+        const hasInlineEval = commandTokens.some((token) => ['-c', '-m', '-'].includes(token));
+        if (hasInlineEval) {
+            return {
+                ok: false,
+                message:
+                    '[STEROID-COMMAND-GUARD] 🛑 BLOCKED: python inline/module execution is not allowed through run.\n  Run a concrete project script file instead.',
+            };
+        }
+    }
+
+    if (baseCommand === 'git') {
+        for (let i = 1; i < commandTokens.length; i++) {
+            const token = commandTokens[i];
+            if (token === '-C' || token === '--git-dir' || token === '--work-tree') {
+                const candidate = commandTokens[i + 1];
+                const resolved = candidate ? resolvePathWithinTargetDir(candidate, { mustExist: true }) : null;
+                if (!resolved) {
+                    return {
+                        ok: false,
+                        message:
+                            '[STEROID-COMMAND-GUARD] 🛑 BLOCKED: git path overrides must stay inside the current project root.',
+                    };
+                }
+            }
+        }
+    }
+
+    return { ok: true };
+}
+
 /**
  * Reads the imported source manifest if present.
  *
@@ -7980,11 +8057,29 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
     process.exit(1);
 }
 
-const child = spawnSync(commandStr, {
+const validatedCommand = validateExecutionCommandTokens(commandTokens);
+if (!validatedCommand.ok) {
+    console.error(`\n${validatedCommand.message}`);
+    process.exit(1);
+}
+
+const child = spawnSync(commandTokens[0], commandTokens.slice(1), {
     cwd: executionCwd,
-    shell: true,
+    shell: false,
     stdio: 'inherit',
 });
+
+if (child.error) {
+    console.error(`\n[steroid-run] ❌ Failed to execute "${baseCommand}": ${child.error.message}`);
+    state.error_count += 1;
+    state.last_error = `Command failed in "${executionLabel}": "${commandStr}" (${child.error.message})`;
+    if (!state.error_history) state.error_history = [];
+    state.error_history.push(`[${new Date().toISOString()}] ${state.last_error}`);
+    if (!state.recovery_actions) state.recovery_actions = [];
+    state.status = state.error_count >= 5 ? 'tripped' : 'active';
+    fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+    process.exit(typeof child.status === 'number' ? child.status : 1);
+}
 
 // --- State Machine Update ---
 if (child.status !== 0) {

@@ -272,8 +272,10 @@ if (childProcessUnavailableReason) {
     });
 
     test('run --cwd executes command inside subdirectory', () => {
-        fs.mkdirSync(path.join(tmpBase, 'packages', 'web'), { recursive: true });
-        const result = run(['run', '--cwd=packages/web', 'node -e "console.log(process.cwd())"']);
+        const webDir = path.join(tmpBase, 'packages', 'web');
+        fs.mkdirSync(webDir, { recursive: true });
+        fs.writeFileSync(path.join(webDir, 'print-cwd.js'), 'console.log(process.cwd())\n');
+        const result = run(['run', '--cwd=packages/web', 'node print-cwd.js']);
         if (result.status !== 0) throw new Error(`Expected exit 0, got ${result.status}`);
         const output = result.stdout.toString().replace(/\r/g, '');
         if (!output.includes(path.join('packages', 'web'))) throw new Error(`Unexpected cwd output: ${output}`);
@@ -286,17 +288,38 @@ if (childProcessUnavailableReason) {
         if (!output.includes('must stay inside')) throw new Error('Missing safety message');
     });
 
-    test('allowlist allows rm command (v6.0.0 expansion)', () => {
-        // rm on nonexistent file will fail, but it should NOT be blocked by allowlist
+    test('run blocks direct rm command in favor of fs-rm', () => {
         const result = run(["'rm nonexistent-file-12345'"]);
-        const output = result.stderr.toString();
-        if (output.includes('BLOCKED')) throw new Error('rm should be in expanded allowlist');
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('Direct rm usage is not allowed')) throw new Error(`Missing rm block: ${output}`);
+        if (!output.includes('fs-rm')) throw new Error(`Missing fs-rm guidance: ${output}`);
     });
 
-    test('allowlist allows grep command (v6.0.0 expansion)', () => {
+    test('run blocks direct grep command in favor of fs-grep', () => {
         const result = run(["'grep --version'"]);
-        const output = result.stderr.toString();
-        if (output.includes('BLOCKED')) throw new Error('grep should be in expanded allowlist');
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('Direct grep usage is not allowed')) throw new Error(`Missing grep block: ${output}`);
+        if (!output.includes('fs-grep')) throw new Error(`Missing fs-grep guidance: ${output}`);
+    });
+
+    test('run blocks node inline evaluation', () => {
+        const result = run(['run', '--cwd=.', 'node -e "console.log(process.cwd())"']);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('node inline evaluation is not allowed')) {
+            throw new Error(`Missing node eval block: ${output}`);
+        }
+    });
+
+    test('run blocks git path overrides outside the project root', () => {
+        const result = run(['run', '--cwd=.', 'git -C .. status']);
+        if (result.status !== 1) throw new Error(`Expected exit 1, got ${result.status}`);
+        const output = `${result.stdout}${result.stderr}`;
+        if (!output.includes('git path overrides must stay inside')) {
+            throw new Error(`Missing git path override block: ${output}`);
+        }
     });
 
     test('command guard blocks powershell interpreter', () => {
@@ -414,7 +437,8 @@ if (childProcessUnavailableReason) {
 
         const brief = fs.readFileSync(briefPath, 'utf-8');
         if (!brief.includes('# Prompt Brief: prompt-receipt')) throw new Error('prompt.md missing heading');
-        if (!brief.includes('Recommended Route: standard-build')) throw new Error('prompt.md missing route summary');
+        if (!brief.includes(`Recommended Route: ${receipt.recommendedPipeline}`))
+            throw new Error('prompt.md missing route summary');
     });
 
     test('pipeline-status surfaces prompt receipt details when prompt.json exists', () => {
