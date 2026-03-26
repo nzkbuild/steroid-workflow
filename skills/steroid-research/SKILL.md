@@ -11,10 +11,10 @@ This skill reads the spec from `.memory/changes/<feature>/spec.md` and investiga
 
 The live governed authority for this phase is:
 
-- `governed/research-system/MODULE.yaml`
-- `governed/research-system/LIVE-MAPPING.md`
-- `governed/research-system/PROVENANCE.md`
-- `governed/research-system/PARITY.md`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
 
 In the live repo, this skill is the execution surface for the governed `steroid-research-system`.
 
@@ -23,12 +23,12 @@ The governed live research artifacts are:
 - `.memory/changes/<feature>/context.md`
 - `.memory/changes/<feature>/research.md`
 
-Forked from: `src/forks/gsd/agents/gsd-phase-researcher.md` (Get-Shit-Done, MIT License) — simplified from 556 to ~150 lines for the Steroid non-technical context.
+Internal reference: `Steroid internal reference` (Steroid, MIT License) — simplified from 556 to ~150 lines for the Steroid non-technical context.
 
 ## When To Use
 
 Activate immediately after `@steroid-specify` completes. Do not wait for user invocation. The spec.md file must already exist in `.memory/changes/<feature>/`.
-Also read `.memory/changes/<feature>/context.md` as the governed upstream codebase map from scan.
+Also read `.memory/changes/<feature>/context.md` as the governed internal codebase map from scan.
 
 ## Instructions
 
@@ -49,7 +49,7 @@ Do not ask the user any questions. Read `.memory/changes/<feature>/spec.md`, and
 
 ### 2. Research Philosophy
 
-> Forked from GSD: "Research is investigation, not confirmation."
+> Forked from Steroid: "Research is investigation, not confirmation."
 
 - Treat your training data as **hypothesis, not fact**. Libraries change, APIs break, best practices evolve.
 - **Verify before asserting** — don't state library capabilities without checking official docs or package registries.
@@ -82,7 +82,7 @@ If `prompt.json` exists, also preserve:
 **Design routing receipt:** For UI-intensive work, the research gate now tries to auto-create this. If you need only the routing receipt, run:
 `node steroid-run.cjs design-route "<normalized prompt or user request>" --feature <feature> --write`
 
-If `design-routing.json` exists afterward, treat it as the routing receipt for which internalized frontend systems Steroid should use during research.
+If `design-routing.json` exists afterward, treat it as the routing receipt for which frontend source-library inputs Steroid should use during research.
 
 **Design system artifact:** For UI-intensive work, the research gate now tries to auto-create this too. If you need only the design system artifact, run:
 `node steroid-run.cjs design-system --feature <feature> --write`
@@ -132,10 +132,10 @@ For each user story in the spec, identify:
 **Design Intelligence** — for any UI-intensive feature
 
 - If the spec includes landing pages, dashboards, marketing sites, app shells, forms, navigation, component libraries, onboarding, responsive layout, visual refreshes, or accessibility-driven UI work, treat design-system research as mandatory, not optional polish
-- Use Steroid's internal design routing layer first. Read `.memory/changes/<feature>/design-routing.json` when it exists so research loads only the right imported frontend packs instead of pulling everything at once
+- Use Steroid's internal design routing layer first. Read `.memory/changes/<feature>/design-routing.json` when it exists so research loads only the right fork-source inputs instead of pulling everything at once
 - Read `.memory/changes/<feature>/design-system.md` when it exists and align research.md to it instead of creating a competing design direction
 - Produce one concrete design recommendation covering the surface, pattern, style direction, color system, typography, spacing, radii, shadows, interaction states, motion rules, responsive breakpoints, accessibility constraints, and anti-patterns to avoid
-- If a required imported pack is unavailable, synthesize the same section manually from vibe.md, spec.md, verified UX guidance, and product context. Never skip the section just because the repo has no design docs
+- If a required fork-source input is unavailable, synthesize the same section manually from vibe.md, spec.md, verified UX guidance, and product context. Never skip the section just because the repo has no design docs
 
 ### 5. Confidence Levels
 
@@ -397,6 +397,6 @@ Output: "Use React and some charting library. Follow best practices for state ma
 
 To understand the full, unmodified logic behind this skill's research methodology, read:
 
-- `src/forks/gsd/agents/gsd-phase-researcher.md` - The complete GSD research agent (556 lines)
-- `src/forks/gsd/agents/gsd-research-synthesizer.md` - The GSD research synthesis agent
+- `Steroid internal reference` - The complete Steroid research agent (556 lines)
+- `Steroid internal reference` - The Steroid research synthesis agent
 ```

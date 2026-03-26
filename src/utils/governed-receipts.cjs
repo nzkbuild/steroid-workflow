@@ -1,6 +1,6 @@
 'use strict';
 
-const { resolveImportedSourcePath, resolveRepoRoot } = require('./imported-sources.cjs');
+const { resolveForkSourcePath, resolveRepoRoot } = require('./fork-sources.cjs');
 const { GOVERNED_COMPLETION_OPTIONS } = require('./governed-artifacts.cjs');
 
 /**
@@ -29,9 +29,16 @@ function normalizeDesignRoutingReceipt(receipt, options = {}) {
 
     const stack = typeof receipt.stack === 'string' ? receipt.stack : 'web';
     const wrapperSkill = typeof receipt.wrapperSkill === 'string' ? receipt.wrapperSkill : null;
-    const importedSourceIds = Array.isArray(receipt.importedSourceIds)
+    const sourceInputIds = Array.isArray(receipt.sourceInputIds)
+        ? receipt.sourceInputIds.filter((value) => typeof value === 'string')
+        : Array.isArray(receipt.importedSourceIds)
         ? receipt.importedSourceIds.filter((value) => typeof value === 'string')
         : [];
+    const sourceInputPaths = Array.isArray(receipt.sourceInputPaths)
+        ? receipt.sourceInputPaths.filter((value) => typeof value === 'string')
+        : Array.isArray(receipt.importedSourcePaths)
+          ? receipt.importedSourcePaths.filter((value) => typeof value === 'string')
+          : [];
     const domain = typeof receipt.domain === 'string' ? receipt.domain : stack;
     const rootDir = options.rootDir || resolveRepoRoot();
 
@@ -43,10 +50,16 @@ function normalizeDesignRoutingReceipt(receipt, options = {}) {
         stack,
         auditOnly: !!receipt.auditOnly,
         wrapperSkill,
-        importedSourceIds,
-        importedSourcePaths: Array.isArray(receipt.importedSourcePaths)
-            ? receipt.importedSourcePaths.filter((value) => typeof value === 'string')
-            : importedSourceIds.map((id) => resolveImportedSourcePath(id, rootDir)).filter(Boolean),
+        sourceInputIds,
+        sourceInputPaths:
+            sourceInputPaths.length > 0
+                ? sourceInputPaths
+                : sourceInputIds.map((id) => resolveForkSourcePath(id, rootDir)).filter(Boolean),
+        importedSourceIds: sourceInputIds,
+        importedSourcePaths:
+            sourceInputPaths.length > 0
+                ? sourceInputPaths
+                : sourceInputIds.map((id) => resolveForkSourcePath(id, rootDir)).filter(Boolean),
         prompt: typeof receipt.prompt === 'string' ? receipt.prompt : '',
         promptSource:
             typeof receipt.promptSource === 'string'
@@ -87,6 +100,16 @@ function normalizeUiReviewReceipt(receipt, feature) {
 
     const status = normalizeAllowedStatus(receipt.status, ['PASS', 'FAIL', 'CONDITIONAL'], null);
     if (!status) return null;
+    const sourceInputIds = Array.isArray(receipt.sourceInputIds)
+        ? receipt.sourceInputIds.filter((value) => typeof value === 'string')
+        : Array.isArray(receipt.importedSourceIds)
+          ? receipt.importedSourceIds.filter((value) => typeof value === 'string')
+          : [];
+    const sourceInputPaths = Array.isArray(receipt.sourceInputPaths)
+        ? receipt.sourceInputPaths.filter((value) => typeof value === 'string')
+        : Array.isArray(receipt.importedSourcePaths)
+          ? receipt.importedSourcePaths.filter((value) => typeof value === 'string')
+          : [];
 
     const findings = Array.isArray(receipt.findings)
         ? receipt.findings
@@ -106,9 +129,10 @@ function normalizeUiReviewReceipt(receipt, feature) {
         stack: typeof receipt.stack === 'string' ? receipt.stack : 'unknown',
         auditOnly: !!receipt.auditOnly,
         wrapperSkill: typeof receipt.wrapperSkill === 'string' ? receipt.wrapperSkill : null,
-        importedSourceIds: Array.isArray(receipt.importedSourceIds)
-            ? receipt.importedSourceIds.filter((value) => typeof value === 'string')
-            : [],
+        sourceInputIds,
+        sourceInputPaths,
+        importedSourceIds: sourceInputIds,
+        importedSourcePaths: sourceInputPaths,
         promptSummary: typeof receipt.promptSummary === 'string' ? receipt.promptSummary : '',
         previewTarget: typeof receipt.previewTarget === 'string' ? receipt.previewTarget : null,
         evidence: receipt.evidence && typeof receipt.evidence === 'object' ? receipt.evidence : {},

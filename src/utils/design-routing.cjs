@@ -1,6 +1,6 @@
 'use strict';
 
-const { getImportedSource, resolveImportedSourcePath, resolveRepoRoot } = require('./imported-sources.cjs');
+const { getForkSource, resolveForkSourcePath, resolveRepoRoot } = require('./fork-sources.cjs');
 
 const UI_KEYWORDS = [
     'design',
@@ -64,6 +64,8 @@ function routeDesignSystems(options = {}) {
         return {
             domain: 'none',
             wrapperSkill: null,
+            sourceInputIds: [],
+            sourceInputPaths: [],
             importedSourceIds: [],
             importedSourcePaths: [],
             auditOnly: false,
@@ -71,45 +73,48 @@ function routeDesignSystems(options = {}) {
         };
     }
 
-    const importedSourceIds = ['ui-ux-pro-max', 'bencium-ux-designer'];
+    const sourceInputIds = ['steroid-design-system', 'steroid-ux-discipline'];
     let wrapperSkill = 'steroid-design-orchestrator';
 
     if (stack === 'react-native') {
-        importedSourceIds.push('vercel-react-native-skills');
+        sourceInputIds.push('steroid-native-rules');
         wrapperSkill = 'steroid-rn-implementation';
     } else {
-        importedSourceIds.push('anthropic-frontend-design');
-        importedSourceIds.push('vercel-web-design-guidelines');
-        importedSourceIds.push('vercel-web-interface-guidelines');
+        sourceInputIds.push('steroid-web-direction');
+        sourceInputIds.push('steroid-web-review');
+        sourceInputIds.push('steroid-interface-review');
         if (stack === 'react') {
-            importedSourceIds.push('vercel-react-best-practices');
-            importedSourceIds.push('vercel-composition-patterns');
+            sourceInputIds.push('steroid-react-rules');
+            sourceInputIds.push('steroid-composition-rules');
             wrapperSkill = 'steroid-react-implementation';
         }
     }
 
     if (isAudit) {
         wrapperSkill = 'steroid-web-design-review';
-        if (!importedSourceIds.includes('vercel-web-design-guidelines') && stack !== 'react-native') {
-            importedSourceIds.push('vercel-web-design-guidelines');
+        if (!sourceInputIds.includes('steroid-web-review') && stack !== 'react-native') {
+            sourceInputIds.push('steroid-web-review');
         }
-        if (!importedSourceIds.includes('vercel-web-interface-guidelines') && stack !== 'react-native') {
-            importedSourceIds.push('vercel-web-interface-guidelines');
+        if (!sourceInputIds.includes('steroid-interface-review') && stack !== 'react-native') {
+            sourceInputIds.push('steroid-interface-review');
         }
-        if (!importedSourceIds.includes('accesslint-core')) {
-            importedSourceIds.push('accesslint-core');
+        if (!sourceInputIds.includes('steroid-accessibility-audit')) {
+            sourceInputIds.push('steroid-accessibility-audit');
         }
     }
 
-    const uniqueSourceIds = importedSourceIds.filter(
-        (id, index) => importedSourceIds.indexOf(id) === index && getImportedSource(id, rootDir),
+    const uniqueSourceIds = sourceInputIds.filter(
+        (id, index) => sourceInputIds.indexOf(id) === index && getForkSource(id, rootDir),
     );
+    const sourceInputPaths = uniqueSourceIds.map((id) => resolveForkSourcePath(id, rootDir)).filter(Boolean);
 
     return {
         domain: stack,
         wrapperSkill,
+        sourceInputIds: uniqueSourceIds,
+        sourceInputPaths,
         importedSourceIds: uniqueSourceIds,
-        importedSourcePaths: uniqueSourceIds.map((id) => resolveImportedSourcePath(id, rootDir)),
+        importedSourcePaths: sourceInputPaths,
         auditOnly: isAudit,
         stack,
     };

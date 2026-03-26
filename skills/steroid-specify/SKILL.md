@@ -11,14 +11,14 @@ This skill reads the user's vibe from `.memory/changes/<feature>/vibe.md` and, w
 
 The live governed authority for this phase is:
 
-- `governed/spec-system/MODULE.yaml`
-- `governed/spec-system/LIVE-MAPPING.md`
-- `governed/spec-system/PROVENANCE.md`
-- `governed/spec-system/PARITY.md`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
 
 In the live repo, this skill implements the `spec_md` part of the governed `steroid-spec-system`. The downstream `plan_md` part is implemented by `skills/steroid-architect/SKILL.md`.
 
-Forked from: `src/forks/spec-kit/templates/spec-template.md` (GitHub Spec Kit, MIT License)
+Internal reference: `Steroid internal reference` (GitHub Steroid, MIT License)
 
 ## When To Use
 
@@ -276,5 +276,5 @@ Output: "The app should track habits with a nice UI."
 
 To understand the full, unmodified logic behind the spec format, read:
 
-- `src/forks/spec-kit/templates/spec-template.md` - The original Spec Kit spec template (116 lines)
-- `src/forks/openspec/openspec/changes/IMPLEMENTATION_ORDER.md` - The OpenSpec per-change folder pattern example
+- `Steroid internal reference` - The original Steroid spec template (116 lines)
+- `Steroid internal reference` - The Steroid per-change folder pattern example

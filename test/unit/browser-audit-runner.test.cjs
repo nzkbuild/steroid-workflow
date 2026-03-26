@@ -22,11 +22,25 @@ function test(name, fn) {
 
 console.log('[unit] browser-audit-runner.test.cjs');
 
-const runner = path.join(__dirname, '..', '..', 'integrations', 'browser-audit', 'run-playwright-audit.cjs');
+const runner = path.join(__dirname, '..', '..', 'src', 'services', 'audit', 'browser-audit.cjs');
+const childProcessProbe = spawnSync(process.execPath, ['-e', 'console.log("probe")'], {
+    cwd: __dirname,
+    stdio: 'pipe',
+    timeout: 5000,
+    env: { ...process.env, PATH: process.env.PATH },
+});
+const childProcessUnavailableReason = childProcessProbe.error ? childProcessProbe.error.message : null;
 const tmpBase = path.join(os.tmpdir(), `steroid-browser-audit-${Date.now()}`);
-fs.mkdirSync(tmpBase, { recursive: true });
+if (!childProcessUnavailableReason) {
+    fs.mkdirSync(tmpBase, { recursive: true });
+}
 
 test('browser audit runner writes JSON and screenshot when Playwright is resolvable', () => {
+    if (childProcessUnavailableReason) {
+        console.log(`  skipped: child Node processes are unavailable in this environment (${childProcessUnavailableReason})`);
+        return;
+    }
+
     const playwrightDir = path.join(tmpBase, 'node_modules', 'playwright');
     const screenshotPath = path.join(tmpBase, 'audit-shot.png');
     fs.mkdirSync(playwrightDir, { recursive: true });

@@ -5,16 +5,16 @@ description: The autonomous execution orchestrator for Steroid-Workflow. This sk
 
 # Steroid Engine (Autonomous Execution Orchestrator)
 
-This skill autonomously executes the checklist in `.memory/changes/<feature>/plan.md`. It uses the Subagent-Driven Development model forked from `obra/superpowers` (see `src/forks/superpowers/subagent.md` and `src/forks/superpowers/tdd.md`) combined with the autonomous loop pattern from Ralph (see `src/forks/ralph/prompt.md`).
+This skill autonomously executes the checklist in `.memory/changes/<feature>/plan.md`. It uses the Subagent-Driven Development model forked from `Steroid` (see `Steroid internal reference` and `Steroid internal reference`) combined with the autonomous loop pattern from Steroid (see `Steroid internal reference`).
 
 ## Governed Baseline
 
 The live governed authority for this phase is:
 
-- `governed/execution-engine/MODULE.yaml`
-- `governed/execution-engine/LIVE-MAPPING.md`
-- `governed/execution-engine/PROVENANCE.md`
-- `governed/execution-engine/PARITY.md`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
 
 In the live repo, this skill is the execution entry point for the governed `steroid-execution-engine`. The current runtime emits standalone live equivalents for `tasks_md` and `execution_receipts` at `.memory/changes/<feature>/tasks.md` and `.memory/changes/<feature>/execution.json`.
 In the live repo, this skill is also one of the runtime surfaces for the governed `steroid-progress-memory`. `.memory/progress.md` is the durable append-only progress artifact.
@@ -39,7 +39,7 @@ Before marking any task as `[x]`, run the verification guard:
 
 ## .gitignore Protection (v5.0.1)
 
-NEVER overwrite the project's `.gitignore`. The installer appends steroid entries (`.memory/`, `steroid-run.cjs`, `.agents/`, `src/forks/`). If you need to create or modify `.gitignore`, ALWAYS APPEND to the existing file — never replace it. The commit command will auto-restore missing entries, but prevention is better than cure.
+NEVER overwrite the project's `.gitignore`. The installer appends steroid entries (`.memory/`, `.steroid/`, `steroid-run.cjs`, `.agents/`). If you need to create or modify `.gitignore`, ALWAYS APPEND to the existing file — never replace it. The commit command will auto-restore missing entries, but prevention is better than cure.
 
 ## Protected Files (v5.0.2)
 
@@ -148,9 +148,9 @@ At completion:
 If `research.md` or `plan.md` indicates UI-intensive work:
 
 - Read the `## Design Intelligence` section from `research.md` before the first UI task and treat it as binding execution context
-- Read `.memory/changes/<feature>/design-routing.json` when present so you know which internalized frontend systems Steroid selected for this feature
+- Read `.memory/changes/<feature>/design-routing.json` when present so you know which frontend source-library inputs Steroid selected for this feature
 - Read `.memory/changes/<feature>/design-system.md` before the first UI task and treat it as the concrete design source of truth
-- Use Steroid's internal imported frontend systems as implementation constraints, not as an excuse to invent a second design direction from scratch
+- Use Steroid's internal frontend source inputs as implementation constraints, not as an excuse to invent a second design direction from scratch
 - Implement semantic tokens, layout hierarchy, responsive behavior, and interaction states before decorative polish
 - Never default to generic AI-looking design: random gradients, placeholder glass cards, inconsistent radii or shadows, noisy purple-on-dark heroes, or motion without purpose
 - Do not mark a frontend task complete until hover/focus/active/disabled/loading/empty/error states and accessibility constraints are implemented
@@ -204,7 +204,7 @@ node steroid-run.cjs review quality <feature>
 ```
 
 Fix any issues found before proceeding to verification.
-Source: `src/forks/superpowers/subagent.md` — two-stage review loop
+Source: `Steroid internal reference` — two-stage review loop
 
 ### Reading Progress First
 
@@ -333,7 +333,7 @@ This prevents dependency drift, missing imports, and cascading build failures. T
 Dispatch a fresh Implementer sub-agent. Provide it with:
 
 - The full text of the current task from `plan.md`
-- The raw TDD methodology from `src/forks/superpowers/tdd.md`
+- The raw TDD methodology from `Steroid internal reference`
 - The `steroid-run` mandate (all commands via `node steroid-run.cjs`)
 - The Codebase Patterns section from `progress.md` (if any)
 
@@ -343,7 +343,7 @@ The Implementer sub-agent follows the Red-Green-Refactor cycle from the forked T
 2. **GREEN** - Write the minimal code to pass the test. Run: `node steroid-run.cjs 'npm test <path>'`. Confirm passing.
 3. **REFACTOR** - Clean up duplication. Confirm tests stay green.
 
-Reference the full TDD rules in `src/forks/superpowers/tdd.md`. The Implementer MUST follow The Iron Law: no production code without a failing test first.
+Reference the full TDD rules in `Steroid internal reference`. The Implementer MUST follow The Iron Law: no production code without a failing test first.
 
 **True TDD Guard (v6.0.0):** The following are strictly forbidden:
 
@@ -369,7 +369,7 @@ Guessing the same fix repeatedly is forbidden. Fresh perspective is mandatory.
 
 **Phase 2: Spec Compliance Review**
 
-Dispatch a SEPARATE, fresh Reviewer sub-agent using the prompt template from `src/forks/superpowers/spec-reviewer-prompt.md`. Give it:
+Dispatch a SEPARATE, fresh Reviewer sub-agent using the prompt template from `Steroid internal reference`. Give it:
 
 - The original task specification from `plan.md`
 - The acceptance criteria from `.memory/changes/<feature>/spec.md` (if referenced)
@@ -379,7 +379,7 @@ The Reviewer's ONLY job is to compare the committed code against the spec. If th
 
 **Phase 3: Code Quality Review**
 
-Dispatch another fresh Reviewer sub-agent using `src/forks/superpowers/code-quality-reviewer-prompt.md`. This reviewer checks for code quality issues independently of the spec.
+Dispatch another fresh Reviewer sub-agent using `Steroid internal reference`. This reviewer checks for code quality issues independently of the spec.
 
 **Phase 4: Verify, Commit & Log (Physical Enforcement)**
 
@@ -501,11 +501,11 @@ When ALL tasks are complete, output: "🎉 The technical blueprint is fully impl
 
 To understand the full, unmodified logic behind this skill, read:
 
-- `src/forks/superpowers/tdd.md` - The complete TDD methodology (372 lines)
-- `src/forks/superpowers/subagent.md` - The complete Subagent execution model (276 lines)
-- `src/forks/superpowers/implementer-prompt.md` - The Implementer dispatch template
-- `src/forks/superpowers/spec-reviewer-prompt.md` - The Spec Reviewer dispatch template
-- `src/forks/superpowers/code-quality-reviewer-prompt.md` - The Quality Reviewer dispatch template
-- `src/forks/memorycore/save-protocol.md` - The continuous state-tracking protocol (222 lines)
-- `src/forks/ralph/prompt.md` - The Ralph autonomous loop prompt (109 lines)
-- `src/forks/ralph/ralph.sh` - The Ralph loop script (114 lines)
+- `Steroid internal reference` - The complete TDD methodology (372 lines)
+- `Steroid internal reference` - The complete Subagent execution model (276 lines)
+- `Steroid internal reference` - The Implementer dispatch template
+- `Steroid internal reference` - The Spec Reviewer dispatch template
+- `Steroid internal reference` - The Quality Reviewer dispatch template
+- `Steroid internal reference` - The continuous state-tracking protocol (222 lines)
+- `Steroid internal reference` - The Steroid autonomous loop prompt (109 lines)
+- `Steroid internal reference` - The Steroid loop script (114 lines)

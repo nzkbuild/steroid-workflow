@@ -36,7 +36,7 @@ test('loadDesignRoutingReceipt normalizes and rewrites routing receipts', () => 
                 stack: 'react',
                 auditOnly: false,
                 wrapperSkill: 'steroid-react-implementation',
-                importedSourceIds: ['ui-ux-pro-max'],
+                importedSourceIds: ['steroid-design-system'],
                 prompt: 'Refresh dashboard UI',
                 source: 'design-route',
                 updatedAt: '2026-03-18T00:00:00.000Z',

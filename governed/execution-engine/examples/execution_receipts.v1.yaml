@@ -1,8 +1,0 @@
-artifact: execution_receipts
-version: "1.0"
-feature_id: sample-feature
-consumed_artifacts:
-  - plan_md
-outcome: completed
-blocker_present: false
-summary: Execution completed against the approved implementation checklist.

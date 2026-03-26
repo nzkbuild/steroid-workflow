@@ -10,7 +10,7 @@ native workflow instead of expecting users to wire external tools themselves.
 
 ## Source
 
-- `integrations/accesslint/`
+- `src/services/audit/accesslint-audit.cjs`
 
 ## Responsibilities
 

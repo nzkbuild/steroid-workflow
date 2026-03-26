@@ -3,9 +3,11 @@
  * steroid-run.cjs — The physical pipeline enforcer for AI-driven development.
  *
  * This file is the single-file CLI that gets copied to user projects during
- * `npx steroid-workflow init`. It must remain self-contained (no require()
- * to external modules). Utility functions also exist in src/utils/ for
- * unit testing, but this file is the canonical source of truth for distribution.
+ * `npx steroid-workflow init`. It must remain runnable standalone inside
+ * initialized projects. During local repo development, it may opportunistically
+ * delegate already-migrated commands into the modular runtime when those
+ * first-party sources are present. Utility functions also exist in src/utils/
+ * for unit testing, but this file remains the compatibility distribution shell.
  *
  * @module steroid-run
  * @version 6.3.0-beta.3
@@ -65,12 +67,19 @@ const { pathToFileURL } = require('url');
 
 /** @type {string} Current working directory (user's project root) */
 const targetDir = process.cwd();
-/** @type {string} Package root (used as a local-development fallback for imported assets) */
+/** @type {string} Package root (used as a local-development fallback for runtime assets and fork sources) */
 const packageRootDir = path.resolve(__dirname, '..');
-/** @type {string} Root directory that actually contains imported Steroid assets */
-const runtimeAssetsRootDir = fs.existsSync(path.join(targetDir, 'imported', 'imported-manifest.json'))
-    ? targetDir
-    : packageRootDir;
+/** @type {string} Steroid-owned runtime assets directory inside an initialized project */
+const installedRuntimeAssetsDir = path.join(targetDir, '.steroid', 'runtime');
+/** @type {string} Root directory that currently contains the runtime services and source manifests */
+const runtimeAssetsRootDir =
+    fs.existsSync(path.join(installedRuntimeAssetsDir, 'services')) ||
+    fs.existsSync(path.join(installedRuntimeAssetsDir, 'sources', 'manifest.json'))
+        ? installedRuntimeAssetsDir
+        : fs.existsSync(path.join(targetDir, 'services')) ||
+            fs.existsSync(path.join(targetDir, 'sources', 'forks', 'manifest.json'))
+          ? targetDir
+          : packageRootDir;
 /** @type {string} Path to circuit breaker state file */
 const stateFile = path.join(targetDir, '.memory', 'execution_state.json');
 /** @type {string} Root of steroid memory directory */
@@ -85,10 +94,16 @@ const knowledgeDir = path.join(memoryDir, 'knowledge');
 const metricsDir = path.join(memoryDir, 'metrics');
 /** @type {string} Directory for handoff reports */
 const reportsDir = path.join(memoryDir, 'reports');
-/** @type {string} Directory containing imported internalized source snapshots */
-const importedDir = path.join(runtimeAssetsRootDir, 'imported');
-/** @type {string} Directory containing internal runtime integrations */
-const integrationsDir = path.join(runtimeAssetsRootDir, 'integrations');
+/** @type {string} Directory containing fork-source manifests and local fork snapshots during repo development */
+const importedDir = fs.existsSync(path.join(runtimeAssetsRootDir, 'imported'))
+    ? path.join(runtimeAssetsRootDir, 'imported')
+    : path.join(runtimeAssetsRootDir, 'sources', 'forks');
+/** @type {string} Directory containing unified source manifests */
+const sourcesDir = path.join(runtimeAssetsRootDir, 'sources');
+/** @type {string} Directory containing first-party runtime services */
+const servicesDir = fs.existsSync(path.join(runtimeAssetsRootDir, 'services'))
+    ? path.join(runtimeAssetsRootDir, 'services')
+    : path.join(runtimeAssetsRootDir, 'src', 'services');
 
 // ═══════════════════════════════════════════════════════════════════
 // § UTILITY FUNCTIONS
@@ -303,18 +318,27 @@ function validateExecutionCommandTokens(commandTokens) {
 }
 
 /**
- * Reads the imported source manifest if present.
+ * Reads the fork source manifest if present.
  *
  * @returns {{sources?: Array<Record<string, any>>}}
  */
 function readImportedManifest() {
-    const manifestFile = path.join(importedDir, 'imported-manifest.json');
-    if (!fs.existsSync(manifestFile)) return { sources: [] };
-    return JSON.parse(fs.readFileSync(manifestFile, 'utf-8'));
+    const manifestFile = path.join(importedDir, 'manifest.json');
+    if (fs.existsSync(manifestFile)) {
+        return JSON.parse(fs.readFileSync(manifestFile, 'utf-8'));
+    }
+
+    const unifiedManifestFile = path.join(sourcesDir, 'manifest.json');
+    if (fs.existsSync(unifiedManifestFile)) {
+        const unified = JSON.parse(fs.readFileSync(unifiedManifestFile, 'utf-8'));
+        return { sources: unified.sources || [] };
+    }
+
+    return { sources: [] };
 }
 
 /**
- * Resolves an imported source entry by id.
+ * Resolves a fork source entry by id.
  *
  * @param {string} id
  * @returns {Record<string, any>|null}
@@ -325,7 +349,7 @@ function getImportedSource(id) {
 }
 
 /**
- * Resolves an imported source path relative to the current project.
+ * Resolves a fork source path relative to the current project.
  *
  * @param {string} id
  * @returns {string|null}
@@ -333,7 +357,8 @@ function getImportedSource(id) {
 function resolveImportedSourcePath(id) {
     const source = getImportedSource(id);
     if (!source) return null;
-    return path.join(runtimeAssetsRootDir, source.localPath);
+    const resolved = path.join(runtimeAssetsRootDir, source.localPath);
+    return fs.existsSync(resolved) ? resolved : null;
 }
 
 function includesAny(haystack, needles) {
@@ -405,26 +430,26 @@ function routeDesignSystems(prompt, options = {}) {
         };
     }
 
-    const importedSourceIds = ['ui-ux-pro-max', 'bencium-ux-designer'];
+    const importedSourceIds = ['steroid-design-system', 'steroid-ux-discipline'];
     let wrapperSkill = 'steroid-design-orchestrator';
 
     if (stack === 'react-native') {
-        importedSourceIds.push('vercel-react-native-skills');
+        importedSourceIds.push('steroid-native-rules');
         wrapperSkill = 'steroid-rn-implementation';
     } else {
-        importedSourceIds.push('anthropic-frontend-design');
-        importedSourceIds.push('vercel-web-design-guidelines');
-        importedSourceIds.push('vercel-web-interface-guidelines');
+        importedSourceIds.push('steroid-web-direction');
+        importedSourceIds.push('steroid-web-review');
+        importedSourceIds.push('steroid-interface-review');
         if (stack === 'react') {
-            importedSourceIds.push('vercel-react-best-practices');
-            importedSourceIds.push('vercel-composition-patterns');
+            importedSourceIds.push('steroid-react-rules');
+            importedSourceIds.push('steroid-composition-rules');
             wrapperSkill = 'steroid-react-implementation';
         }
     }
 
     if (isAudit) {
         wrapperSkill = 'steroid-web-design-review';
-        if (!importedSourceIds.includes('accesslint-core')) importedSourceIds.push('accesslint-core');
+        if (!importedSourceIds.includes('steroid-accessibility-audit')) importedSourceIds.push('steroid-accessibility-audit');
     }
 
     const uniqueSourceIds = importedSourceIds.filter(
@@ -504,6 +529,10 @@ function normalizeDesignRoutingReceipt(receipt) {
  * @returns {Record<string, any>|null}
  */
 function loadDesignRoutingReceipt(featureDir) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'frontend-receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.loadDesignRoutingReceipt === 'function') {
+        return receiptLoaders.loadDesignRoutingReceipt(featureDir, { rootDir: targetDir });
+    }
     const routeReceiptPath = path.join(featureDir, 'design-routing.json');
     const existing = readJsonFile(routeReceiptPath);
     const normalized = normalizeDesignRoutingReceipt(existing);
@@ -542,105 +571,47 @@ function resolveFeaturePromptForDesign(featureDir) {
     return candidates.join(' | ').slice(0, 1200).trim();
 }
 
-function resolvePythonRunner() {
-    const candidates = [
-        { command: 'python', args: [] },
-        { command: 'python3', args: [] },
-        { command: 'py', args: ['-3'] },
-    ];
-
-    for (const candidate of candidates) {
-        const probe = spawnSync(candidate.command, [...candidate.args, '--version'], {
-            cwd: targetDir,
-            stdio: 'pipe',
-            encoding: 'utf-8',
-            timeout: 5000,
-        });
-        if (!probe.error && probe.status === 0) {
-            return candidate;
-        }
-    }
-
-    return null;
-}
-
 function generateDesignSystemMarkdown(query, options = {}) {
-    const importedRoot = resolveImportedSourcePath('ui-ux-pro-max');
-    if (!importedRoot) {
+    const generatorPath = path.join(servicesDir, 'design', 'design-system-generator.cjs');
+    if (!fs.existsSync(generatorPath)) {
         return {
             ok: false,
-            error: 'ui-ux-pro-max is not installed in this Steroid project. Re-run `steroid-workflow init`.',
+            error: 'Steroid design-system generator is not installed in this project. Re-run `steroid-workflow init`.',
         };
     }
 
-    const searchScript = path.join(importedRoot, 'scripts', 'search.py');
-    if (!fs.existsSync(searchScript)) {
+    try {
+        const generator = require(generatorPath);
+        const content = generator.generateDesignSystemMarkdown(query, options).trim();
+        if (!content) {
+            return {
+                ok: false,
+                error: 'Steroid design-system generator returned empty output.',
+            };
+        }
+        return {
+            ok: true,
+            content,
+            generatorPath,
+        };
+    } catch (error) {
         return {
             ok: false,
-            error: `Missing imported design-system generator: ${path.relative(targetDir, searchScript)}`,
+            error: `Failed to run Steroid design-system generator: ${error.message}`,
         };
     }
-
-    const python = resolvePythonRunner();
-    if (!python) {
-        return {
-            ok: false,
-            error: 'Python is required to run the imported ui-ux-pro-max generator, but no python executable was found.',
-        };
-    }
-
-    const commandArgs = [...python.args, searchScript, query, '--design-system', '--format', 'markdown'];
-    if (hasText(options.projectName)) {
-        commandArgs.push('--project-name', options.projectName.trim());
-    }
-
-    const result = spawnSync(python.command, commandArgs, {
-        cwd: targetDir,
-        stdio: 'pipe',
-        encoding: 'utf-8',
-        timeout: 120000,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-    });
-
-    if (result.error) {
-        return {
-            ok: false,
-            error: `Failed to run imported design-system generator: ${result.error.message}`,
-        };
-    }
-
-    if (result.status !== 0) {
-        return {
-            ok: false,
-            error:
-                result.stderr?.trim() ||
-                result.stdout?.trim() ||
-                `Imported design-system generator exited with code ${result.status}.`,
-        };
-    }
-
-    const content = String(result.stdout || '').trim();
-    if (!content) {
-        return {
-            ok: false,
-            error: 'Imported design-system generator returned empty output.',
-        };
-    }
-
-    return {
-        ok: true,
-        content,
-        scriptPath: searchScript,
-        pythonCommand: [python.command, ...python.args].join(' '),
-    };
 }
 
 function resolveAccessLintRunnerPath() {
-    return path.join(integrationsDir, 'accesslint', 'run-audit.cjs');
+    const servicePath = path.join(servicesDir, 'audit', 'accesslint-audit.cjs');
+    if (fs.existsSync(servicePath)) return servicePath;
+    return '';
 }
 
 function resolveBrowserAuditRunnerPath() {
-    return path.join(integrationsDir, 'browser-audit', 'run-playwright-audit.cjs');
+    const servicePath = path.join(servicesDir, 'audit', 'browser-audit.cjs');
+    if (fs.existsSync(servicePath)) return servicePath;
+    return '';
 }
 
 function readFeatureArtifactText(featureDir, fileName) {
@@ -1066,12 +1037,20 @@ function buildUiRiskFindings({
 }
 
 function summarizeUiReviewStatus(findings) {
+    const uiArchivePolicy = loadRepoLocalUtilityModule(path.join('src', 'utils', 'ui-archive-policy.cjs'));
+    if (uiArchivePolicy && typeof uiArchivePolicy.summarizeUiReviewStatus === 'function') {
+        return uiArchivePolicy.summarizeUiReviewStatus(findings);
+    }
     if (findings.some((finding) => finding.severity === 'critical')) return 'FAIL';
     if (findings.some((finding) => finding.severity === 'medium')) return 'CONDITIONAL';
     return 'PASS';
 }
 
 function buildUiArchivePolicy(uiReviewReceipt, options = {}) {
+    const uiArchivePolicy = loadRepoLocalUtilityModule(path.join('src', 'utils', 'ui-archive-policy.cjs'));
+    if (uiArchivePolicy && typeof uiArchivePolicy.buildUiArchivePolicy === 'function') {
+        return uiArchivePolicy.buildUiArchivePolicy(uiReviewReceipt, options);
+    }
     if (!uiReviewReceipt?.status) {
         return {
             decision: 'PASS',
@@ -1358,6 +1337,10 @@ function normalizeUiReviewReceipt(receipt, feature) {
  * @returns {Record<string, any>|null}
  */
 function loadUiReviewReceipt(feature, featureDir) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'frontend-receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.loadUiReviewReceipt === 'function') {
+        return receiptLoaders.loadUiReviewReceipt(feature, featureDir);
+    }
     const uiReviewReceiptPath = path.join(featureDir, 'ui-review.json');
     const existing = readJsonFile(uiReviewReceiptPath);
     const normalized = normalizeUiReviewReceipt(existing, feature);
@@ -1387,6 +1370,10 @@ function buildAccesslintResultFromReceipt(receipt) {
 }
 
 function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
+    const frontendReview = loadRepoLocalUtilityModule(path.join('src', 'utils', 'frontend-review.cjs'));
+    if (frontendReview && typeof frontendReview.refreshUiReviewArtifacts === 'function') {
+        return frontendReview.refreshUiReviewArtifacts(feature, featureDir, options);
+    }
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
     const designReceipt = loadDesignRoutingReceipt(featureDir);
     const accesslintReceipt = readJsonFile(path.join(featureDir, 'accessibility.json'));
@@ -2430,6 +2417,10 @@ function saveReviewReceipt(featureDir, receipt) {
  * @returns {string}
  */
 function createArchiveStamp(date = new Date()) {
+    const trustHelpers = loadRepoLocalUtilityModule(path.join('src', 'utils', 'trust-helpers.cjs'));
+    if (trustHelpers && typeof trustHelpers.createArchiveStamp === 'function') {
+        return trustHelpers.createArchiveStamp(date);
+    }
     return date.toISOString().replace(/[:.]/g, '-');
 }
 
@@ -2442,6 +2433,10 @@ function createArchiveStamp(date = new Date()) {
  * @returns {string}
  */
 function getArchiveDestinationPath(archiveDir, archiveStamp, fileName) {
+    const trustHelpers = loadRepoLocalUtilityModule(path.join('src', 'utils', 'trust-helpers.cjs'));
+    if (trustHelpers && typeof trustHelpers.getArchiveDestinationPath === 'function') {
+        return trustHelpers.getArchiveDestinationPath(archiveDir, archiveStamp, fileName, fs.existsSync);
+    }
     let candidate = path.join(archiveDir, `${archiveStamp}-${fileName}`);
     if (!fs.existsSync(candidate)) {
         return candidate;
@@ -2463,6 +2458,10 @@ function getArchiveDestinationPath(archiveDir, archiveStamp, fileName) {
  * @returns {string|null}
  */
 function parseVerifyMarkdownStatus(content) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.parseVerifyMarkdownStatus === 'function') {
+        return receiptLoaders.parseVerifyMarkdownStatus(content);
+    }
     const match = content.match(/\*\*Status:\*\*\s*(PASS|FAIL|CONDITIONAL)/);
     return match ? match[1] : null;
 }
@@ -2475,6 +2474,10 @@ function parseVerifyMarkdownStatus(content) {
  * @returns {{ feature: string, status: string|null, reviewPassed: boolean, checks: Record<string, any>, deepRequested: boolean, deepCompleted: boolean, updatedAt: string|null, source: string }}
  */
 function loadVerifyReceipt(feature, featureDir) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.loadVerifyReceipt === 'function') {
+        return receiptLoaders.loadVerifyReceipt(feature, featureDir);
+    }
     const verifyJsonPath = path.join(featureDir, 'verify.json');
     const verifyMdPath = path.join(featureDir, 'verify.md');
     const existing = readJsonFile(verifyJsonPath);
@@ -2541,6 +2544,10 @@ function loadVerifyReceipt(feature, featureDir) {
  * @param {{ feature: string, status: string, reviewPassed: boolean, checks: Record<string, any>, updatedAt?: string, source?: string }} receipt
  */
 function saveVerifyReceipt(featureDir, receipt) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.saveVerifyReceipt === 'function') {
+        return receiptLoaders.saveVerifyReceipt(featureDir, receipt);
+    }
     writeJsonFile(path.join(featureDir, 'verify.json'), {
         feature: receipt.feature,
         status: receipt.status,
@@ -2560,6 +2567,10 @@ function saveVerifyReceipt(featureDir, receipt) {
  * @param {{ feature: string, requestedAt?: string, source?: string, summary?: string }} receipt
  */
 function saveRequestReceipt(featureDir, receipt) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.saveRequestReceipt === 'function') {
+        return receiptLoaders.saveRequestReceipt(featureDir, receipt);
+    }
     writeJsonFile(path.join(featureDir, 'request.json'), {
         feature: receipt.feature,
         requestedAt: receipt.requestedAt || new Date().toISOString(),
@@ -2576,6 +2587,10 @@ function saveRequestReceipt(featureDir, receipt) {
  * @returns {{ feature: string, requestedAt: string|null, source: string, summary: string|null }}
  */
 function loadRequestReceipt(feature, featureDir) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.loadRequestReceipt === 'function') {
+        return receiptLoaders.loadRequestReceipt(feature, featureDir);
+    }
     const requestJsonPath = path.join(featureDir, 'request.json');
     const existing = readJsonFile(requestJsonPath);
 
@@ -2612,6 +2627,10 @@ function loadRequestReceipt(feature, featureDir) {
  * @param {{ feature: string, status: string, sourceArtifacts?: string[], nextActions?: string[], options?: string[], updatedAt?: string, source?: string, summary?: string }} receipt
  */
 function saveCompletionReceipt(featureDir, receipt) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.saveCompletionReceipt === 'function') {
+        return receiptLoaders.saveCompletionReceipt(featureDir, receipt);
+    }
     writeJsonFile(path.join(featureDir, 'completion.json'), {
         feature: receipt.feature,
         status: receipt.status,
@@ -2633,6 +2652,10 @@ function saveCompletionReceipt(featureDir, receipt) {
  * @returns {{ feature: string, status: string|null, sourceArtifacts: string[], nextActions: string[], options: string[], updatedAt: string|null, source: string, summary: string|null }}
  */
 function loadCompletionReceipt(feature, featureDir) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.loadCompletionReceipt === 'function') {
+        return receiptLoaders.loadCompletionReceipt(feature, featureDir);
+    }
     const completionJsonPath = path.join(featureDir, 'completion.json');
     const existing = readJsonFile(completionJsonPath);
 
@@ -2694,6 +2717,10 @@ function loadCompletionReceipt(feature, featureDir) {
  * @returns {{ feature: string, status: string|null, consumedArtifacts: string[], updatedAt: string|null, source: string, summary: string|null }}
  */
 function loadExecutionReceipt(feature, featureDir) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.loadExecutionReceipt === 'function') {
+        return receiptLoaders.loadExecutionReceipt(feature, featureDir);
+    }
     const executionJsonPath = path.join(featureDir, 'execution.json');
     const existing = readJsonFile(executionJsonPath);
 
@@ -2773,6 +2800,10 @@ function syncTasksArtifact(feature, featureDir, planContent) {
  * @param {{ feature: string, status: string, consumedArtifacts?: string[], updatedAt?: string, source?: string, summary?: string }} receipt
  */
 function saveExecutionReceipt(featureDir, receipt) {
+    const receiptLoaders = loadRepoLocalUtilityModule(path.join('src', 'utils', 'receipt-loaders.cjs'));
+    if (receiptLoaders && typeof receiptLoaders.saveExecutionReceipt === 'function') {
+        return receiptLoaders.saveExecutionReceipt(featureDir, receipt);
+    }
     writeJsonFile(path.join(featureDir, 'execution.json'), {
         feature: receipt.feature,
         status: receipt.status,
@@ -3219,6 +3250,10 @@ function summarizeRouteProgress(analysis, artifacts) {
 }
 
 function buildFeatureArtifactState(featureDir) {
+    const pipelineStatus = loadRepoLocalUtilityModule(path.join('src', 'utils', 'pipeline-status.cjs'));
+    if (pipelineStatus && typeof pipelineStatus.buildFeatureArtifactState === 'function') {
+        return pipelineStatus.buildFeatureArtifactState(featureDir);
+    }
     const feature = path.basename(featureDir);
     const requestReceipt = loadRequestReceipt(feature, featureDir);
     const designReceipt = loadDesignRoutingReceipt(featureDir);
@@ -3248,6 +3283,10 @@ function getRouteDisplayPhases(route) {
 }
 
 function getPipelineStatusEntries(featureDir, promptReceipt) {
+    const pipelineStatus = loadRepoLocalUtilityModule(path.join('src', 'utils', 'pipeline-status.cjs'));
+    if (pipelineStatus && typeof pipelineStatus.getPipelineStatusEntries === 'function') {
+        return pipelineStatus.getPipelineStatusEntries(featureDir, promptReceipt);
+    }
     const route = promptReceipt ? promptReceipt.recommendedPipeline || 'standard-build' : 'standard-build';
     const expectedPhases = new Set(getRouteDisplayPhases(route));
     const designReceipt = loadDesignRoutingReceipt(featureDir);
@@ -3542,7 +3581,7 @@ Usage:
     node steroid-run.cjs design-prep --feature <feature> --write
                                                           Prepare UI design artifacts from prompt/spec/vibe context
     node steroid-run.cjs design-route "<message>"          Route UI work to Steroid's internal frontend systems
-    node steroid-run.cjs design-system "<message>"         Generate a design-system artifact from imported UI systems
+    node steroid-run.cjs design-system "<message>"         Generate a design-system artifact from Steroid frontend intelligence
     node steroid-run.cjs design-system --feature <feature> --write
                                                           Generate or refresh .memory/changes/<feature>/design-system.md
     node steroid-run.cjs prompt-health "<message>"         Score prompt clarity, ambiguity, and risk
@@ -3569,6 +3608,99 @@ Run 'recover' after any error for smart fix suggestions.
 `);
     process.exit(0);
 }
+
+const MODULAR_OWNED_COMMAND_NAMES = [
+    'archive',
+    'audit',
+    'dashboard',
+    'detect-intent',
+    'detect-tests',
+    'design-prep',
+    'design-route',
+    'design-system',
+    'gate',
+    'init-feature',
+    'commit',
+    'log',
+    'check-plan',
+    'stories',
+    'memory',
+    'normalize-prompt',
+    'pipeline-status',
+    'progress',
+    'prompt-health',
+    'report',
+    'reset',
+    'recover',
+    'review',
+    'run',
+    'scan',
+    'session-detect',
+    'smoke-test',
+    'status',
+    'verify',
+    'verify-feature',
+    'git-init',
+    'fs-cat',
+    'fs-cp',
+    'fs-find',
+    'fs-grep',
+    'fs-ls',
+    'fs-mkdir',
+    'fs-mv',
+    'fs-rm',
+];
+
+const MONOLITH_ONLY_COMMAND_NAMES = [];
+
+const MODULAR_OWNED_COMMANDS = new Set(MODULAR_OWNED_COMMAND_NAMES);
+const KNOWN_COMMANDS = [...new Set([...MODULAR_OWNED_COMMAND_NAMES, ...MONOLITH_ONLY_COMMAND_NAMES])];
+const repoLocalUtilityModuleCache = new Map();
+
+function loadRepoLocalUtilityModule(relativePath) {
+    const modulePath = path.join(packageRootDir, relativePath);
+    if (!fs.existsSync(modulePath)) {
+        return null;
+    }
+    if (repoLocalUtilityModuleCache.has(modulePath)) {
+        return repoLocalUtilityModuleCache.get(modulePath);
+    }
+    try {
+        const mod = require(modulePath);
+        repoLocalUtilityModuleCache.set(modulePath, mod);
+        return mod;
+    } catch {
+        repoLocalUtilityModuleCache.set(modulePath, null);
+        return null;
+    }
+}
+
+function tryRunModularCommand(argv) {
+    const command = argv[0] || '';
+    if (!MODULAR_OWNED_COMMANDS.has(command)) {
+        return false;
+    }
+
+    const dispatchPath = path.join(packageRootDir, 'src', 'cli', 'dispatch.cjs');
+    if (!fs.existsSync(dispatchPath)) {
+        return false;
+    }
+
+    try {
+        const { dispatchCli } = require(dispatchPath);
+        const result = dispatchCli(argv, { targetDir });
+        if (!result || !result.handled) {
+            return false;
+        }
+        if (result.stdout) process.stdout.write(result.stdout);
+        if (result.stderr) process.stderr.write(result.stderr);
+        process.exit(result.exitCode || 0);
+    } catch {
+        return false;
+    }
+}
+
+tryRunModularCommand(args);
 
 // ═══════════════════════════════════════════════════════════════════
 // § STATE INITIALIZATION
@@ -3757,7 +3889,7 @@ if (args[0] === 'report' && (!args[1] || args[1] === '--help' || args[1] === 'bu
 
 /** CMD: recover — Smart recovery guidance based on error count (5 graduated levels) */
 // --- Recover Command (Smart recovery — v4.0) ---
-// Source: src/forks/superpowers implementer-prompt.md status types
+// Source: Steroid internal reference
 if (args[0] === 'recover') {
     const level = state.error_count;
 
@@ -3961,7 +4093,7 @@ if (args[0] === 'pipeline-status') {
                 Array.isArray(designReceipt.importedSourceIds) && designReceipt.importedSourceIds.length > 0
                     ? designReceipt.importedSourceIds.join(', ')
                     : 'none';
-            console.log(`    - Imported sources: ${sources}`);
+            console.log(`    - Source inputs: ${sources}`);
         } else {
             console.log('    - Routing hint: UI work appears likely, but design-routing.json is missing.');
         }
@@ -4009,7 +4141,7 @@ if (args[0] === 'progress') {
 
 /** CMD: memory — Structured knowledge store (show/show-all/write/stats) */
 // --- Memory Command (Structured knowledge store — v4.0) ---
-// Source: src/forks/memorycore/master-memory.md + src/forks/ralph/AGENTS.md
+// Source: Steroid internal reference
 if (args[0] === 'memory') {
     const sub = args[1];
 
@@ -4992,13 +5124,13 @@ if (args[0] === 'git-init') {
     process.exit(0);
 }
 
-// ============================================================
-// PIPELINE ENFORCEMENT COMMANDS (Ported from ecosystem forks)
-// ============================================================
+// ==================================
+// PIPELINE ENFORCEMENT COMMANDS
+// ==================================
 
 /** CMD: init-feature — Create feature folder with progress.md template */
-// --- Init Feature Command (Ported from OpenSpec change-utils.ts) ---
-// Source: src/forks/openspec/src/utils/change-utils.ts validateChangeName() + createChange()
+// --- Init Feature Command ---
+// Source: Steroid internal reference
 if (args[0] === 'init-feature') {
     const slug = args[1];
     if (!slug) {
@@ -5007,7 +5139,7 @@ if (args[0] === 'init-feature') {
         process.exit(1);
     }
 
-    // Ported from OpenSpec validateChangeName() — kebab-case validation with specific error messages
+    // Kebab-case validation with specific error messages.
     const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
     if (!kebabCasePattern.test(slug)) {
         if (/[A-Z]/.test(slug)) {
@@ -5028,7 +5160,7 @@ if (args[0] === 'init-feature') {
         process.exit(1);
     }
 
-    // Ported from OpenSpec createChange() — directory creation with duplicate check
+    // Directory creation with duplicate check.
     const featureDir = path.join(changesDir, slug);
     if (fs.existsSync(featureDir)) {
         console.log(`[steroid-run] ⚠️  Feature "${slug}" already exists at ${featureDir}`);
@@ -5264,8 +5396,8 @@ if (args[0] === 'gate') {
 }
 
 /** CMD: commit — Atomic git commit with steroid format prefix */
-// --- Commit Command (Atomic commit — adapted from Ralph/GSD patterns) ---
-// Source: src/forks/ralph/prompt.md atomic commit format
+// --- Commit Command (Atomic commit) ---
+// Source: Steroid internal reference
 if (args[0] === 'commit') {
     const message = args.slice(1).join(' ');
     if (!message) {
@@ -5286,7 +5418,7 @@ if (args[0] === 'commit') {
 
     // v5.0.1: Protect .gitignore — auto-restore steroid entries before commit
     const gitignorePath = path.join(targetDir, '.gitignore');
-    const requiredGitignoreEntries = ['.memory/', 'steroid-run.cjs', '.agents/', 'src/forks/'];
+    const requiredGitignoreEntries = ['.memory/', '.steroid/', 'steroid-run.cjs', '.agents/'];
     if (fs.existsSync(gitignorePath)) {
         const giContent = fs.readFileSync(gitignorePath, 'utf-8');
         const missing = requiredGitignoreEntries.filter((e) => !giContent.includes(e));
@@ -5337,8 +5469,8 @@ if (args[0] === 'commit') {
 }
 
 /** CMD: log — Append a message to the feature progress log */
-// --- Log Command (Ported from Ralph ralph.sh progress pattern) ---
-// Source: src/forks/ralph/ralph.sh lines 76-79 (progress init) + prompt.md learnings format
+// --- Log Command ---
+// Source: Steroid internal reference
 if (args[0] === 'log') {
     const feature = args[1];
     const message = args.slice(2).join(' ');
@@ -5349,13 +5481,13 @@ if (args[0] === 'log') {
         process.exit(1);
     }
 
-    // Initialize progress file if it doesn't exist (ported from ralph.sh lines 76-79)
+    // Initialize progress file if it doesn't exist (following the Steroid progress baseline)
     if (!fs.existsSync(progressFile)) {
         const initContent = `# Steroid Progress Log\nStarted: ${new Date().toISOString()}\n\n## Codebase Patterns\n\n[Patterns will be added here as tasks are completed]\n\n---\n`;
         fs.writeFileSync(progressFile, initContent);
     }
 
-    // Append timestamped entry (adapted from Ralph prompt.md learnings format)
+    // Append timestamped entry.
     const timestamp = new Date().toISOString().replace('T', ' ').split('.')[0];
     const entry = `\n## [${timestamp}] — ${feature}: ${message}\n---\n`;
     fs.appendFileSync(progressFile, entry);
@@ -5415,7 +5547,7 @@ if (args[0] === 'check-plan') {
 
 /** CMD: stories — List prioritized stories or get next story to work on */
 // --- Stories Command (Prioritized story execution — v4.0) ---
-// Source: src/forks/spec-kit tasks-template.md + src/forks/ralph prd.json
+// Source: Steroid internal reference
 if (args[0] === 'stories') {
     const feature = args[1];
     const sub = args[2];
@@ -5524,8 +5656,8 @@ if (args[0] === 'stories') {
 }
 
 /** CMD: archive — Archive completed feature to .memory/archive/ with verify and completion receipts */
-// --- Archive Command (Ported from Ralph ralph.sh archive pattern) ---
-// Source: src/forks/ralph/ralph.sh lines 50-63 (archive previous run)
+// --- Archive Command ---
+// Source: Steroid internal reference
 if (args[0] === 'archive') {
     const feature = args[1];
     if (!feature) {
@@ -5703,8 +5835,8 @@ if (args[0] === 'archive') {
 // ============================================================
 
 /** CMD: scan — Bootstrap codebase context (writes context.md) */
-// --- Scan Command (Bootstraps request.json + context.md — adapted from GSD codebase-mapper) ---
-// Source: src/forks/gsd/agents/gsd-codebase-mapper.md
+// --- Scan Command (Bootstraps request.json + context.md) ---
+// Source: Steroid internal reference
 if (args[0] === 'scan') {
     const feature = args[1];
     if (!feature) {
@@ -6062,7 +6194,7 @@ if (args[0] === 'normalize-prompt') {
     process.exit(0);
 }
 
-/** CMD: design-route — Route UI work to Steroid's internalized frontend systems */
+/** CMD: design-route — Route UI work to Steroid's internal frontend source library */
 if (args[0] === 'design-route') {
     const featureFlagIndex = args.indexOf('--feature');
     const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
@@ -6117,7 +6249,7 @@ if (args[0] === 'design-route') {
         console.log(`  Audit only: ${route.auditOnly ? 'yes' : 'no'}`);
         console.log(`  Wrapper skill: ${route.wrapperSkill || 'none'}`);
         console.log(
-            `  Imported sources: ${route.importedSourceIds.length > 0 ? route.importedSourceIds.join(', ') : 'none'}`,
+            `  Source inputs: ${route.importedSourceIds.length > 0 ? route.importedSourceIds.join(', ') : 'none'}`,
         );
         if (args.includes('--write')) {
             console.log(`  Receipt: .memory/changes/${feature}/design-routing.json`);
@@ -6126,7 +6258,7 @@ if (args[0] === 'design-route') {
     process.exit(0);
 }
 
-/** CMD: design-prep — Generate UI design artifacts together from imported systems */
+/** CMD: design-prep — Generate UI design artifacts together from Steroid frontend intelligence */
 if (args[0] === 'design-prep') {
     const featureFlagIndex = args.indexOf('--feature');
     const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
@@ -6250,7 +6382,7 @@ if (args[0] === 'design-prep') {
         console.log(`  Audit only: ${payload.auditOnly ? 'yes' : 'no'}`);
         console.log(`  Wrapper skill: ${payload.wrapperSkill || 'none'}`);
         console.log(
-            `  Imported sources: ${payload.importedSourceIds.length > 0 ? payload.importedSourceIds.join(', ') : 'none'}`,
+            `  Source inputs: ${payload.importedSourceIds.length > 0 ? payload.importedSourceIds.join(', ') : 'none'}`,
         );
         if (payload.skipped) {
             console.log(`  Result: ${bootstrap.reason}`);
@@ -6278,7 +6410,7 @@ if (args[0] === 'design-prep') {
     process.exit(0);
 }
 
-/** CMD: design-system — Generate a design-system artifact from imported UI systems */
+/** CMD: design-system — Generate a design-system artifact from Steroid frontend intelligence */
 if (args[0] === 'design-system') {
     const featureFlagIndex = args.indexOf('--feature');
     const feature = featureFlagIndex !== -1 ? args[featureFlagIndex + 1] : null;
@@ -6390,7 +6522,7 @@ if (args[0] === 'design-system') {
         console.log(`  Stack: ${route.stack}`);
         console.log(`  Wrapper skill: ${route.wrapperSkill || 'none'}`);
         console.log(
-            `  Imported sources: ${route.importedSourceIds.length > 0 ? route.importedSourceIds.join(', ') : 'none'}`,
+            `  Source inputs: ${route.importedSourceIds.length > 0 ? route.importedSourceIds.join(', ') : 'none'}`,
         );
         console.log(`  Artifact: .memory/changes/${feature}/design-system.md`);
     } else {
@@ -6465,7 +6597,7 @@ if (args[0] === 'detect-intent') {
 
 /** CMD: detect-tests — Detect test framework configurations in the project */
 // --- Detect Tests Command (Test framework auto-detection) ---
-// Source: src/forks/gsd/agents/gsd-phase-researcher.md validation architecture
+// Source: Steroid internal reference
 if (args[0] === 'detect-tests') {
     console.log('[steroid-run] 🔍 Detecting test infrastructure...');
     console.log('');
@@ -7362,7 +7494,7 @@ if (args[0] === 'verify-feature') {
 
 /** CMD: review — Two-stage review system for feature validation. */
 // --- Review Command (Two-stage review system — v5.0) ---
-// Source: src/forks/superpowers/subagent.md + spec-reviewer-prompt.md + code-quality-reviewer-prompt.md
+// Source: Steroid internal reference
 if (args[0] === 'review') {
     const sub = args[1];
     const feature = args[2];
@@ -7386,7 +7518,7 @@ Stages:
 
 Output: .memory/changes/<feature>/review.md + review.json
 
-Source: src/forks/superpowers/subagent.md (two-stage review flow)
+Source: Steroid internal reference
 `);
         process.exit(0);
     }
@@ -7507,7 +7639,7 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         console.log('  4. Determine status: ✅ IMPLEMENTED | ⚠️ PARTIAL | ❌ MISSING | 🔄 EXTRA');
         console.log('  5. Write findings to .memory/changes/' + feature + '/review.md');
         console.log('');
-        console.log('  Source: src/forks/superpowers/spec-reviewer-prompt.md');
+        console.log('  Source: Steroid internal reference
         console.log("  CRITICAL: Do NOT trust the implementer's report. Read the actual code.");
         console.log('');
 
@@ -7552,7 +7684,7 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
         console.log('  4. Categorize: 🛑 Critical | ⚠️ Important | ℹ️ Minor');
         console.log('  5. Update Stage 2 section in review.md');
         console.log('');
-        console.log('  Source: src/forks/superpowers/code-quality-reviewer-prompt.md');
+        console.log('  Source: Steroid internal reference
         process.exit(0);
     }
 
@@ -7562,7 +7694,7 @@ Source: src/forks/superpowers/subagent.md (two-stage review flow)
 
 /** CMD: report (generate/show/list) — AI-to-Human handoff reports */
 // --- Report Command (AI-to-Human handoff — v5.0) ---
-// Source: src/forks/gsd research-synthesizer + src/forks/ralph progress.txt + src/forks/spec-kit success-criteria
+// Source: Steroid internal reference
 if (args[0] === 'report') {
     const sub = args[1];
     const feature = args[2];
@@ -7578,7 +7710,7 @@ Usage:
 
 Reports are written to .memory/reports/<feature>.md
 
-Source: src/forks/gsd research-synthesizer (executive summary pattern)
+Source: Steroid internal reference
 `);
         process.exit(0);
     }
@@ -7662,7 +7794,7 @@ Source: src/forks/gsd research-synthesizer (executive summary pattern)
 
 /** CMD: dashboard — Project health analytics overview */
 // --- Dashboard Command (Analytics dashboard — v5.0) ---
-// Source: src/forks/ralph progress.txt metrics + src/forks/gsd confidence-breakdown
+// Source: Steroid internal reference
 if (args[0] === 'dashboard') {
     console.log('\n[steroid-run] 📊 Steroid-Workflow Dashboard\n');
 
@@ -8056,48 +8188,9 @@ if (!ALLOWED_COMMANDS.has(baseCommand)) {
         }
         return dp[m][n];
     };
-    const KNOWN_CMDS = [
-        'run',
-        'reset',
-        'recover',
-        'status',
-        'pipeline-status',
-        'progress',
-        'memory',
-        'audit',
-        'init-feature',
-        'gate',
-        'commit',
-        'log',
-        'check-plan',
-        'stories',
-        'archive',
-        'scan',
-        'detect-intent',
-        'normalize-prompt',
-        'design-prep',
-        'design-route',
-        'design-system',
-        'prompt-health',
-        'session-detect',
-        'detect-tests',
-        'verify-feature',
-        'review',
-        'report',
-        'dashboard',
-        'verify',
-        'fs-cat',
-        'fs-find',
-        'fs-grep',
-        'fs-ls',
-        'fs-mkdir',
-        'fs-cp',
-        'fs-mv',
-        'fs-rm',
-    ];
     let bestMatch = null,
         bestDist = Infinity;
-    for (const cmd of KNOWN_CMDS) {
+    for (const cmd of KNOWN_COMMANDS) {
         const d = levenshtein(baseCommand, cmd);
         if (d < bestDist) {
             bestDist = d;

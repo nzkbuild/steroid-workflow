@@ -16,7 +16,18 @@ const runtimeSource = fs.readFileSync(path.join(root, 'bin', 'steroid-run.cjs'),
 const smokeSource = fs.readFileSync(path.join(root, 'test', 'smoke.test.cjs'), 'utf-8');
 const unitSource = fs.readFileSync(path.join(root, 'test', 'unit', 'v6-commands.test.cjs'), 'utf-8');
 const designRoutingSource = fs.readFileSync(path.join(root, 'src', 'utils', 'design-routing.cjs'), 'utf-8');
-const importedManifest = JSON.parse(fs.readFileSync(path.join(root, 'imported', 'imported-manifest.json'), 'utf-8'));
+const forkManifest = JSON.parse(fs.readFileSync(path.join(root, 'sources', 'forks', 'manifest.json'), 'utf-8'));
+const forkDirectories = fs
+    .readdirSync(path.join(root, 'sources', 'forks'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+const publicSourcesCatalog = JSON.parse(
+    fs.readFileSync(path.join(root, 'src', 'services', 'sources', 'catalog.json'), 'utf-8'),
+);
+const publicSourcesPolicy = JSON.parse(
+    fs.readFileSync(path.join(root, 'src', 'services', 'sources', 'policy.json'), 'utf-8'),
+);
 const readmeSource = fs.readFileSync(path.join(root, 'README.md'), 'utf-8');
 const architectureSource = fs.readFileSync(path.join(root, 'ARCHITECTURE.md'), 'utf-8');
 const researchSkillSource = fs.readFileSync(path.join(root, 'skills', 'steroid-research', 'SKILL.md'), 'utf-8');
@@ -64,15 +75,43 @@ check(
     lock.packages && lock.packages[''] && lock.packages[''].version === pkg.version,
     `package-lock.json root package version ${lock.packages?.['']?.version} does not match package.json ${pkg.version}.`,
 );
-check(Array.isArray(importedManifest.sources), 'imported/imported-manifest.json should define a sources array.');
-check(importedManifest.sources.length === 9, 'imported/imported-manifest.json should track 9 imported sources.');
-for (const source of importedManifest.sources || []) {
-    check(source.id, 'Each imported source should define an id.');
-    check(source.localPath, `Imported source ${source.id || '(missing id)'} should define localPath.`);
+check(Array.isArray(forkManifest.sources), 'The private source manifest should define a sources array.');
+check(
+    forkManifest.sources.length === forkDirectories.length,
+    `The private source manifest should track every private intake directory (${forkDirectories.length} expected, got ${forkManifest.sources.length}).`,
+);
+check(Array.isArray(publicSourcesCatalog.sources), 'src/services/sources/catalog.json should define a sources array.');
+check(
+    publicSourcesPolicy.publicPackage && publicSourcesPolicy.publicPackage.allowRawUpstreamTrees === false,
+    'src/services/sources/policy.json should forbid raw upstream tree shipping.',
+);
+for (const source of forkManifest.sources || []) {
+    check(source.id, 'Each fork source should define an id.');
+    check(source.localPath, `Fork source ${source.id || '(missing id)'} should define localPath.`);
     if (source.localPath) {
-        check(fs.existsSync(path.join(root, source.localPath)), `Imported source path missing: ${source.localPath}`);
+        check(fs.existsSync(path.join(root, source.localPath)), `Fork source path missing: ${source.localPath}`);
     }
 }
+const manifestForkDirectories = (forkManifest.sources || [])
+    .map((source) => path.basename(source.localPath))
+    .sort();
+const privateForkPrefix = ['sources', 'forks'].join('/');
+check(
+    JSON.stringify(manifestForkDirectories) === JSON.stringify(forkDirectories),
+    'The private source manifest should register every private intake directory.',
+);
+check(
+    (publicSourcesCatalog.sources || []).some((source) => source.id === 'browser-audit'),
+    'src/services/sources/catalog.json should classify the browser-audit source.',
+);
+check(
+    (publicSourcesCatalog.sources || []).some((source) => source.id === 'steroid-design-system'),
+    'src/services/sources/catalog.json should classify the Steroid design system capability.',
+);
+const accesslintSource = (publicSourcesCatalog.sources || []).find((source) => source.id === 'steroid-accessibility-audit');
+check(accesslintSource?.localPath === 'src/services/audit/accesslint-audit.cjs', 'src/services/sources/catalog.json should point steroid-accessibility-audit at the first-party audit service.');
+const browserAuditSource = (publicSourcesCatalog.sources || []).find((source) => source.id === 'browser-audit');
+check(browserAuditSource?.localPath === 'src/services/audit/browser-audit.cjs', 'src/services/sources/catalog.json should point browser-audit at the first-party audit service.');
 
 const latestChangelogMatch = changelogSource.match(new RegExp(`^## \\[${SEMVER_PATTERN}\\]`, 'm'));
 check(latestChangelogMatch, 'CHANGELOG.md should contain a semver release heading.');
@@ -161,12 +200,28 @@ check(
 check(cliSource.includes('review ui <feature>'), 'bin/cli.js Maestro rules should mention review ui <feature>.');
 check(cliSource.includes('--url <preview>'), 'bin/cli.js Maestro rules should mention verify-feature --url <preview>.');
 check(
-    cliSource.includes('Imported frontend systems installed to imported/'),
-    'bin/cli.js should copy imported frontend systems into user projects.',
+    !cliSource.includes("copyRecursiveSync(path.join(sourceDir, 'imported')"),
+    'bin/cli.js should no longer copy removed top-level imported trees into user projects.',
 );
 check(
-    cliSource.includes('ui-ux-pro-max'),
-    'bin/cli.js Maestro rules should mention the ui-ux-pro-max frontend design pairing.',
+    !cliSource.includes('.steroid/runtime/integrations/'),
+    'bin/cli.js should no longer install runtime integrations under .steroid/runtime/integrations/.',
+);
+check(
+    cliSource.includes('.steroid/runtime/services/'),
+    'bin/cli.js should install runtime services under .steroid/runtime/services/.',
+);
+check(
+    !cliSource.includes('.steroid/runtime/sources/'),
+    'bin/cli.js should not install private source manifests under .steroid/runtime/sources/.',
+);
+check(
+    cliSource.includes("const gitignoreEntries = ['.memory/', '.steroid/', 'steroid-run.cjs', '.agents/'];"),
+    'bin/cli.js should gitignore the .steroid runtime asset directory.',
+);
+check(
+    cliSource.includes('Steroid frontend intelligence'),
+    'bin/cli.js Maestro rules should describe the Steroid frontend intelligence layer.',
 );
 check(
     architectureSource.includes('verify-feature <feature> [--deep]'),
@@ -196,20 +251,42 @@ check(readmeSource.includes('ui-audit.json'), 'README.md should mention ui-audit
 check(readmeSource.includes('ui-review.md'), 'README.md should mention ui-review.md.');
 check(readmeSource.includes('ui-review.json'), 'README.md should mention ui-review.json.');
 check(readmeSource.includes('review ui <feature>'), 'README.md should mention review ui <feature>.');
+check(readmeSource.includes('Frontend Intelligence'), 'README.md should present the frontend system as Steroid-owned frontend intelligence.');
 check(
     readmeSource.includes('archive will stay blocked'),
     'README.md should mention archive blocking on ui-review.json FAIL.',
 );
 check(readmeSource.includes('--url <preview>'), 'README.md should mention verify-feature --url <preview>.');
-check(readmeSource.includes('ui-ux-pro-max'), 'README.md should mention the ui-ux-pro-max frontend pairing.');
 check(
-    pkg.files.includes('imported/'),
-    'package.json files array should include imported/ so internalized sources ship with Steroid.',
+    architectureSource.includes("Steroid's internal frontend intelligence"),
+    'ARCHITECTURE.md should describe design routing through the Steroid frontend intelligence layer.',
 );
 check(
-    pkg.files.includes('integrations/'),
-    'package.json files array should include integrations/ so internalized integrations ship with Steroid.',
+    !pkg.files.includes('imported/'),
+    'package.json files array should not include removed top-level imported trees.',
 );
+check(
+    !pkg.files.includes('integrations/'),
+    'package.json files array should not include removed integrations trees now that audit logic lives in first-party services.',
+);
+check(
+    pkg.files.includes('src/services/'),
+    'package.json files array should include src/services/ for first-party runtime services.',
+);
+check(
+    !pkg.files.includes(`${privateForkPrefix}/`),
+    'package.json files array should not include the private intake tree.',
+);
+check(
+    !pkg.files.includes('sources/'),
+    'package.json files array should not include private sources/ metadata.',
+);
+check(
+    pkg.files.includes('src/services/'),
+    'package.json files array should include src/services/ so public source catalog metadata ships with runtime services.',
+);
+check(!pkg.files.includes('contracts/'), 'package.json files array should not include contracts/.');
+check(!pkg.files.includes('ARCHITECTURE.md'), 'package.json files array should not include ARCHITECTURE.md.');
 check(
     runtimeSource.includes('archive <feature>                 Archive completed feature (requires verify.json + completion.json)'),
     'bin/steroid-run.cjs help text should mention archive requires verify.json + completion.json.',
@@ -282,8 +359,8 @@ check(
     'skills/steroid-engine/SKILL.md should mention design-system.md.',
 );
 check(
-    designOrchestratorSource.includes('imported/ui-ux-pro-max/'),
-    'skills/steroid-design-orchestrator/SKILL.md should reference imported design sources.',
+    designOrchestratorSource.includes('steroid-design-system'),
+    'skills/steroid-design-orchestrator/SKILL.md should reference the Steroid design source inputs.',
 );
 check(engineSkillSource.includes('verify.json'), 'skills/steroid-engine/SKILL.md should mention verify.json receipts.');
 check(verifySkillSource.includes('verify.json'), 'skills/steroid-verify/SKILL.md should mention verify.json receipts.');
@@ -329,8 +406,8 @@ check(
     'src/utils/design-routing.cjs should route UI work through Steroid wrapper skills.',
 );
 check(
-    designRoutingSource.includes('accesslint-core'),
-    'src/utils/design-routing.cjs should include AccessLint for audit routes.',
+    designRoutingSource.includes('steroid-accessibility-audit'),
+    'src/utils/design-routing.cjs should include the Steroid accessibility audit capability for audit routes.',
 );
 check(
     runtimeSource.includes('Design Intelligence'),
@@ -371,12 +448,12 @@ check(
     'bin/steroid-run.cjs should auto-bootstrap UI design artifacts during research gate.',
 );
 check(
-    fs.existsSync(path.join(root, 'integrations', 'accesslint', 'run-audit.cjs')),
-    'integrations/accesslint/run-audit.cjs should exist.',
+    fs.existsSync(path.join(root, 'src', 'services', 'audit', 'accesslint-audit.cjs')),
+    'src/services/audit/accesslint-audit.cjs should exist.',
 );
 check(
-    fs.existsSync(path.join(root, 'integrations', 'browser-audit', 'run-playwright-audit.cjs')),
-    'integrations/browser-audit/run-playwright-audit.cjs should exist.',
+    fs.existsSync(path.join(root, 'src', 'services', 'audit', 'browser-audit.cjs')),
+    'src/services/audit/browser-audit.cjs should exist.',
 );
 check(
     typeof pkg.scripts?.['format:check'] === 'string' && pkg.scripts['format:check'].includes('prettier --check'),

@@ -17,17 +17,17 @@ The governed live outputs for this skill are:
 
 The live governed authority chain for this phase is:
 
-- `governed/review-and-verify/MODULE.yaml`
-- `governed/review-and-verify/LIVE-MAPPING.md`
-- `governed/review-and-verify/PROVENANCE.md`
-- `governed/review-and-verify/PARITY.md`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
 
 Adapted from:
 
-- **GSD Verifier** (see `src/forks/gsd/agents/gsd-verifier.md`) — Goal-backward verification, 3-level artifact checks, anti-pattern scanning
-- **Superpowers Spec Compliance Review** (see `src/forks/superpowers/spec-reviewer-prompt.md`) — Independent requirement verification
-- **Superpowers Code Quality Review** (see `src/forks/superpowers/code-quality-reviewer-prompt.md`) — Structural quality checks
-- **Superpowers Verification Before Completion** (see `src/forks/superpowers/verification-before-completion/SKILL.md`) — Evidence-before-claims gate
+- **Steroid Verifier** (see `Steroid internal reference`) — Goal-backward verification, 3-level artifact checks, anti-pattern scanning
+- **Steroid Spec Compliance Review** (see `Steroid internal reference`) — Independent requirement verification
+- **Steroid Code Quality Review** (see `Steroid internal reference`) — Structural quality checks
+- **Steroid Verification Before Completion** (see `Steroid internal reference`) — Evidence-before-claims gate
 
 ## The Iron Law
 
@@ -35,7 +35,7 @@ Adapted from:
 NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 ```
 
-Source: `src/forks/superpowers/verification-before-completion/SKILL.md` — "Claiming work is complete without verification is dishonesty, not efficiency."
+Source: `Steroid internal reference` — "Claiming work is complete without verification is dishonesty, not efficiency."
 
 If you haven't run the verification command and seen its output, you cannot claim the feature passes.
 
@@ -65,7 +65,7 @@ Then run the feature verification pre-check:
 node steroid-run.cjs verify-feature <feature>
 ```
 
-This is the core verification gate. It confirms review status, task completion, runtime checks, runs the internalized AccessLint audit when local HTML targets exist, and refreshes `ui-review.md` / `ui-review.json` whenever the latest verification evidence changes the frontend review picture. The receipt records freshness metadata so later handoff surfaces can show who refreshed the frontend verdict and which evidence triggered it.
+This is the core verification gate. It confirms review status, task completion, runtime checks, runs the Steroid-owned AccessLint audit when local HTML targets exist, and refreshes `ui-review.md` / `ui-review.json` whenever the latest verification evidence changes the frontend review picture. The receipt records freshness metadata so later handoff surfaces can show who refreshed the frontend verdict and which evidence triggered it.
 
 If you want optional deep scans for runtime UI behavior, code smells, and license auditing, run:
 
@@ -108,7 +108,7 @@ The two-stage review produces the governed review artifacts:
 - `.memory/changes/<feature>/review.md` — human-readable review report
 - `.memory/changes/<feature>/review.json` — machine-readable review receipt
 
-Source: `src/forks/superpowers/subagent.md` — "Spec compliance first, then code quality. Never skip reviews."
+Source: `Steroid internal reference` — "Spec compliance first, then code quality. Never skip reviews."
 
 ## The Verification Process
 
@@ -168,7 +168,7 @@ Do NOT mark verify.md as PASS if mandatory success criteria exist but none were 
 
 ### Step 2: Spec Compliance Review
 
-**Source: `src/forks/superpowers/spec-reviewer-prompt.md`**
+**Source: `Steroid internal reference`**
 
 > "Your job is to compare the task's stated requirements against the actual code. Do NOT trust the implementer's report. Read the actual code."
 
@@ -182,11 +182,11 @@ For EACH acceptance criterion in spec.md:
     - ❌ **MISSING** — No code found that addresses this criterion
     - 🔄 **EXTRA** — Code does something NOT in the spec (flag for review)
 
-**Critical mindset** (from GSD Verifier): "Do NOT trust SUMMARY.md claims. SUMMARYs document what the AI SAID it did. You verify what ACTUALLY exists in the code. These often differ."
+**Critical mindset** (from Steroid Verifier): "Do NOT trust SUMMARY.md claims. SUMMARYs document what the AI SAID it did. You verify what ACTUALLY exists in the code. These often differ."
 
 ### Step 3: Code Quality Review
 
-**Source: `src/forks/superpowers/code-quality-reviewer-prompt.md`**
+**Source: `Steroid internal reference`**
 
 Review all files created or modified during the feature. For each file, check:
 
@@ -195,7 +195,7 @@ Review all files created or modified during the feature. For each file, check:
 3. **Error Handling** — Are errors caught and handled appropriately?
 4. **No Stubs** — Are there any placeholder implementations?
 
-**Anti-Pattern Scanning** (from GSD Verifier):
+**Anti-Pattern Scanning** (from Steroid Verifier):
 
 ```bash
 # TODO/FIXME/placeholder comments
@@ -466,8 +466,8 @@ Instead:
 
 ## Referenced Forks
 
-- `src/forks/gsd/agents/gsd-verifier.md` — The complete goal-backward verification system (582 lines)
-- `src/forks/superpowers/spec-reviewer-prompt.md` — Spec compliance review template (62 lines)
-- `src/forks/superpowers/code-quality-reviewer-prompt.md` — Code quality review template (27 lines)
-- `src/forks/superpowers/verification-before-completion/SKILL.md` — Evidence-before-claims gate (140 lines)
-- `src/forks/superpowers/systematic-debugging/SKILL.md` — If verification reveals bugs, use this for diagnosis
+- `Steroid internal reference` — The complete goal-backward verification system (582 lines)
+- `Steroid internal reference` — Spec compliance review template (62 lines)
+- `Steroid internal reference` — Code quality review template (27 lines)
+- `Steroid internal reference` — Evidence-before-claims gate (140 lines)
+- `Steroid internal reference` — If verification reveals bugs, use this for diagnosis

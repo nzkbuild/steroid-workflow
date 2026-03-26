@@ -121,7 +121,7 @@ Steroid is designed for real repos, not just toy greenfield demos. It helps redu
 
 Feature building and debugging are different jobs. Steroid gives them different paths.
 
-## Internalized Frontend Systems
+## Frontend Intelligence
 
 ### Frontend Support
 
@@ -150,7 +150,7 @@ node steroid-run.cjs verify-feature <feature> --deep --url <preview>
 node steroid-run.cjs review ui <feature>
 ```
 
-Steroid pairs this path with internalized frontend systems, including `ui-ux-pro-max`, so UI-heavy work can move through a more opinionated design-and-review flow instead of pure freeform prompting.
+Steroid pairs this path with its internal frontend intelligence layer so UI-heavy work can move through a more opinionated design-and-review flow instead of pure freeform prompting.
 
 If `ui-review.json` is `FAIL`, archive will stay blocked until the frontend issues are resolved.
 
@@ -226,21 +226,6 @@ node steroid-run.cjs audit
 ```
 
 This checks the enforcement/runtime setup inside the current project.
-
-## For Advanced Users
-
-If you want the internal model, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
-That document covers:
-
-- command reference
-- gate behavior
-- intent routing internals
-- governed live baseline
-- artifact surfaces
-- runtime architecture
-
-The live governed baseline also exists under `governed/` for the subsystems already migrated into explicit contract form.
 
 ## License
 

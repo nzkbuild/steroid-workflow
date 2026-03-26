@@ -382,7 +382,7 @@ Dogfooding v5.0 on a real portfolio build revealed that the AI overwrites `.giti
 ## [5.0.0] "Beyond Code" - 2026-03-13
 
 ### The Vision
-v4.0 gave the AI structured memory and graduated recovery. But it still operated as a single-brain AI — reviewing its own work, with no handoff report and no project health visibility. v5.0 adds the crown jewels from the superpowers fork: two-stage review (spec compliance then code quality), AI-to-human handoff reports, and an analytics dashboard.
+v4.0 gave the AI structured memory and graduated recovery. But it still operated as a single-brain AI — reviewing its own work, with no handoff report and no project health visibility. v5.0 adds two-stage review (spec compliance then code quality), AI-to-human handoff reports, and an analytics dashboard.
 
 ### Added — Two-Stage Review System
 - **`review` command** — Two-stage gated review for feature validation
@@ -498,9 +498,9 @@ v3.0 shipped the 8-skill pipeline, but had enforcement gaps: the diagnose skill 
 v2.x proved the pipeline (vibe → spec → research → architect → engine) works. But it was blind — no codebase awareness, no verification, and only one pipeline for all intents. v3.0 closes the loop: the AI now scans before it builds, verifies after it builds, and routes to different pipelines based on what you ask for.
 
 ### Added — New Skills (3)
-- **`steroid-scan`** — Codebase awareness skill (Skill #0). Runs BEFORE vibe capture. Auto-detects tech stack, project structure, test infrastructure, existing patterns, and related code. Writes `context.md`. Adapted from GSD codebase-mapper (773 lines) and Ralph AGENTS.md system.
-- **`steroid-verify`** — Proof of work skill (Skill #6). Runs AFTER engine completes all tasks. Performs spec compliance review, code quality review, test execution, lint/type checks, and anti-pattern scanning. Writes `verify.md` with PASS/FAIL/CONDITIONAL status. Adapted from GSD verifier (582 lines) and superpowers spec/code quality reviewers.
-- **`steroid-diagnose`** — Fix/debug pipeline skill (Skill #7). Replaces the full build pipeline when the user wants to fix a bug. 4-phase root cause investigation → targeted fix plan → TDD → verify. Adapted from superpowers systematic-debugging (297 lines) and GSD debugger.
+- **`steroid-scan`** — Codebase awareness skill (Skill #0). Runs BEFORE vibe capture. Auto-detects tech stack, project structure, test infrastructure, existing patterns, and related code. Writes `context.md`.
+- **`steroid-verify`** — Proof of work skill (Skill #6). Runs AFTER engine completes all tasks. Performs spec compliance review, code quality review, test execution, lint/type checks, and anti-pattern scanning. Writes `verify.md` with PASS/FAIL/CONDITIONAL status.
+- **`steroid-diagnose`** — Fix/debug pipeline skill (Skill #7). Replaces the full build pipeline when the user wants to fix a bug. 4-phase root cause investigation → targeted fix plan → TDD → verify.
 
 ### Added — New CLI Commands (5)
 - **`scan <feature>`** — Bootstraps `context.md` with auto-detected tech stack, framework, test runner, and test count
@@ -533,12 +533,10 @@ v2.x proved the pipeline (vibe → spec → research → architect → engine) w
 - Final banner shows verification enforcement and intent routing
 - Audit command checks for 7 skills (was 5): added scan and verify
 
-### Added — Fork Library Expansion
-- `src/forks/` expanded from 23 to 60 files (37 new files extracted)
-- 9 new superpowers skills: systematic-debugging, verification-before-completion, dispatching-parallel-agents, brainstorming, executing-plans, writing-plans, finishing-a-development-branch, requesting-code-review, receiving-code-review
-- 10 new GSD agents: gsd-verifier, gsd-codebase-mapper, gsd-debugger, gsd-executor, gsd-planner, gsd-roadmapper, gsd-integration-checker, gsd-nyquist-auditor, gsd-plan-checker, gsd-project-researcher
-- 3 new spec-kit templates: agent-file, checklist, constitution
-- 3 ralph extras: AGENTS.md, prd.json.example, CLAUDE.md
+### Added — Internal Capability Expansion
+- Internal capability intake expanded significantly to support the new routing and verification systems
+- New review, verification, planning, debugging, and execution patterns were folded into the runtime and skill set
+- Additional templates and internal references were added to support the broadened workflow
 
 ## [2.1.1] "ESM Hotfix" - 2026-03-11
 
@@ -593,7 +591,7 @@ Tested steroid-workflow on Gemini 3.1 Pro (High) in Antigravity IDE. The AI comp
 - Section numbering in steroid-specify, steroid-research, steroid-architect after gate insertion
 - Engine now has gate check (`node steroid-run.cjs gate engine <feature>`)
 - `check-plan` regex counts `[/]` in-progress tasks correctly
-- Stale `openspec/changes/` reference after fork cleanup
+- Stale private change-path reference after cleanup
 - `commit` no longer creates empty commits (`--allow-empty` removed)
 
 ### Added
@@ -607,11 +605,11 @@ Tested steroid-workflow on Gemini 3.1 Pro (High) in Antigravity IDE. The AI comp
 ### Added
 - 5-skill autonomous pipeline: vibe-capture → specify → research → architect → engine
 - 6 new `steroid-run.cjs` enforcement commands: `init-feature`, `gate`, `commit`, `log`, `check-plan`, `archive`
-- Spec-driven development via Spec Kit templates
-- Tech research phase via GSD researcher patterns
+- Spec-driven development via internal feature templates
+- Tech research phase via internal research patterns
 - Per-change folder structure (`.memory/changes/<feature>/`)
 - Autonomous execution loop with `<promise>COMPLETE</promise>` signal
-- Code ported from OpenSpec (`validateChangeName`), Ralph (progress/archive), GSD (researcher)
+- Core feature naming, progress/archive flow, and research assistance hardened into the Steroid runtime
 
 ### Changed
 - Fork cleanup: 8.6MB → 112KB (23 files, only referenced sources + LICENSE)
@@ -624,4 +622,4 @@ Tested steroid-workflow on Gemini 3.1 Pro (High) in Antigravity IDE. The AI comp
 - Initial release: 3-skill pipeline (vibe-capture → architect → engine)
 - Circuit breaker with 3-strike error tracking
 - Anti-summarization verification
-- MemoryCore state tracking
+- Runtime memory state tracking

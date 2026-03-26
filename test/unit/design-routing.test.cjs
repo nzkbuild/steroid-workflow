@@ -52,10 +52,10 @@ test('routes React dashboard work to the React implementation wrapper', () => {
     if (route.wrapperSkill !== 'steroid-react-implementation') {
         throw new Error(`Unexpected wrapper: ${route.wrapperSkill}`);
     }
-    if (!route.importedSourceIds.includes('vercel-react-best-practices')) {
+    if (!route.importedSourceIds.includes('steroid-react-rules')) {
         throw new Error('Missing Vercel React Best Practices');
     }
-    if (!route.importedSourceIds.includes('vercel-composition-patterns')) {
+    if (!route.importedSourceIds.includes('steroid-composition-rules')) {
         throw new Error('Missing Vercel Composition Patterns');
     }
 });
@@ -68,7 +68,7 @@ test('routes React Native redesign work to the RN wrapper', () => {
     if (route.wrapperSkill !== 'steroid-rn-implementation') {
         throw new Error(`Unexpected wrapper: ${route.wrapperSkill}`);
     }
-    if (!route.importedSourceIds.includes('vercel-react-native-skills')) {
+    if (!route.importedSourceIds.includes('steroid-native-rules')) {
         throw new Error('Missing Vercel React Native Skills');
     }
 });
@@ -81,7 +81,7 @@ test('routes audit prompts to web design review and accesslint', () => {
     if (route.wrapperSkill !== 'steroid-web-design-review') {
         throw new Error(`Unexpected wrapper: ${route.wrapperSkill}`);
     }
-    if (!route.importedSourceIds.includes('accesslint-core')) {
+    if (!route.importedSourceIds.includes('steroid-accessibility-audit')) {
         throw new Error('Missing AccessLint integration');
     }
 });
@@ -92,7 +92,7 @@ test('returns no route for non-UI work', () => {
         rootDir,
     });
     if (route.wrapperSkill !== null) throw new Error('Expected null wrapper for non-UI work');
-    if (route.importedSourceIds.length !== 0) throw new Error('Expected no imported sources');
+    if (route.importedSourceIds.length !== 0) throw new Error('Expected no source inputs');
 });
 
 console.log(`  ${passed} passed, ${failed} failed`);

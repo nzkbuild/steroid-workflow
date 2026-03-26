@@ -33,7 +33,7 @@ test('normalizes design routing receipts and preserves provenance fields', () =>
             stack: 'react',
             auditOnly: false,
             wrapperSkill: 'steroid-react-implementation',
-            importedSourceIds: ['ui-ux-pro-max'],
+            importedSourceIds: ['steroid-design-system'],
             prompt: 'Refresh the dashboard UI.',
             source: 'design-route',
             updatedAt: '2026-03-18T00:00:00.000Z',

@@ -8,9 +8,14 @@ test-install/
 tmp-*/
 test-*.md
 incident_report.md
+.npm-local-cache/
 
-# Fork source files — kept in npm package via "files" field, not tracked in git
-src/forks/
+# Private source intake / provenance
+sources/
+
+# Internal architecture planning / live audit docs
+docs/V7-*.md
+docs/LIVE-*.md
 
 proposed-plan.md
 

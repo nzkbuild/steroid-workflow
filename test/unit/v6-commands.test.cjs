@@ -417,7 +417,7 @@ if (childProcessUnavailableReason) {
                     stack: 'react',
                     auditOnly: false,
                     wrapperSkill: 'steroid-react-implementation',
-                    importedSourceIds: ['ui-ux-pro-max'],
+                    importedSourceIds: ['steroid-design-system'],
                 },
                 null,
                 2,
@@ -526,7 +526,7 @@ if (childProcessUnavailableReason) {
                     stack: 'react',
                     auditOnly: false,
                     wrapperSkill: 'steroid-react-implementation',
-                    importedSourceIds: ['ui-ux-pro-max', 'vercel-react-best-practices'],
+                    importedSourceIds: ['steroid-design-system', 'steroid-react-rules'],
                 },
                 null,
                 2,
@@ -810,18 +810,20 @@ if (childProcessUnavailableReason) {
         const feature = 'gate-ui-research-bootstrap';
         const featureDir = path.join(changesDir, feature);
         fs.mkdirSync(featureDir, { recursive: true });
-        const importedRoot = path.join(tmpBase, 'imported');
-        const importedSkillDir = path.join(importedRoot, 'ui-ux-pro-max');
+        const importedRoot = path.join(tmpBase, 'sources', 'forks');
+        const importedSkillDir = path.join(importedRoot, 'steroid-design-system');
         fs.mkdirSync(importedRoot, { recursive: true });
-        fs.cpSync(path.join(__dirname, '..', '..', 'imported', 'ui-ux-pro-max'), importedSkillDir, { recursive: true });
+        fs.cpSync(path.join(__dirname, '..', '..', 'sources', 'forks', 'steroid-design-system'), importedSkillDir, {
+            recursive: true,
+        });
         fs.writeFileSync(
-            path.join(importedRoot, 'imported-manifest.json'),
+            path.join(importedRoot, 'manifest.json'),
             JSON.stringify(
                 {
                     sources: [
                         {
-                            id: 'ui-ux-pro-max',
-                            localPath: 'imported/ui-ux-pro-max',
+                            id: 'steroid-design-system',
+                            localPath: ['sources', 'forks', 'steroid-design-system'].join('/'),
                         },
                     ],
                 },
@@ -1077,7 +1079,7 @@ if (childProcessUnavailableReason) {
                     domain: 'frontend',
                     stack: 'react',
                     wrapperSkill: 'steroid-react-implementation',
-                    importedSourceIds: ['ui-ux-pro-max', 'vercel-react-best-practices'],
+                    importedSourceIds: ['steroid-design-system', 'steroid-react-rules'],
                 },
                 null,
                 2,
@@ -1519,7 +1521,7 @@ if (childProcessUnavailableReason) {
                     domain: 'frontend',
                     stack: 'react',
                     wrapperSkill: 'steroid-react-implementation',
-                    importedSourceIds: ['ui-ux-pro-max'],
+                    importedSourceIds: ['steroid-design-system'],
                 },
                 null,
                 2,
@@ -1597,7 +1599,7 @@ if (childProcessUnavailableReason) {
                     domain: 'frontend',
                     stack: 'react',
                     wrapperSkill: 'steroid-react-implementation',
-                    importedSourceIds: ['ui-ux-pro-max'],
+                    importedSourceIds: ['steroid-design-system'],
                 },
                 null,
                 2,
@@ -1912,7 +1914,7 @@ exports.chromium = {
                     stack: 'react',
                     auditOnly: false,
                     wrapperSkill: 'steroid-react-implementation',
-                    importedSourceIds: ['ui-ux-pro-max', 'anthropic-frontend-design'],
+                    importedSourceIds: ['steroid-design-system', 'steroid-web-direction'],
                 },
                 null,
                 2,
@@ -2254,10 +2256,14 @@ test('source contains frontend design-system guidance', () => {
         'utf-8',
     );
 
-    if (!cliSource.includes('ui-ux-pro-max')) throw new Error('CLI guidance missing ui-ux-pro-max pairing');
-    if (!cliSource.includes('imported/')) throw new Error('CLI missing imported systems install guidance');
-    if (!readmeSource.includes('Internalized Frontend Systems')) {
-        throw new Error('README missing internalized frontend systems guidance');
+    if (!cliSource.includes('Steroid frontend intelligence')) {
+        throw new Error('CLI guidance missing Steroid frontend intelligence wording');
+    }
+    if (cliSource.includes("copyRecursiveSync(path.join(sourceDir, 'imported')")) {
+        throw new Error('CLI should no longer copy imported/ into initialized projects');
+    }
+    if (!readmeSource.includes('Frontend Intelligence')) {
+        throw new Error('README missing frontend intelligence guidance');
     }
     if (!researchSource.includes('## Design Intelligence')) {
         throw new Error('Research skill missing design intelligence section');

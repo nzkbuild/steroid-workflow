@@ -1,6 +1,6 @@
 ---
 name: steroid-react-implementation
-description: Internal Steroid wrapper for imported React/Next frontend implementation rules.
+description: Internal Steroid wrapper for React/Next frontend source inputs and implementation constraints.
 ---
 
 # Steroid React Implementation
@@ -9,15 +9,15 @@ Use this internal skill for React and Next.js UI implementation or refactor work
 
 ## Sources
 
-- `imported/ui-ux-pro-max/`
-- `imported/anthropic-frontend-design/`
-- `imported/bencium-ux-designer/`
-- `imported/vercel-react-best-practices/`
-- `imported/vercel-composition-patterns/`
+- `steroid-design-system`
+- `steroid-web-direction`
+- `steroid-ux-discipline`
+- `steroid-react-rules`
+- `steroid-composition-rules`
 
 ## Responsibilities
 
 - Generate or apply a design system before implementation.
-- Enforce imported React performance rules.
-- Enforce imported component composition rules.
-- Translate imported guidance into explicit implementation constraints for Steroid engine work.
+- Enforce React performance rules drawn from Steroid's fork source library.
+- Enforce component composition rules drawn from Steroid's fork source library.
+- Translate fork-source guidance into explicit implementation constraints for Steroid engine work.

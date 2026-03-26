@@ -8,14 +8,11 @@
   "main": "bin/cli.js",
   "files": [
     "bin/",
-    "governed/",
-    "imported/",
-    "integrations/",
     "skills/",
-    "src/forks/",
-    "memory-template/",
+    "src/install/",
+    "src/services/",
+    "templates/",
     "README.md",
-    "ARCHITECTURE.md",
     "LICENSE"
   ],
   "scripts": {
@@ -42,7 +39,6 @@
     "spec-driven",
     "autonomous",
     "research",
-    "openspec",
     "claude",
     "cursor",
     "gemini",

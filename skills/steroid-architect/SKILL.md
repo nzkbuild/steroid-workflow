@@ -11,10 +11,10 @@ This skill reads the spec and research from `.memory/changes/<feature>/` and pro
 
 The live governed authority for the planning surface is:
 
-- `governed/spec-system/MODULE.yaml`
-- `governed/spec-system/LIVE-MAPPING.md`
-- `governed/spec-system/PROVENANCE.md`
-- `governed/spec-system/PARITY.md`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
 
 In the live repo, this skill implements the `plan_md` part of the governed `steroid-spec-system` after the specification artifact has been locked.
 
@@ -111,7 +111,7 @@ If `prompt.json` exists, adapt the checklist shape to the approved route without
 
 Do NOT invent new route names. Use `prompt.json` only as planning context inside the existing structure.
 
-**UI-intensive override:** If `research.md` contains `## Design Intelligence`, the checklist MUST translate it into implementation tasks. Do not leave design direction trapped in research. Create explicit tasks for tokens, layout hierarchy, component states, responsive behavior, accessibility constraints, imported rule application, and final anti-pattern review.
+**UI-intensive override:** If `research.md` contains `## Design Intelligence`, the checklist MUST translate it into implementation tasks. Do not leave design direction trapped in research. Create explicit tasks for tokens, layout hierarchy, component states, responsive behavior, accessibility constraints, source-input rule application, and final anti-pattern review.
 If `design-system.md` exists, the checklist MUST reference it explicitly in frontend tasks instead of inventing a separate design direction.
 
 ### 4. Task Ordering Rules
@@ -272,7 +272,7 @@ Output: "Setup frontend. Build habit tracking. Add styling."
 
 ## Referenced Forks
 
-To understand the full, unmodified logic behind the upstream methodology, read:
+To understand the full, unmodified logic behind the internal methodology, read:
 
-- `src/forks/spec-kit/templates/plan-template.md` - Spec Kit's plan template
-- `src/forks/spec-kit/templates/tasks-template.md` - Spec Kit's task breakdown template
+- `Steroid internal reference` - Steroid's plan template
+- `Steroid internal reference` - Steroid's task breakdown template

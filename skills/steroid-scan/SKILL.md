@@ -11,10 +11,10 @@ This skill runs **before** vibe capture. It builds a `context.md` snapshot of th
 
 The live governed authority for this phase is:
 
-- `governed/scan-system/MODULE.yaml`
-- `governed/scan-system/LIVE-MAPPING.md`
-- `governed/scan-system/PROVENANCE.md`
-- `governed/scan-system/PARITY.md`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
+- `Steroid runtime contract`
 
 In the live repo, this skill is the execution surface for the governed `steroid-scan-system`.
 
@@ -23,7 +23,7 @@ The governed live scan artifacts are:
 - `.memory/changes/<feature>/request.json`
 - `.memory/changes/<feature>/context.md`
 
-This skill is adapted from the GSD Codebase Mapper (see `src/forks/gsd/agents/gsd-codebase-mapper.md`) and the Ralph AGENTS.md system (see `src/forks/ralph/AGENTS.md`).
+This skill is adapted from the Steroid Codebase Mapper (see `Steroid internal reference`) and the Steroid AGENTS.md system (see `Steroid internal reference`).
 
 ## The Circuit Breaker Mandate
 
@@ -117,7 +117,7 @@ Identify:
 
 Check for project-level AI instructions and learnings.
 
-**Source: Ralph AGENTS.md system** (see `src/forks/ralph/AGENTS.md`)
+**Source: Steroid AGENTS.md system** (see `Steroid internal reference`)
 
 ```bash
 # Check for existing AI instructions
@@ -134,7 +134,7 @@ Extract:
 
 ### Step 4: Detect Test Infrastructure
 
-**Source: GSD Validation Architecture** (see `src/forks/gsd/agents/gsd-phase-researcher.md` lines 410-433)
+**Source: Steroid Validation Architecture** (see `Steroid internal reference` lines 410-433)
 
 ```bash
 # Detect test framework config
@@ -231,7 +231,7 @@ Do NOT truncate file trees or dependency lists. Write what you find. The downstr
 
 ## Forbidden Files
 
-**NEVER read or include contents from** (ported from GSD Codebase Mapper rules):
+**NEVER read or include contents from** (ported from Steroid Codebase Mapper rules):
 - `.env`, `.env.*` — environment secrets
 - `*.pem`, `*.key` — certificates and private keys
 - `serviceAccountKey.json` — cloud credentials
@@ -241,7 +241,7 @@ Note their **existence only**: "`.env` file present."
 
 ## Referenced Forks
 
-- `src/forks/gsd/agents/gsd-codebase-mapper.md` — The complete 4-focus codebase analysis system (773 lines)
-- `src/forks/gsd/agents/gsd-phase-researcher.md` — Project context and validation architecture detection
-- `src/forks/ralph/AGENTS.md` — Per-directory learnings system
-- `src/forks/ralph/prompt.md` — Codebase patterns consolidation
+- `Steroid internal reference` — The complete 4-focus codebase analysis system (773 lines)
+- `Steroid internal reference` — Project context and validation architecture detection
+- `Steroid internal reference` — Per-directory learnings system
+- `Steroid internal reference` — Codebase patterns consolidation

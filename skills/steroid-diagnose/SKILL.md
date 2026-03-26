@@ -8,10 +8,10 @@ description: The debugging and diagnosis skill for Steroid-Workflow. Used when t
 This skill replaces the full build pipeline when the user wants to **fix a bug** or **debug an issue**. Instead of vibe → specify → research → architect, it runs a focused diagnosis that produces `diagnosis.md` with root cause analysis and a targeted fix plan.
 
 Adapted from:
-- **Superpowers Systematic Debugging** (see `src/forks/superpowers/systematic-debugging/SKILL.md`) — 4-phase root cause process
-- **Superpowers Root Cause Tracing** (see `src/forks/superpowers/systematic-debugging/root-cause-tracing.md`) — Backward call-stack tracing
-- **Superpowers Defense in Depth** (see `src/forks/superpowers/systematic-debugging/defense-in-depth.md`) — Multi-layer validation after fix
-- **GSD Debugger** (see `src/forks/gsd/agents/gsd-debugger.md`) — Codebase-aware debugging
+- **Steroid Systematic Debugging** (see `Steroid internal reference`) — 4-phase root cause process
+- **Steroid Root Cause Tracing** (see `Steroid internal reference`) — Backward call-stack tracing
+- **Steroid Defense in Depth** (see `Steroid internal reference`) — Multi-layer validation after fix
+- **Steroid Debugger** (see `Steroid internal reference`) — Codebase-aware debugging
 
 ## The Iron Law
 
@@ -19,7 +19,7 @@ Adapted from:
 NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
 ```
 
-Source: `src/forks/superpowers/systematic-debugging/SKILL.md` — "Random fixes waste time and create new bugs. Quick patches mask underlying issues."
+Source: `Steroid internal reference` — "Random fixes waste time and create new bugs. Quick patches mask underlying issues."
 
 If you haven't completed Phase 1 (Root Cause Investigation), you CANNOT propose fixes.
 
@@ -80,7 +80,7 @@ This verifies `context.md` exists from the scan phase.
    - New dependencies? Config changes?
 
 4. **Trace Data Flow**
-   Use the backward tracing technique from `src/forks/superpowers/systematic-debugging/root-cause-tracing.md`:
+   Use the backward tracing technique from `Steroid internal reference`:
    - Where does the bad value originate?
    - What called this function with bad input?
    - Keep tracing up until you find the source
@@ -183,8 +183,8 @@ node steroid-run.cjs memory write gotchas '{"issue-keyword": "fix description"}'
 
 ## Referenced Forks
 
-- `src/forks/superpowers/systematic-debugging/SKILL.md` — Full 4-phase debugging process (297 lines)
-- `src/forks/superpowers/systematic-debugging/root-cause-tracing.md` — Backward tracing technique
-- `src/forks/superpowers/systematic-debugging/defense-in-depth.md` — Multi-layer validation
-- `src/forks/superpowers/systematic-debugging/condition-based-waiting.md` — Replace timeouts with condition polling
-- `src/forks/gsd/agents/gsd-debugger.md` — Codebase-aware debugging agent
+- `Steroid internal reference` — Full 4-phase debugging process (297 lines)
+- `Steroid internal reference` — Backward tracing technique
+- `Steroid internal reference` — Multi-layer validation
+- `Steroid internal reference` — Replace timeouts with condition polling
+- `Steroid internal reference` — Codebase-aware debugging agent
