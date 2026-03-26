@@ -45,14 +45,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '6.3.0-beta.3';
+        return '7.0.0-beta.1';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '6.3.0-beta.3';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.1';
     } catch {
-        return '6.3.0-beta.3';
+        return '7.0.0-beta.1';
     }
 }
 

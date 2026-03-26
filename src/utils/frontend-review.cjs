@@ -248,7 +248,7 @@ function buildUiReviewMarkdown(feature, options) {
         refreshReason,
         evidenceUpdatedAt,
         evidenceUpdatedFrom,
-        version = '6.3.0-beta.3',
+        version = '7.0.0-beta.1',
     } = options;
 
     const findings = buildUiRiskFindings({

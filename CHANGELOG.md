@@ -1,6 +1,6 @@
 # Changelog
 
-## [6.3.0-beta.3] "Install Footprint and Product Clarity" - 2026-03-18
+## [7.0.0-beta.1] "Install Footprint and Product Clarity" - 2026-03-27
 
 ### Changed
 - **README rewrite** — repositioned Steroid as a product-facing guarded AI coding runtime instead of leading with internal governance details

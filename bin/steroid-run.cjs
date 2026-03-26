@@ -10,7 +10,7 @@
  * for unit testing, but this file remains the compatibility distribution shell.
  *
  * @module steroid-run
- * @version 6.3.0-beta.3
+ * @version 7.0.0-beta.1
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -3492,7 +3492,7 @@ function formatPromptMarkdown(feature, analysis, sessionState) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '6.3.0-beta.3';
+let SW_VERSION = '7.0.0-beta.1';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');

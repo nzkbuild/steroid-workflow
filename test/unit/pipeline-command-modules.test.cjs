@@ -232,7 +232,7 @@ test('handleArchive blocks when verify receipt is missing', () => {
     const feature = 'archive-missing-verify';
     const featureDir = path.join(tmpBase, '.memory', 'changes', feature);
     fs.mkdirSync(featureDir, { recursive: true });
-    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '6.3.0-beta.3' });
+    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '7.0.0-beta.1' });
     if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stderr.includes('No verify.json receipt found')) throw new Error(`Unexpected stderr: ${result.stderr}`);
 });
@@ -250,7 +250,7 @@ test('handleArchive archives verified feature artifacts and writes report', () =
         path.join(featureDir, 'completion.json'),
         JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
     );
-    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '6.3.0-beta.3' });
+    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '7.0.0-beta.1' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Archived')) throw new Error(`Unexpected stdout: ${result.stdout}`);
     if (!fs.existsSync(path.join(tmpBase, '.memory', 'reports', `${feature}.md`))) {
