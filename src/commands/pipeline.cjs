@@ -150,14 +150,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.2';
+        return '7.0.0-beta.3';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.3';
     } catch {
-        return '7.0.0-beta.2';
+        return '7.0.0-beta.3';
     }
 }
 
@@ -606,7 +606,16 @@ function handleFinish(argv = [], context = {}) {
     const reviewReceipt = loadReviewReceipt(feature, featureDir);
     const verifyReceipt = loadVerifyReceipt(feature, featureDir);
     const completionReceipt = loadCompletionReceipt(feature, featureDir);
-    const uiReviewReceipt = loadUiReviewReceipt(feature, featureDir);
+    const uiReviewRefresh = refreshUiReviewArtifacts(feature, featureDir, {
+        targetDir: runtime.targetDir,
+        pruneStaleEvidence: true,
+        verifyStatus: verifyReceipt.status || 'PENDING',
+        deepMode: !!verifyReceipt.deepRequested,
+        refreshSource: 'finish',
+        refreshReason: 'Finish readiness check refreshed frontend evidence.',
+        version: runtime.version,
+    });
+    const uiReviewReceipt = uiReviewRefresh.ok ? uiReviewRefresh.receipt : loadUiReviewReceipt(feature, featureDir);
     const uiArchivePolicy = buildUiArchivePolicy(uiReviewReceipt, {
         deepRequested: !!verifyReceipt.deepRequested,
     });
@@ -1592,6 +1601,8 @@ function handleArchive(argv = [], context = {}) {
     }
 
     const uiReviewRefresh = refreshUiReviewArtifacts(feature, featureDir, {
+        targetDir: runtime.targetDir,
+        pruneStaleEvidence: true,
         verifyStatus: verifyReceipt.status || 'PENDING',
         deepMode: !!verifyReceipt.deepRequested,
         refreshSource: 'archive',

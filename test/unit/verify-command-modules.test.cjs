@@ -146,6 +146,107 @@ test('verify-feature writes verify and completion receipts on success', () => {
     }
 });
 
+test('verify-feature uses Windows-safe npm.cmd and npx.cmd execution without shell mode', () => {
+    const feature = 'verify-windows-safe-runner';
+    const windowsRoot = path.join(os.tmpdir(), `steroid-verify-windows-${Date.now()}`);
+    const windowsChangesDir = path.join(windowsRoot, '.memory', 'changes');
+    const featureDir = path.join(windowsChangesDir, feature);
+    fs.mkdirSync(featureDir, { recursive: true });
+    fs.mkdirSync(path.join(windowsRoot, '.memory', 'knowledge'), { recursive: true });
+    writeGovernedPlan(featureDir);
+    writeGovernedTasks(featureDir);
+    writeExecutionReceipt(featureDir, feature);
+    writeJson(path.join(featureDir, 'review.json'), {
+        feature,
+        stage1: 'PASS',
+        stage2: 'PASS',
+        updatedAt: new Date().toISOString(),
+    });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-windows-safe-runner',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | Build path verified | PASS | src/app.tsx:42 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified quality at src/app.tsx:42',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
+    writeJson(path.join(windowsRoot, '.memory', 'knowledge', 'tech-stack.json'), {
+        language: 'TypeScript',
+        framework: 'React',
+        packageManager: 'npm',
+    });
+    fs.writeFileSync(
+        path.join(windowsRoot, 'package.json'),
+        JSON.stringify(
+            {
+                name: 'verify-windows-safe-runner',
+                version: '0.0.0-test',
+                scripts: {
+                    build: 'node build.js',
+                    lint: 'node lint.js',
+                    test: 'node test.js',
+                },
+            },
+            null,
+            2,
+        ),
+    );
+
+    const calls = [];
+    const result = run(['verify-feature', feature, '--deep', '--url', 'https://example.test/app'], {
+        targetDir: windowsRoot,
+        platform: 'win32',
+        spawn: (command, args, options) => {
+            calls.push({ command, args, options });
+            if (command === process.execPath) {
+                return {
+                    status: 0,
+                    stdout: JSON.stringify({
+                        ok: true,
+                        finalUrl: 'https://example.test/app',
+                        target: 'https://example.test/app',
+                        consoleMessages: [],
+                        pageErrors: [],
+                        failedRequests: [],
+                        pageTitle: 'Windows Runner',
+                        screenshotPath: path.join(featureDir, 'ui-audit.png'),
+                    }),
+                    stderr: '',
+                };
+            }
+            return { status: 0, stdout: '', stderr: '' };
+        },
+        accesslintAudit: () => ({
+            fileCount: 1,
+            violationCount: 0,
+            highestImpact: 'none',
+            results: [],
+        }),
+    });
+
+    if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode} ${result.stderr || ''}`);
+    const npmCalls = calls.filter((entry) => entry.command === 'npm.cmd');
+    const npxCalls = calls.filter((entry) => entry.command === 'npx.cmd');
+    if (npmCalls.length < 3) {
+        throw new Error(`Expected npm.cmd build/lint/test calls, got ${JSON.stringify(calls)}`);
+    }
+    if (npxCalls.length < 3) {
+        throw new Error(`Expected npx.cmd deep scan calls, got ${JSON.stringify(calls)}`);
+    }
+    if (calls.some((entry) => entry.options.shell !== false)) {
+        throw new Error(`Expected shell=false for runtime commands: ${JSON.stringify(calls)}`);
+    }
+
+    fs.rmSync(windowsRoot, { recursive: true, force: true });
+});
+
 test('verify-feature refreshes ui-review receipts for UI-intensive features', () => {
     const feature = 'verify-ui-review-artifact';
     const featureDir = path.join(changesDir, feature);

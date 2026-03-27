@@ -8,7 +8,7 @@
  * needed.
  *
  * @module steroid-run-standalone-compat
- * @version 7.0.0-beta.2
+ * @version 7.0.0-beta.3
  *
  * SECTION MAP (for navigation):
  * ─────────────────────────────────────────────────────────────────
@@ -595,7 +595,66 @@ function buildAccesslintResultFromReceipt(receipt) {
 }
 
 function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
-    return refreshCanonicalUiReviewArtifacts(feature, featureDir, { ...options, version: SW_VERSION });
+    return refreshCanonicalUiReviewArtifacts(feature, featureDir, {
+        targetDir,
+        pruneStaleEvidence: true,
+        ...options,
+        version: SW_VERSION,
+    });
+}
+
+function getRuntimeCommandCandidates(command) {
+    if (process.platform !== 'win32') {
+        return [command];
+    }
+
+    if (/\.(cmd|exe|bat)$/i.test(command)) {
+        return [command];
+    }
+
+    return [`${command}.cmd`, command];
+}
+
+function spawnRuntimeCommand(command, args, options = {}) {
+    const candidates = getRuntimeCommandCandidates(command);
+    let lastResult = null;
+
+    for (const candidate of candidates) {
+        const result = spawnSync(candidate, args, {
+            shell: false,
+            encoding: 'utf-8',
+            stdio: 'pipe',
+            ...options,
+        });
+        lastResult = result;
+
+        const errorCode = result?.error?.code;
+        const retriableSpawnFailure = errorCode === 'ENOENT' || errorCode === 'EPERM';
+        if (!retriableSpawnFailure || candidate === candidates[candidates.length - 1]) {
+            return result;
+        }
+    }
+
+    return lastResult || {
+        status: null,
+        stdout: '',
+        stderr: '',
+        error: new Error(`Unable to execute ${command}`),
+    };
+}
+
+function summarizeCommandFailure(result, fallbackDetail) {
+    if (result?.error?.message) {
+        return result.error.message;
+    }
+
+    return (
+        String(result?.stderr || result?.stdout || '')
+            .trim()
+            .split('\n')
+            .slice(-5)
+            .join('\n') || fallbackDetail
+    );
 }
 
 function getArtifactMtimeMs(filePath) {
@@ -1530,7 +1589,7 @@ function formatPromptMarkdown(feature, analysis, sessionState) {
 // ═══════════════════════════════════════════════════════════════════
 // § DYNAMIC VERSION
 // ═══════════════════════════════════════════════════════════════════
-let SW_VERSION = '7.0.0-beta.2';
+let SW_VERSION = '7.0.0-beta.3';
 try {
     // When running from npm package: __dirname = bin/, package.json is ../package.json
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -4888,25 +4947,17 @@ if (args[0] === 'verify-feature') {
             const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
             if (pkg.scripts && pkg.scripts.build) {
                 console.log('  ⏳ Running build check (npm run build)...');
-                const build = spawnSync('npm', ['run', 'build'], {
+                const build = spawnRuntimeCommand('npm', ['run', 'build'], {
                     cwd: targetDir,
-                    stdio: 'pipe',
                     timeout: 120000,
-                    shell: true,
                 });
                 if (build.status === 0) {
                     results.push({ step: 'Build', status: 'PASS', detail: 'npm run build succeeded' });
                 } else {
-                    const errOutput = (build.stderr || build.stdout || Buffer.from(''))
-                        .toString()
-                        .trim()
-                        .split('\n')
-                        .slice(-5)
-                        .join('\n');
                     results.push({
                         step: 'Build',
                         status: 'FAIL',
-                        detail: errOutput || 'npm run build failed (no output)',
+                        detail: summarizeCommandFailure(build, 'npm run build failed'),
                     });
                     hasFailure = true;
                 }
@@ -4917,22 +4968,18 @@ if (args[0] === 'verify-feature') {
             // ── Step 3: Lint check ──
             if (pkg.scripts && pkg.scripts.lint) {
                 console.log('  ⏳ Running lint check (npm run lint)...');
-                const lint = spawnSync('npm', ['run', 'lint'], {
+                const lint = spawnRuntimeCommand('npm', ['run', 'lint'], {
                     cwd: targetDir,
-                    stdio: 'pipe',
                     timeout: 60000,
-                    shell: true,
                 });
                 if (lint.status === 0) {
                     results.push({ step: 'Lint', status: 'PASS', detail: 'npm run lint passed' });
                 } else {
-                    const errOutput = (lint.stderr || lint.stdout || Buffer.from(''))
-                        .toString()
-                        .trim()
-                        .split('\n')
-                        .slice(-5)
-                        .join('\n');
-                    results.push({ step: 'Lint', status: 'WARN', detail: errOutput || 'Lint issues detected' });
+                    results.push({
+                        step: 'Lint',
+                        status: 'WARN',
+                        detail: summarizeCommandFailure(lint, 'Lint issues detected'),
+                    });
                 }
             } else {
                 results.push({ step: 'Lint', status: 'SKIP', detail: 'No lint script in package.json' });
@@ -4941,22 +4988,18 @@ if (args[0] === 'verify-feature') {
             // ── Step 4: Test check ──
             if (pkg.scripts && pkg.scripts.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
                 console.log('  ⏳ Running test check (npm test)...');
-                const test = spawnSync('npm', ['test'], {
+                const test = spawnRuntimeCommand('npm', ['test'], {
                     cwd: targetDir,
-                    stdio: 'pipe',
                     timeout: 120000,
-                    shell: true,
                 });
                 if (test.status === 0) {
                     results.push({ step: 'Tests', status: 'PASS', detail: 'npm test passed' });
                 } else {
-                    const errOutput = (test.stderr || test.stdout || Buffer.from(''))
-                        .toString()
-                        .trim()
-                        .split('\n')
-                        .slice(-5)
-                        .join('\n');
-                    results.push({ step: 'Tests', status: 'WARN', detail: errOutput || 'Test failures detected' });
+                    results.push({
+                        step: 'Tests',
+                        status: 'WARN',
+                        detail: summarizeCommandFailure(test, 'Test failures detected'),
+                    });
                 }
             } else {
                 // Check if plan contains test items but no test command
@@ -5309,11 +5352,9 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: knip',
                 shouldRun: fs.existsSync(pkgPath),
                 run: () =>
-                    spawnSync('npx', ['--no-install', 'knip', '--no-exit-code', '--reporter', 'compact'], {
+                    spawnRuntimeCommand('npx', ['--no-install', 'knip', '--no-exit-code', '--reporter', 'compact'], {
                         cwd: targetDir,
-                        stdio: 'pipe',
                         timeout: 120000,
-                        shell: true,
                     }),
                 pass: 'knip completed',
                 fail: 'knip reported issues or could not run',
@@ -5323,11 +5364,9 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: madge',
                 shouldRun: fs.existsSync(path.join(targetDir, 'src')),
                 run: () =>
-                    spawnSync('npx', ['--no-install', 'madge', '--circular', 'src'], {
+                    spawnRuntimeCommand('npx', ['--no-install', 'madge', '--circular', 'src'], {
                         cwd: targetDir,
-                        stdio: 'pipe',
                         timeout: 120000,
-                        shell: true,
                     }),
                 pass: 'madge completed',
                 fail: 'madge reported circular dependencies or could not run',
@@ -5337,11 +5376,9 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: gitleaks',
                 shouldRun: true,
                 run: () =>
-                    spawnSync('npx', ['--no-install', '@ziul285/gitleaks', 'detect', '--no-git', '--source', '.'], {
+                    spawnRuntimeCommand('npx', ['--no-install', '@ziul285/gitleaks', 'detect', '--no-git', '--source', '.'], {
                         cwd: targetDir,
-                        stdio: 'pipe',
                         timeout: 120000,
-                        shell: true,
                     }),
                 pass: 'gitleaks completed',
                 fail: 'gitleaks reported findings or could not run',
@@ -5351,11 +5388,9 @@ if (args[0] === 'verify-feature') {
                 step: 'Deep scan: license-checker',
                 shouldRun: fs.existsSync(pkgPath),
                 run: () =>
-                    spawnSync('npx', ['--no-install', 'license-checker', '--summary'], {
+                    spawnRuntimeCommand('npx', ['--no-install', 'license-checker', '--summary'], {
                         cwd: targetDir,
-                        stdio: 'pipe',
                         timeout: 120000,
-                        shell: true,
                     }),
                 pass: 'license-checker completed',
                 fail: 'license-checker reported issues or could not run',
@@ -5374,13 +5409,7 @@ if (args[0] === 'verify-feature') {
             if (outcome.status === 0) {
                 results.push({ step: scan.step, status: 'PASS', detail: scan.pass });
             } else {
-                const detail =
-                    (outcome.stderr || outcome.stdout || Buffer.from(''))
-                        .toString()
-                        .trim()
-                        .split('\n')
-                        .slice(-5)
-                        .join('\n') || scan.fail;
+                const detail = summarizeCommandFailure(outcome, scan.fail);
                 results.push({ step: scan.step, status: scan.severity, detail });
             }
         }

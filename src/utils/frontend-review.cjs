@@ -21,6 +21,12 @@ function writeJsonFile(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+function removeFileIfPresent(filePath) {
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+}
+
 function readFeatureArtifactText(featureDir, fileName) {
     const artifactPath = path.join(featureDir, fileName);
     if (!fs.existsSync(artifactPath)) return '';
@@ -248,7 +254,7 @@ function buildUiReviewMarkdown(feature, options) {
         refreshReason,
         evidenceUpdatedAt,
         evidenceUpdatedFrom,
-        version = '7.0.0-beta.2',
+        version = '7.0.0-beta.3',
     } = options;
 
     const findings = buildUiRiskFindings({
@@ -391,9 +397,12 @@ function buildUiReviewMarkdown(feature, options) {
 function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
     const promptReceipt = readJsonFile(path.join(featureDir, 'prompt.json'));
     const designReceipt = loadDesignRoutingReceipt(featureDir);
-    const accesslintReceipt = readJsonFile(path.join(featureDir, 'accessibility.json'));
-    const browserAuditReceipt = readJsonFile(path.join(featureDir, 'ui-audit.json'));
     const verifyReceipt = loadVerifyReceipt(feature, featureDir);
+    const accesslintArtifact = path.join(featureDir, 'accessibility.json');
+    const browserAuditArtifact = path.join(featureDir, 'ui-audit.json');
+    const browserAuditScreenshot = path.join(featureDir, 'ui-audit.png');
+    let accesslintReceipt = readJsonFile(accesslintArtifact);
+    let browserAuditReceipt = readJsonFile(browserAuditArtifact);
     const previewTarget =
         normalizePreviewUrlCandidate(options.previewUrl) ||
         normalizePreviewUrlCandidate(readFeatureArtifactText(featureDir, 'preview-url.txt')) ||
@@ -401,6 +410,27 @@ function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
         browserAuditReceipt?.finalUrl ||
         browserAuditReceipt?.target ||
         null;
+    const staleEvidenceReasons = [];
+
+    if (options.targetDir && designReceipt?.stack !== 'react-native') {
+        const { collectHtmlAuditTargets } = require('./browser-audit-target.cjs');
+        const currentHtmlTargets = collectHtmlAuditTargets(options.targetDir);
+        if (currentHtmlTargets.length === 0 && accesslintReceipt) {
+            accesslintReceipt = null;
+            staleEvidenceReasons.push('ignored stale accessibility evidence because no current auditable HTML targets were found');
+            if (options.pruneStaleEvidence) {
+                removeFileIfPresent(accesslintArtifact);
+            }
+        }
+        if (currentHtmlTargets.length === 0 && !previewTarget && browserAuditReceipt) {
+            browserAuditReceipt = null;
+            staleEvidenceReasons.push('ignored stale browser-audit evidence because no current preview target or auditable HTML target was found');
+            if (options.pruneStaleEvidence) {
+                removeFileIfPresent(browserAuditArtifact);
+                removeFileIfPresent(browserAuditScreenshot);
+            }
+        }
+    }
 
     const uiReviewEligible =
         detectUiFeatureForGate(featureDir, promptReceipt) ||
@@ -411,6 +441,8 @@ function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
     if (!uiReviewEligible) {
         return {
             ok: false,
+            attempted: true,
+            refreshed: false,
             skipped: true,
             reason: 'Feature does not currently look UI-intensive, so no frontend review was generated.',
         };
@@ -436,7 +468,10 @@ function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
         previewTarget,
         deepMode,
         refreshSource: options.refreshSource,
-        refreshReason: options.refreshReason,
+        refreshReason:
+            staleEvidenceReasons.length > 0
+                ? staleEvidenceReasons.join('; ')
+                : options.refreshReason,
         evidenceUpdatedAt: options.evidenceUpdatedAt,
         evidenceUpdatedFrom: options.evidenceUpdatedFrom,
         version: options.version,
@@ -449,6 +484,8 @@ function refreshUiReviewArtifacts(feature, featureDir, options = {}) {
 
     return {
         ok: true,
+        attempted: true,
+        refreshed: true,
         skipped: false,
         reportPath: uiReviewArtifact,
         receiptPath: uiReviewReceiptArtifact,

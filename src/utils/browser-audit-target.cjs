@@ -9,7 +9,7 @@ const { normalizePreviewUrlCandidate } = require('./frontend-review.cjs');
 function collectHtmlAuditTargets(targetDir) {
     const targets = [];
     const seen = new Set();
-    const roots = ['out', 'dist', 'build', 'public', '.next/server/app', '.next/server/pages', 'src'];
+    const roots = ['out', 'dist', 'build'];
     const exactFiles = ['index.html'];
 
     const pushFile = (filePath) => {

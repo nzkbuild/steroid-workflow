@@ -190,6 +190,67 @@ test('handleFinish guides the final review to archive path', () => {
     }
 });
 
+test('handleFinish refreshes stale ui-review receipts before archive readiness', () => {
+    const feature = `finish-refresh-ui-${Date.now()}`;
+    const featureDir = path.join(tmpBase, '.memory', 'changes', feature);
+    fs.mkdirSync(path.join(featureDir, 'archive'), { recursive: true });
+    fs.writeFileSync(path.join(featureDir, 'review.md'), '**Stage 1 Result:** PASS\n**Stage 2 Result:** PASS\n');
+    fs.writeFileSync(
+        path.join(featureDir, 'verify.json'),
+        JSON.stringify(
+            {
+                feature,
+                status: 'PASS',
+                confidence: 'HIGH',
+                reviewPassed: true,
+                checks: {},
+                deepRequested: false,
+                deepCompleted: false,
+            },
+            null,
+            2,
+        ),
+    );
+    fs.writeFileSync(
+        path.join(featureDir, 'completion.json'),
+        JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
+    );
+    fs.writeFileSync(
+        path.join(featureDir, 'prompt.json'),
+        JSON.stringify({ normalizedSummary: 'Polish the dashboard UI', recommendedPipeline: 'standard-build' }, null, 2),
+    );
+    fs.writeFileSync(
+        path.join(featureDir, 'design-routing.json'),
+        JSON.stringify({ stack: 'react', auditOnly: false, wrapperSkill: 'steroid-react-implementation' }, null, 2),
+    );
+    fs.writeFileSync(path.join(featureDir, 'design-system.md'), '## Design System\n');
+    fs.writeFileSync(
+        path.join(featureDir, 'ui-review.json'),
+        JSON.stringify(
+            {
+                feature,
+                status: 'FAIL',
+                findings: [{ severity: 'critical', title: 'Accessibility violations detected', detail: 'stale' }],
+            },
+            null,
+            2,
+        ),
+    );
+    fs.writeFileSync(
+        path.join(featureDir, 'accessibility.json'),
+        JSON.stringify({ violationCount: 2, highestImpact: 'serious', fileCount: 1 }, null, 2),
+    );
+
+    const result = handleFinish(['finish', feature], { targetDir: tmpBase, version: '7.0.0-beta.2' });
+    if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
+    if (!result.stdout.includes('Archive readiness: READY')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+
+    const refreshedUiReview = JSON.parse(fs.readFileSync(path.join(featureDir, 'ui-review.json'), 'utf-8'));
+    if (refreshedUiReview.status !== 'PASS') {
+        throw new Error(`Expected finish refresh to clear stale FAIL receipt: ${JSON.stringify(refreshedUiReview)}`);
+    }
+});
+
 test('handleGate passes vibe when request and context receipts exist', () => {
     const feature = 'gate-vibe-pass';
     const featureDir = path.join(tmpBase, '.memory', 'changes', feature);

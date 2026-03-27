@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.0.0-beta.3] "Verification Reliability Hotfix" - 2026-03-27
+
+### Fixed
+- **Windows verification execution** — `verify-feature` now runs package scripts and deep scans through a Windows-safe direct process path instead of relying on `shell: true`
+- **HTML audit target drift** — AccessLint and browser-audit fallback now prefer shipped HTML artifacts (`out/`, `dist/`, `build/`, root `index.html`) and stop treating `src/`, `public/`, and internal Next server output as audit targets
+- **Stale frontend evidence** — `verify-feature`, `review ui`, `finish`, and `archive` now prune or ignore stale frontend audit receipts when current auditable targets no longer exist, reducing false UI failures and blocked completion state
+
 ## [7.0.0-beta.2] "Workflow Clarity and Truthful Verification" - 2026-03-27
 
 ### Added

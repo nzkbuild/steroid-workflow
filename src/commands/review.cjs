@@ -23,14 +23,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.2';
+        return '7.0.0-beta.3';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.3';
     } catch {
-        return '7.0.0-beta.2';
+        return '7.0.0-beta.3';
     }
 }
 
@@ -281,6 +281,8 @@ function handleQuality(runtime, feature) {
 function handleUi(runtime, feature) {
     const paths = getFeaturePaths(runtime, feature);
     const refreshed = refreshUiReviewArtifacts(feature, paths.featureDir, {
+        targetDir: runtime.targetDir,
+        pruneStaleEvidence: true,
         refreshSource: 'review ui',
         refreshReason: 'Manual frontend review refresh requested.',
         version: runtime.version,

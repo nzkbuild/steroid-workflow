@@ -176,5 +176,52 @@ test('review ui refreshes frontend review receipts', () => {
     if (!uiReview.includes('keyboard-operable')) throw new Error(`Missing web review guidance: ${uiReview}`);
 });
 
+test('review ui ignores stale accessibility evidence when no current auditable HTML targets exist', () => {
+    const staleFeature = 'review-ui-stale-evidence';
+    const staleFeatureDir = path.join(tmpBase, '.memory', 'changes', staleFeature);
+    fs.mkdirSync(staleFeatureDir, { recursive: true });
+    fs.writeFileSync(
+        path.join(staleFeatureDir, 'prompt.json'),
+        JSON.stringify(
+            {
+                normalizedSummary: 'Refresh the settings dashboard UI',
+                recommendedPipeline: 'standard-build',
+            },
+            null,
+            2,
+        ),
+    );
+    fs.writeFileSync(
+        path.join(staleFeatureDir, 'design-routing.json'),
+        JSON.stringify(
+            {
+                stack: 'react',
+                auditOnly: false,
+                wrapperSkill: 'steroid-react-implementation',
+            },
+            null,
+            2,
+        ),
+    );
+    fs.writeFileSync(path.join(staleFeatureDir, 'design-system.md'), '## Design System\n');
+    fs.writeFileSync(
+        path.join(staleFeatureDir, 'accessibility.json'),
+        JSON.stringify({ violationCount: 3, highestImpact: 'serious', fileCount: 1 }, null, 2),
+    );
+
+    const result = run(['review', 'ui', staleFeature], { targetDir: tmpBase });
+    if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
+    const uiReviewReceipt = JSON.parse(fs.readFileSync(path.join(staleFeatureDir, 'ui-review.json'), 'utf-8'));
+    if (uiReviewReceipt.evidence?.accesslint?.present) {
+        throw new Error(`Expected stale accesslint evidence to be ignored: ${JSON.stringify(uiReviewReceipt)}`);
+    }
+    if (uiReviewReceipt.status !== 'PASS') {
+        throw new Error(`Expected stale accessibility evidence to stop poisoning the verdict: ${JSON.stringify(uiReviewReceipt)}`);
+    }
+    if (fs.existsSync(path.join(staleFeatureDir, 'accessibility.json'))) {
+        throw new Error('Expected stale accessibility.json to be pruned during refresh');
+    }
+});
+
 console.log(`  ${passed} passed, ${failed} failed`);
 module.exports = { passed, failed };

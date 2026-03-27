@@ -38,6 +38,7 @@ function buildRuntimeContext(context = {}) {
         spawn: context.spawn || spawnSync,
         browserAudit: context.browserAudit || null,
         accesslintAudit: context.accesslintAudit || null,
+        platform: context.platform || process.platform,
         version: context.version || loadPackageVersion(targetDir),
     };
 }
@@ -45,14 +46,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.2';
+        return '7.0.0-beta.3';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.3';
     } catch {
-        return '7.0.0-beta.2';
+        return '7.0.0-beta.3';
     }
 }
 
@@ -153,6 +154,66 @@ function removeCompletionReceiptIfPresent(paths) {
     }
 }
 
+function removeArtifactIfPresent(filePath) {
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+}
+
+function getRuntimeCommandCandidates(runtime, command) {
+    if (runtime.platform !== 'win32') {
+        return [command];
+    }
+
+    if (/\.(cmd|exe|bat)$/i.test(command)) {
+        return [command];
+    }
+
+    return [`${command}.cmd`, command];
+}
+
+function spawnRuntimeCommand(runtime, command, args, options = {}) {
+    const candidates = getRuntimeCommandCandidates(runtime, command);
+    let lastResult = null;
+
+    for (const candidate of candidates) {
+        const result = runtime.spawn(candidate, args, {
+            shell: false,
+            encoding: 'utf-8',
+            stdio: 'pipe',
+            ...options,
+        });
+        lastResult = result;
+
+        const errorCode = result?.error?.code;
+        const retriableSpawnFailure = errorCode === 'ENOENT' || errorCode === 'EPERM';
+        if (!retriableSpawnFailure || candidate === candidates[candidates.length - 1]) {
+            return result;
+        }
+    }
+
+    return lastResult || {
+        status: null,
+        stdout: '',
+        stderr: '',
+        error: new Error(`Unable to execute ${command}`),
+    };
+}
+
+function summarizeCommandFailure(result, fallbackDetail) {
+    if (result?.error?.message) {
+        return result.error.message;
+    }
+
+    const output = String(result?.stderr || result?.stdout || '')
+        .trim()
+        .split('\n')
+        .slice(-5)
+        .join('\n');
+
+    return output || fallbackDetail;
+}
+
 function runPackageScript(runtime, scriptName, timeoutMs) {
     const pkgPath = path.join(runtime.targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) return { status: 'SKIP', detail: 'No package.json found' };
@@ -166,26 +227,18 @@ function runPackageScript(runtime, scriptName, timeoutMs) {
             return { status: 'SKIP', detail: 'No test script in package.json' };
         }
 
-        const result = runtime.spawn('npm', ['run', scriptName], {
+        const result = spawnRuntimeCommand(runtime, 'npm', ['run', scriptName], {
             cwd: runtime.targetDir,
-            stdio: 'pipe',
             timeout: timeoutMs,
-            shell: true,
         });
 
         if (result.status === 0) {
             return { status: 'PASS', detail: `npm run ${scriptName} succeeded` };
         }
 
-        const output = String(result.stderr || result.stdout || '')
-            .trim()
-            .split('\n')
-            .slice(-5)
-            .join('\n');
-
         return {
             status: scriptName === 'build' ? 'FAIL' : 'WARN',
-            detail: output || `npm run ${scriptName} failed`,
+            detail: summarizeCommandFailure(result, `npm run ${scriptName} failed`),
         };
     } catch (error) {
         return { status: 'SKIP', detail: `package.json parse error: ${error.message}` };
@@ -211,7 +264,9 @@ function readOptionalJson(filePath) {
 }
 
 function runAccesslintStep(runtime, featureDir, designReceipt) {
+    const accesslintArtifact = path.join(featureDir, 'accessibility.json');
     if (designReceipt?.stack === 'react-native') {
+        removeArtifactIfPresent(accesslintArtifact);
         return {
             result: {
                 step: 'Accessibility (AccessLint)',
@@ -225,11 +280,12 @@ function runAccesslintStep(runtime, featureDir, designReceipt) {
 
     const htmlTargets = collectHtmlAuditTargets(runtime.targetDir);
     if (htmlTargets.length === 0) {
+        removeArtifactIfPresent(accesslintArtifact);
         return {
             result: {
                 step: 'Accessibility (AccessLint)',
                 status: 'SKIP',
-                detail: 'No HTML targets found in out/, dist/, build/, public/, src/, or index.html',
+                detail: 'No auditable built HTML targets found in out/, dist/, build/, or index.html',
             },
             receipt: null,
             failed: false,
@@ -240,7 +296,7 @@ function runAccesslintStep(runtime, featureDir, designReceipt) {
         const parsed = runtime.accesslintAudit
             ? runtime.accesslintAudit({ files: htmlTargets, cwd: runtime.targetDir })
             : auditFiles(htmlTargets, { cwd: runtime.targetDir });
-        fs.writeFileSync(path.join(featureDir, 'accessibility.json'), JSON.stringify(parsed, null, 2));
+        fs.writeFileSync(accesslintArtifact, JSON.stringify(parsed, null, 2));
         const summary = buildAccesslintResultFromReceipt(parsed);
         return {
             result: {
@@ -252,6 +308,7 @@ function runAccesslintStep(runtime, featureDir, designReceipt) {
             failed: summary.status === 'FAIL',
         };
     } catch (error) {
+        removeArtifactIfPresent(accesslintArtifact);
         return {
             result: {
                 step: 'Accessibility (AccessLint)',
@@ -275,6 +332,8 @@ function runBrowserAuditStep(runtime, featureDir, promptReceipt, designReceipt, 
     const browserAuditEligible = detectUiFeatureForGate(featureDir, promptReceipt);
 
     if (!browserAuditEligible || designReceipt?.stack === 'react-native') {
+        removeArtifactIfPresent(browserAuditArtifact);
+        removeArtifactIfPresent(browserAuditScreenshot);
         return {
             result: {
                 step,
@@ -288,6 +347,8 @@ function runBrowserAuditStep(runtime, featureDir, promptReceipt, designReceipt, 
     const htmlTargets = collectHtmlAuditTargets(runtime.targetDir);
     const browserTarget = resolveBrowserAuditTarget(runtime.targetDir, featureDir, htmlTargets, { url: previewUrl });
     if (!browserTarget) {
+        removeArtifactIfPresent(browserAuditArtifact);
+        removeArtifactIfPresent(browserAuditScreenshot);
         return {
             result: {
                 step,
@@ -308,6 +369,8 @@ function runBrowserAuditStep(runtime, featureDir, promptReceipt, designReceipt, 
             : runBrowserAuditViaService(runtime, browserTarget.target, browserAuditScreenshot);
 
         if (parsed.skipped) {
+            removeArtifactIfPresent(browserAuditArtifact);
+            removeArtifactIfPresent(browserAuditScreenshot);
             return {
                 result: {
                     step,
@@ -331,6 +394,8 @@ function runBrowserAuditStep(runtime, featureDir, promptReceipt, designReceipt, 
             failed: summary.status === 'FAIL',
         };
     } catch (error) {
+        removeArtifactIfPresent(browserAuditArtifact);
+        removeArtifactIfPresent(browserAuditScreenshot);
         return {
             result: {
                 step,
@@ -416,11 +481,9 @@ function runOptionalDeepScans(runtime) {
             };
         }
 
-        const outcome = runtime.spawn('npx', scan.args, {
+        const outcome = spawnRuntimeCommand(runtime, 'npx', scan.args, {
             cwd: runtime.targetDir,
-            stdio: 'pipe',
             timeout: 120000,
-            shell: true,
         });
 
         if (outcome.status === 0) {
@@ -431,12 +494,7 @@ function runOptionalDeepScans(runtime) {
             };
         }
 
-        const detail =
-            String(outcome.stderr || outcome.stdout || '')
-                .trim()
-                .split('\n')
-                .slice(-5)
-                .join('\n') || scan.fail;
+        const detail = summarizeCommandFailure(outcome, scan.fail);
         return {
             step: scan.step,
             status: 'WARN',
@@ -707,6 +765,8 @@ function run(argv = [], context = {}) {
     const verifyConfidence = assessVerificationConfidence(results, hasFailure);
 
     const uiReviewRefresh = refreshUiReviewArtifacts(feature, paths.featureDir, {
+        targetDir: runtime.targetDir,
+        pruneStaleEvidence: true,
         verifyStatus,
         deepMode,
         previewUrl: normalizedPreviewUrl || undefined,
@@ -768,5 +828,7 @@ module.exports = {
     canHandle,
     collectAccessibilityAuditTargets,
     resolveBrowserAuditTarget,
+    runPackageScript,
     run,
+    spawnRuntimeCommand,
 };
