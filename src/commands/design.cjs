@@ -89,7 +89,7 @@ function handleDesignRoute(argv = [], context = {}) {
                 area: 'design',
                 command: 'design-route',
                 exitCode: 1,
-                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}\n`,
+                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run start ${feature}\n`,
             };
         }
         writeJsonFile(path.join(featureDir, 'design-routing.json'), {
@@ -148,7 +148,7 @@ function handleDesignPrep(argv = [], context = {}) {
                 area: 'design',
                 command: 'design-prep',
                 exitCode: 1,
-                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}\n`,
+                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run start ${feature}\n`,
             };
         }
     }
@@ -325,7 +325,7 @@ function handleDesignSystem(argv = [], context = {}) {
                 area: 'design',
                 command: 'design-system',
                 exitCode: 1,
-                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}\n`,
+                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run start ${feature}\n`,
             };
         }
     }

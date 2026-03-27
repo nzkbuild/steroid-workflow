@@ -8,10 +8,12 @@ const {
     handleArchive,
     handleCheckPlan,
     handleCommit,
+    handleFinish,
     handleGate,
     handleGitInit,
     handleInitFeature,
     handleLog,
+    handleStart,
     handleReset,
     handleRecover,
     handleSmokeTest,
@@ -137,6 +139,57 @@ test('handleInitFeature creates a governed feature folder', () => {
     }
 });
 
+test('handleStart initializes a feature and captures bootstrap context', () => {
+    const feature = `started-feature-${Date.now()}`;
+    const result = handleStart(['start', feature], { targetDir: tmpBase });
+    if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode} ${result.stderr || ''}`);
+    if (!result.stdout.includes('Feature start complete')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes(`Next command: node steroid-run.cjs next ${feature}`)) {
+        throw new Error(`Missing next-command guidance: ${result.stdout}`);
+    }
+    if (!fs.existsSync(path.join(tmpBase, '.memory', 'changes', feature, 'context.md'))) {
+        throw new Error('context.md was not written');
+    }
+    if (!fs.existsSync(path.join(tmpBase, '.memory', 'changes', feature, 'request.json'))) {
+        throw new Error('request.json was not written');
+    }
+});
+
+test('handleFinish guides the final review to archive path', () => {
+    const feature = `finish-feature-${Date.now()}`;
+    const featureDir = path.join(tmpBase, '.memory', 'changes', feature);
+    fs.mkdirSync(path.join(featureDir, 'archive'), { recursive: true });
+    fs.writeFileSync(path.join(featureDir, 'review.md'), '**Stage 1 Result:** PASS\n**Stage 2 Result:** PASS\n');
+    fs.writeFileSync(
+        path.join(featureDir, 'verify.json'),
+        JSON.stringify(
+            {
+                feature,
+                status: 'PASS',
+                confidence: 'HIGH',
+                reviewPassed: true,
+                checks: {},
+                deepRequested: false,
+                deepCompleted: false,
+            },
+            null,
+            2,
+        ),
+    );
+    fs.writeFileSync(
+        path.join(featureDir, 'completion.json'),
+        JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
+    );
+
+    const result = handleFinish(['finish', feature], { targetDir: tmpBase });
+    if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
+    if (!result.stdout.includes('Finish check for')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes('Archive readiness: READY')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes(`Next command: node steroid-run.cjs archive ${feature}`)) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
+});
+
 test('handleGate passes vibe when request and context receipts exist', () => {
     const feature = 'gate-vibe-pass';
     const featureDir = path.join(tmpBase, '.memory', 'changes', feature);
@@ -232,7 +285,7 @@ test('handleArchive blocks when verify receipt is missing', () => {
     const feature = 'archive-missing-verify';
     const featureDir = path.join(tmpBase, '.memory', 'changes', feature);
     fs.mkdirSync(featureDir, { recursive: true });
-    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '7.0.0-beta.1' });
+    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '7.0.0-beta.2' });
     if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stderr.includes('No verify.json receipt found')) throw new Error(`Unexpected stderr: ${result.stderr}`);
 });
@@ -250,7 +303,7 @@ test('handleArchive archives verified feature artifacts and writes report', () =
         path.join(featureDir, 'completion.json'),
         JSON.stringify({ feature, status: 'PASS', sourceArtifacts: ['verify.json'], nextActions: ['archive'] }, null, 2),
     );
-    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '7.0.0-beta.1' });
+    const result = handleArchive(['archive', feature], { targetDir: tmpBase, version: '7.0.0-beta.2' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Archived')) throw new Error(`Unexpected stdout: ${result.stdout}`);
     if (!fs.existsSync(path.join(tmpBase, '.memory', 'reports', `${feature}.md`))) {

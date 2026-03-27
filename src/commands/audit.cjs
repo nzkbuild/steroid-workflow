@@ -46,14 +46,14 @@ function buildRuntimeContext(context = {}) {
 function loadVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.1';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
     } catch {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 }
 
@@ -87,7 +87,13 @@ function summarizeVersionDrift(filePath, version) {
 
 function handleAudit(context = {}) {
     const runtime = buildRuntimeContext(context);
-    const lines = ['', `[steroid-run] 🔍 Auditing enforcement layers... (v${runtime.version})`, ''];
+    const lines = [
+        '',
+        `[steroid-run] 🔍 Auditing enforcement layers... (v${runtime.version})`,
+        '',
+        '  Role: installation and enforcement health check.',
+        '',
+    ];
     let passed = 0;
     let failed = 0;
     let skillCount = 0;
@@ -230,7 +236,7 @@ function handleAudit(context = {}) {
             area: 'audit',
             command: 'audit',
             exitCode: 1,
-            stdout: `${lines.join('\n')}\n`,
+            stdout: `${lines.join('\n')}\n  Next command: npx steroid-workflow init\n`,
         };
     }
 
@@ -251,6 +257,7 @@ function handleAudit(context = {}) {
 
     lines.push('');
     lines.push('  All enforcement layers active. 🔒');
+    lines.push('  Next command: node steroid-run.cjs dashboard');
     return {
         handled: true,
         area: 'audit',

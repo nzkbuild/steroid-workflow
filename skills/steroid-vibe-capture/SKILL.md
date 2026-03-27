@@ -101,17 +101,17 @@ Examples:
 
 ### 5. Physical Folder Creation
 
-Once the slug is determined, physically create the feature folder using the steroid-run enforcer:
+Once the slug is determined, begin the feature using the higher-level steroid-run entrypoint:
 
 ```
-node steroid-run.cjs init-feature <slug>
+node steroid-run.cjs start <slug>
 ```
 
-This is NOT optional. The command validates the slug format and creates `.memory/changes/<slug>/` with the correct structure. If the name is invalid, the command will block you with an error.
+This is NOT optional. The command validates the slug format, creates `.memory/changes/<slug>/`, and bootstraps the first scan receipts. If the name is invalid, the command will block you with an error.
 
 ### 5b. Prompt Intelligence Receipt (v6.2.0)
 
-Immediately after `init-feature`, persist the normalized prompt interpretation:
+If you are intentionally using the lower-level flow instead of `start`, immediately after `init-feature`, persist the normalized prompt interpretation:
 
 ```bash
 node steroid-run.cjs normalize-prompt "<original user prompt>" --feature <slug> --write

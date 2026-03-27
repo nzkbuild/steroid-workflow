@@ -71,6 +71,7 @@ test('loadVerifyReceipt preserves deep verification flags from verify.json', () 
             {
                 feature: 'sample',
                 status: 'pass',
+                confidence: 'REDUCED',
                 reviewPassed: true,
                 checks: { lint: 'PASS' },
                 deepRequested: true,
@@ -81,7 +82,7 @@ test('loadVerifyReceipt preserves deep verification flags from verify.json', () 
         ),
     );
     const receipt = loadVerifyReceipt('sample', featureDir);
-    if (receipt.status !== 'PASS' || !receipt.deepRequested || receipt.deepCompleted) {
+    if (receipt.status !== 'PASS' || receipt.confidence !== 'REDUCED' || !receipt.deepRequested || receipt.deepCompleted) {
         throw new Error(`Unexpected verify receipt: ${JSON.stringify(receipt)}`);
     }
 });
@@ -90,13 +91,14 @@ test('saveVerifyReceipt writes verify.json in governed shape', () => {
     saveVerifyReceipt(featureDir, {
         feature: 'sample',
         status: 'PASS',
+        confidence: 'HIGH',
         reviewPassed: true,
         checks: { test: 'PASS' },
         deepRequested: true,
         deepCompleted: true,
     });
     const verifyJson = JSON.parse(fs.readFileSync(featureDir + '/verify.json', 'utf-8'));
-    if (!verifyJson.deepRequested || !verifyJson.deepCompleted) {
+    if (!verifyJson.deepRequested || !verifyJson.deepCompleted || verifyJson.confidence !== 'HIGH') {
         throw new Error(`Unexpected saved verify receipt: ${JSON.stringify(verifyJson)}`);
     }
 });

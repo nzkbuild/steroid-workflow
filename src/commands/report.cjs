@@ -28,19 +28,23 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.1';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
     } catch {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 }
 
 function ensureDir(dirPath) {
     fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function formatReportNextCommand(command) {
+    return `  Next command: ${command}\n`;
 }
 
 function readStateFile(stateFile) {
@@ -161,7 +165,8 @@ function createBugReport(runtime) {
         exitCode: 0,
         stdout:
             '[steroid-run] 📋 Bug report saved to .memory/bug-report.md\n' +
-            '[steroid-run] 💡 Edit the "Expected vs Actual" section, then share the file.\n',
+            '[steroid-run] 💡 Edit the "Expected vs Actual" section, then share the file.\n' +
+            formatReportNextCommand('node steroid-run.cjs report list'),
     };
 }
 
@@ -175,11 +180,13 @@ function handleList(runtime) {
             area: 'report',
             command: 'report',
             exitCode: 0,
-            stdout: '[steroid-run] 📭 No handoff reports yet. Archive a feature to generate one.\n',
+            stdout:
+                '[steroid-run] 📭 No handoff reports yet. Archive a feature to generate one.\n' +
+                formatReportNextCommand('node steroid-run.cjs pipeline-status <feature>'),
         };
     }
 
-    const lines = ['', '[steroid-run] 📋 Handoff Reports', ''];
+    const lines = ['', '[steroid-run] 📋 Handoff Reports', '', '  Role: human-readable handoff and delivery output.', ''];
     files.forEach((fileName) => {
         const content = fs.readFileSync(path.join(runtime.reportsDir, fileName), 'utf-8');
         const statusMatch = content.match(/\*\*Status:\*\* (.+)/);
@@ -194,7 +201,7 @@ function handleList(runtime) {
         area: 'report',
         command: 'report',
         exitCode: 0,
-        stdout: `${lines.join('\n')}\n`,
+        stdout: `${lines.join('\n')}\n${formatReportNextCommand('node steroid-run.cjs report show <feature>')}`,
     };
 }
 
@@ -217,7 +224,9 @@ function handleShow(argv, runtime) {
             area: 'report',
             command: 'report',
             exitCode: 1,
-            stderr: `[steroid-run] ❌ No report found for "${feature}".\n`,
+            stderr:
+                `[steroid-run] ❌ No report found for "${feature}".\n` +
+                formatReportNextCommand('node steroid-run.cjs report list'),
         };
     }
 
@@ -227,7 +236,7 @@ function handleShow(argv, runtime) {
         area: 'report',
         command: 'report',
         exitCode: 0,
-        stdout: content.endsWith('\n') ? content : `${content}\n`,
+        stdout: `${content.endsWith('\n') ? content : `${content}\n`}${formatReportNextCommand('node steroid-run.cjs report list')}`,
     };
 }
 
@@ -266,7 +275,8 @@ function handleGenerate(argv, runtime) {
                 exitCode: 1,
                 stderr:
                     `[steroid-run] 🚫 REPORT BLOCKED: ${governedArtifact} is missing governed structure.\n` +
-                    `  ${governedShape.reason}\n`,
+                    `  ${governedShape.reason}\n` +
+                    formatReportNextCommand(`node steroid-run.cjs pipeline-status ${feature}`),
             };
         }
     }
@@ -296,7 +306,8 @@ function handleGenerate(argv, runtime) {
         exitCode: 0,
         stdout:
             `[steroid-run] 📄 Handoff report generated: .memory/reports/${feature}.md\n` +
-            `  Run: node steroid-run.cjs report show ${feature}\n`,
+            `  Run: node steroid-run.cjs report show ${feature}\n` +
+            formatReportNextCommand(`node steroid-run.cjs report show ${feature}`),
     };
 }
 
@@ -325,7 +336,9 @@ function run(argv = [], context = {}) {
         area: 'report',
         command: 'report',
         exitCode: 1,
-        stderr: `[steroid-run] ❌ Unknown report subcommand: "${sub}". Run: node steroid-run.cjs report --help\n`,
+        stderr:
+            `[steroid-run] ❌ Unknown report subcommand: "${sub}". Run: node steroid-run.cjs report --help\n` +
+            formatReportNextCommand('node steroid-run.cjs report --help'),
     };
 }
 

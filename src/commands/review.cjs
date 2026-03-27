@@ -23,14 +23,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.1';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
     } catch {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 }
 
@@ -91,6 +91,10 @@ function getFeaturePaths(runtime, feature) {
     };
 }
 
+function formatNextCommand(command) {
+    return `  Next command: ${command}\n`;
+}
+
 function handleStatus(runtime, feature) {
     const paths = getFeaturePaths(runtime, feature);
     if (!fs.existsSync(paths.reviewFile) && !fs.existsSync(paths.reviewReceiptFile)) {
@@ -101,7 +105,8 @@ function handleStatus(runtime, feature) {
             exitCode: 0,
             stdout:
                 `[steroid-run] 📋 No review started for "${feature}".\n` +
-                `  Run: node steroid-run.cjs review spec ${feature}\n`,
+                `  Run: node steroid-run.cjs review spec ${feature}\n` +
+                formatNextCommand(`node steroid-run.cjs review spec ${feature}`),
         };
     }
 
@@ -125,10 +130,15 @@ function handleStatus(runtime, feature) {
 
     if (specStatus === 'PASS' && qualityStatus === 'PASS') {
         lines.push('', '  ✅ Both stages passed. Ready for verification.');
+        lines.push(`  Next command: node steroid-run.cjs verify-feature ${feature}`);
     } else if (specStatus === 'FAIL') {
         lines.push('', `  ❌ Spec review failed. Fix issues and re-run: node steroid-run.cjs review spec ${feature}`);
+        lines.push(`  Next command: node steroid-run.cjs review spec ${feature}`);
     } else if (specStatus === 'PASS' && qualityStatus !== 'PASS') {
         lines.push('', `  ⏳ Spec passed. Run quality review: node steroid-run.cjs review quality ${feature}`);
+        lines.push(`  Next command: node steroid-run.cjs review quality ${feature}`);
+    } else {
+        lines.push('', `  Next command: node steroid-run.cjs review spec ${feature}`);
     }
 
     return {
@@ -158,7 +168,8 @@ function handleReset(runtime, feature) {
         command: 'review',
         exitCode: 0,
         stdout: hadReviewFile || hadReviewReceipt
-            ? `[steroid-run] 🔄 Review reset for "${feature}". Run: node steroid-run.cjs review spec ${feature}\n`
+            ? `[steroid-run] 🔄 Review reset for "${feature}". Run: node steroid-run.cjs review spec ${feature}\n` +
+              formatNextCommand(`node steroid-run.cjs review spec ${feature}`)
             : `[steroid-run] No review to reset for "${feature}".\n`,
     };
 }
@@ -172,7 +183,9 @@ function handleSpec(runtime, feature) {
             area: 'review',
             command: 'review',
             exitCode: 1,
-            stderr: `[steroid-run] ❌ No spec.md found for "${feature}". Cannot run spec review without acceptance criteria.\n`,
+            stderr:
+                `[steroid-run] ❌ No spec.md found for "${feature}". Cannot run spec review without acceptance criteria.\n` +
+                formatNextCommand(`node steroid-run.cjs pipeline-status ${feature}`),
         };
     }
     if (!fs.existsSync(paths.planFile)) {
@@ -181,7 +194,9 @@ function handleSpec(runtime, feature) {
             area: 'review',
             command: 'review',
             exitCode: 1,
-            stderr: `[steroid-run] ❌ No plan.md found for "${feature}". Cannot run spec review without task list.\n`,
+            stderr:
+                `[steroid-run] ❌ No plan.md found for "${feature}". Cannot run spec review without task list.\n` +
+                formatNextCommand(`node steroid-run.cjs pipeline-status ${feature}`),
         };
     }
 
@@ -210,7 +225,8 @@ function handleSpec(runtime, feature) {
             "  CRITICAL: Do NOT trust the implementer's report. Read the actual code.\n\n" +
             `[steroid-run] 📝 Review template written to .memory/changes/${feature}/review.md\n` +
             `[steroid-run] 🧾 Receipt written to .memory/changes/${feature}/review.json\n` +
-            '  AI: Complete the spec review, then update Stage 1 Result to PASS or FAIL.\n',
+            '  AI: Complete the spec review, then update Stage 1 Result to PASS or FAIL.\n' +
+            formatNextCommand(`node steroid-run.cjs review status ${feature}`),
     };
 }
 
@@ -223,7 +239,9 @@ function handleQuality(runtime, feature) {
             area: 'review',
             command: 'review',
             exitCode: 1,
-            stderr: `[steroid-run] ❌ No review started. Run Stage 1 first: node steroid-run.cjs review spec ${feature}\n`,
+            stderr:
+                `[steroid-run] ❌ No review started. Run Stage 1 first: node steroid-run.cjs review spec ${feature}\n` +
+                formatNextCommand(`node steroid-run.cjs review spec ${feature}`),
         };
     }
 
@@ -237,7 +255,8 @@ function handleQuality(runtime, feature) {
             stderr:
                 '[steroid-run] 🚫 REVIEW GATE: Stage 1 (Spec) has not passed.\n' +
                 '  Stage 2 (Quality) cannot run until Stage 1 passes.\n' +
-                `  Fix spec issues and update review.md, then re-run: node steroid-run.cjs review status ${feature}\n`,
+                `  Fix spec issues and update review.md, then re-run: node steroid-run.cjs review status ${feature}\n` +
+                formatNextCommand(`node steroid-run.cjs review status ${feature}`),
         };
     }
 
@@ -254,7 +273,8 @@ function handleQuality(runtime, feature) {
             '  3. Run anti-pattern scan: TODO/FIXME, empty returns, console.log-only handlers\n' +
             '  4. Categorize: 🛑 Critical | ⚠️ Important | ℹ️ Minor\n' +
             '  5. Update Stage 2 section in review.md\n\n' +
-            '  Source: Steroid internal code quality rubric\n',
+            '  Source: Steroid internal code quality rubric\n' +
+            formatNextCommand(`node steroid-run.cjs review status ${feature}`),
     };
 }
 

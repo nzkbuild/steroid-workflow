@@ -44,7 +44,7 @@ function populateHappyPathProject(root) {
         'steroid-verify',
         'steroid-diagnose',
     ]) {
-        ensureFile(path.join(root, '.agents', 'skills', skillName, 'SKILL.md'), `# ${skillName}\nVersion 7.0.0-beta.1\n`);
+        ensureFile(path.join(root, '.agents', 'skills', skillName, 'SKILL.md'), `# ${skillName}\nVersion 7.0.0-beta.2\n`);
     }
     ensureFile(path.join(root, '.memory', 'execution_state.json'), JSON.stringify({ error_count: 0 }, null, 2));
     ensureFile(path.join(root, 'steroid-run.cjs'), `${new Array(120).fill('line').join('\n')}\n`);
@@ -62,10 +62,13 @@ test('handleAudit reports a healthy installed project', () => {
     const root = makeProjectRoot('healthy');
     populateHappyPathProject(root);
 
-    const result = handleAudit({ targetDir: root, version: '7.0.0-beta.1' });
+    const result = handleAudit({ targetDir: root, version: '7.0.0-beta.2' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('All enforcement layers active.')) {
         throw new Error(`Missing success footer: ${result.stdout}`);
+    }
+    if (!result.stdout.includes('Role: installation and enforcement health check.')) {
+        throw new Error(`Missing role guidance: ${result.stdout}`);
     }
     if (!result.stdout.includes('8 skills')) {
         throw new Error(`Missing skill count summary: ${result.stdout}`);
@@ -79,13 +82,16 @@ test('handleAudit fails when required layers are missing', () => {
     const root = makeProjectRoot('missing');
     ensureFile(path.join(root, 'steroid-run.cjs'), 'short\n');
 
-    const result = handleAudit({ targetDir: root, version: '7.0.0-beta.1' });
+    const result = handleAudit({ targetDir: root, version: '7.0.0-beta.2' });
     if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Git pre-commit hook — missing')) {
         throw new Error(`Missing hook failure: ${result.stdout}`);
     }
     if (!result.stdout.includes('Fix: Run "npx steroid-workflow init"')) {
         throw new Error(`Missing remediation message: ${result.stdout}`);
+    }
+    if (!result.stdout.includes('Next command: npx steroid-workflow init')) {
+        throw new Error(`Missing next command: ${result.stdout}`);
     }
 });
 

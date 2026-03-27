@@ -1,5 +1,19 @@
 # Changelog
 
+## [7.0.0-beta.2] "Workflow Clarity and Truthful Verification" - 2026-03-27
+
+### Added
+- **Top-level workflow commands** — added `start`, `next`, and `finish` so users can begin work, ask what to do now, and check completion readiness without dropping into low-level pipeline fragments first
+
+### Changed
+- **Workflow readability** — `pipeline-status` now leads with route, phase, blockers, progress, and the exact next command before deeper artifact detail
+- **Command guidance** — `gate`, `review`, `verify-feature`, `memory`, `report`, `dashboard`, and `audit` now give more explicit next-step guidance
+- **Public journey** — public-facing help and README wording now center the `start -> next -> finish` journey while keeping lower-level commands available for advanced use
+
+### Fixed
+- **Review truthfulness** — `verify-feature` now validates `review.md` evidence instead of trusting `review.json` alone
+- **Verification honesty** — verification now carries explicit confidence levels (`HIGH`, `REDUCED`, `BLOCKED`) in command output and receipts
+
 ## [7.0.0-beta.1] "Install Footprint and Product Clarity" - 2026-03-27
 
 ### Changed

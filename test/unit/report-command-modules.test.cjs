@@ -127,18 +127,24 @@ writeJson(path.join(featureDir, 'ui-review.json'), {
 });
 
 test('report generates a bug report by default', () => {
-    const result = run(['report'], { targetDir: tmpBase, version: '7.0.0-beta.1' });
+    const result = run(['report'], { targetDir: tmpBase, version: '7.0.0-beta.2' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Bug report saved')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes('Next command: node steroid-run.cjs report list')) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
     const bugReport = fs.readFileSync(path.join(memoryDir, 'bug-report.md'), 'utf-8');
     if (!bugReport.includes('Steroid Workflow Bug Report')) throw new Error('Bug report file was not created');
     if (!bugReport.includes('example failure')) throw new Error('Bug report is missing execution state details');
 });
 
 test('report generate writes a handoff report', () => {
-    const result = run(['report', 'generate', feature], { targetDir: tmpBase, version: '7.0.0-beta.1' });
+    const result = run(['report', 'generate', feature], { targetDir: tmpBase, version: '7.0.0-beta.2' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode} ${result.stderr || ''}`);
     if (!result.stdout.includes(`.memory/reports/${feature}.md`)) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes(`Next command: node steroid-run.cjs report show ${feature}`)) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
     const report = fs.readFileSync(path.join(reportsDir, `${feature}.md`), 'utf-8');
     if (!report.includes('# Handoff Report: sample-feature')) throw new Error(report);
     if (!report.includes('## Frontend Quality')) throw new Error(report);
@@ -154,6 +160,9 @@ test('report list summarizes available reports', () => {
     const result = run(['report', 'list'], { targetDir: tmpBase });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Handoff Reports')) throw new Error(`Missing list header: ${result.stdout}`);
+    if (!result.stdout.includes('Role: human-readable handoff and delivery output.')) {
+        throw new Error(`Missing role guidance: ${result.stdout}`);
+    }
     if (!result.stdout.includes('sample-feature')) throw new Error(`Missing report listing: ${result.stdout}`);
 });
 

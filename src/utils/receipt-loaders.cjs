@@ -115,6 +115,7 @@ function loadVerifyReceipt(feature, featureDir) {
         }
         if (
             existing.status !== receipt.status ||
+            existing.confidence !== receipt.confidence ||
             existing.reviewPassed !== receipt.reviewPassed ||
             existing.checks !== receipt.checks ||
             existing.source !== receipt.source ||
@@ -133,6 +134,7 @@ function loadVerifyReceipt(feature, featureDir) {
             const receipt = {
                 feature,
                 status,
+                confidence: null,
                 reviewPassed: false,
                 checks: {},
                 deepRequested: false,
@@ -148,6 +150,7 @@ function loadVerifyReceipt(feature, featureDir) {
     return {
         feature,
         status: null,
+        confidence: null,
         reviewPassed: false,
         checks: {},
         deepRequested: false,
@@ -161,6 +164,7 @@ function saveVerifyReceipt(featureDir, receipt) {
     writeJsonFile(path.join(featureDir, 'verify.json'), {
         feature: receipt.feature,
         status: receipt.status,
+        confidence: typeof receipt.confidence === 'string' ? receipt.confidence : null,
         reviewPassed: !!receipt.reviewPassed,
         checks: receipt.checks || {},
         deepRequested: !!receipt.deepRequested,

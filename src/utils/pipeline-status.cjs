@@ -93,11 +93,93 @@ function getPipelineStatusEntries(featureDir, promptReceipt) {
     });
 }
 
-function formatPipelineStatus(feature, featureDir, promptReceipt) {
+function getCurrentPhase(phases, routeSummary) {
+    const expectedPhases = phases.filter((phase) => phase.expected);
+    const latestCompleted = [...expectedPhases].reverse().find((phase) => phase.present);
+    if (routeSummary?.next?.phase === 'complete') {
+        return latestCompleted ? `${latestCompleted.name} complete` : 'complete';
+    }
+    if (!latestCompleted) {
+        return 'not started';
+    }
+    return latestCompleted.name;
+}
+
+function getBlockingItems(phases, routeSummary) {
+    if (!routeSummary || routeSummary.next.phase === 'complete') {
+        return [];
+    }
+
+    const nextPhase = routeSummary.next.phase;
+    return phases
+        .filter((phase) => phase.expected && !phase.present)
+        .filter((phase) => {
+            if (nextPhase === 'prompt') return phase.name === 'prompt';
+            return phase.name === nextPhase || phase.name.startsWith(nextPhase);
+        })
+        .map((phase) => `${phase.file} missing`);
+}
+
+function formatNextCommand(feature, routeSummary) {
+    if (!routeSummary) {
+        return `node steroid-run.cjs scan ${feature}`;
+    }
+
+    switch (routeSummary.next.phase) {
+        case 'scan':
+            return `node steroid-run.cjs scan ${feature}`;
+        case 'normalize-prompt':
+        case 'prompt':
+            return `node steroid-run.cjs normalize-prompt "<user prompt>" --feature ${feature} --write`;
+        case 'vibe':
+            return `Use the steroid vibe step for "${feature}" to produce vibe.md`;
+        case 'specify':
+            return `Use the steroid specify step for "${feature}" to produce spec.md`;
+        case 'research':
+            return `node steroid-run.cjs gate research ${feature}`;
+        case 'architect':
+            return `node steroid-run.cjs gate architect ${feature}`;
+        case 'diagnose':
+            return `node steroid-run.cjs gate diagnose ${feature}`;
+        case 'engine':
+            return `node steroid-run.cjs gate engine ${feature}`;
+        case 'verify':
+            return `node steroid-run.cjs verify-feature ${feature}`;
+        case 'complete':
+            return `node steroid-run.cjs archive ${feature}`;
+        default:
+            return `node steroid-run.cjs pipeline-status ${feature}`;
+    }
+}
+
+function buildWorkflowOverview(feature, featureDir, promptReceipt) {
     const phases = getPipelineStatusEntries(featureDir, promptReceipt);
     const artifactState = buildFeatureArtifactState(featureDir);
+    const routeSummary = promptReceipt ? summarizeRouteProgress(promptReceipt, artifactState) : null;
+    const currentPhase = getCurrentPhase(phases, routeSummary);
+    const blockers = getBlockingItems(phases, routeSummary);
+    const nextCommand = formatNextCommand(feature, routeSummary);
+    const routeName = promptReceipt?.recommendedPipeline || 'standard-build';
+    const completed = phases.filter((phase) => phase.present).length;
+
+    return {
+        phases,
+        artifactState,
+        routeSummary,
+        currentPhase,
+        blockers,
+        nextCommand,
+        routeName,
+        completed,
+        total: phases.length,
+    };
+}
+
+function formatPipelineStatus(feature, featureDir, promptReceipt) {
+    const overview = buildWorkflowOverview(feature, featureDir, promptReceipt);
+    const { phases, artifactState, routeSummary, currentPhase, blockers, nextCommand, routeName, completed, total } =
+        overview;
     const lines = [``, `[steroid-run] Pipeline status for: ${feature}`, ``];
-    let completed = 0;
 
     for (const phase of phases) {
         const artifactPath = path.join(featureDir, phase.file);
@@ -106,7 +188,6 @@ function formatPipelineStatus(feature, featureDir, promptReceipt) {
             const suffix = phase.expected ? `${lineCount} lines` : `${lineCount} lines, extra for route`;
             const icon = phase.expected ? '✅' : '⚠️';
             lines.push(`  ${icon} ${phase.name.padEnd(12)} → ${phase.file} (${suffix})`);
-            completed++;
         } else if (!phase.expected) {
             lines.push(
                 `  ⏭️ ${phase.name.padEnd(12)} → ${phase.file} (not used by ${promptReceipt?.recommendedPipeline || 'standard-build'})`,
@@ -116,15 +197,28 @@ function formatPipelineStatus(feature, featureDir, promptReceipt) {
         }
     }
 
-    const total = phases.length;
     const barFull = Math.round((completed / total) * 16);
     const bar = '█'.repeat(barFull) + '░'.repeat(16 - barFull);
+    lines.push('  Workflow Overview');
+    lines.push(`    - Route: ${routeName}`);
+    lines.push(`    - Current phase: ${currentPhase}`);
+    lines.push(`    - Progress: ${completed}/${total} tracked artifacts`);
+    if (routeSummary) {
+        lines.push(`    - Status: ${routeSummary.status}`);
+    }
+    if (blockers.length > 0) {
+        lines.push(`    - Blockers: ${blockers.join('; ')}`);
+    } else if (routeSummary?.next?.phase === 'complete') {
+        lines.push('    - Blockers: none');
+    } else {
+        lines.push('    - Blockers: no hard blocker detected');
+    }
+    lines.push(`    - Next command: ${nextCommand}`);
     lines.push('');
-    lines.push(`  Progress: ${bar} ${completed}/${total} phases`);
+    lines.push(`  Progress Bar: ${bar} ${completed}/${total} phases`);
     lines.push('');
 
     if (promptReceipt) {
-        const routeSummary = summarizeRouteProgress(promptReceipt, artifactState);
         lines.push('  Prompt Intelligence');
         lines.push(`    - Intent: ${promptReceipt.primaryIntent || 'Unknown'}`);
         if (Array.isArray(promptReceipt.secondaryIntents) && promptReceipt.secondaryIntents.length > 0) {
@@ -198,6 +292,7 @@ function formatPipelineStatus(feature, featureDir, promptReceipt) {
 }
 
 module.exports = {
+    buildWorkflowOverview,
     buildFeatureArtifactState,
     formatPipelineStatus,
     getPipelineStatusEntries,

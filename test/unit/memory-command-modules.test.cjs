@@ -111,6 +111,12 @@ test('handleMemorySummary reports aggregated state and recommendations', () => {
     if (!result.stdout.includes('Recommended next actions:')) {
         throw new Error(`Missing recommendations: ${result.stdout}`);
     }
+    if (!result.stdout.includes('Role: operational context snapshot')) {
+        throw new Error(`Missing role guidance: ${result.stdout}`);
+    }
+    if (!result.stdout.includes('Next command:')) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
 });
 
 test('handleMemorySave writes a session checkpoint artifact', () => {
@@ -122,6 +128,9 @@ test('handleMemorySave writes a session checkpoint artifact', () => {
     const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
     if (summary.totalEntries < 1) throw new Error(`Unexpected summary: ${JSON.stringify(summary)}`);
     if (!summary.stores.patterns.present) throw new Error(`Patterns store not captured: ${JSON.stringify(summary)}`);
+    if (!result.stdout.includes('Next command: node steroid-run.cjs memory summary')) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
 });
 
 test('handleMemory routes help and unknown subcommands', () => {
@@ -132,6 +141,9 @@ test('handleMemory routes help and unknown subcommands', () => {
     }
     if (!result.stdout.includes('memory save')) {
         throw new Error(`Missing save command in help text: ${result.stdout}`);
+    }
+    if (!result.stdout.includes('Primary use:')) {
+        throw new Error(`Missing primary use guidance: ${result.stdout}`);
     }
 
     result = handleMemory(['memory', 'unknown-subcommand'], { targetDir: tmpBase });

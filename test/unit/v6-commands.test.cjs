@@ -14,6 +14,7 @@ let passed = 0;
 let failed = 0;
 
 const steroidRun = path.join(__dirname, '..', '..', 'bin', 'steroid-run.cjs');
+const compatSourcePath = path.join(__dirname, '..', '..', 'src', 'runtime', 'standalone-compat.cjs');
 const childProcessProbe = spawnSync(process.execPath, ['-e', 'console.log("probe")'], {
     cwd: __dirname,
     stdio: 'pipe',
@@ -2173,29 +2174,33 @@ exports.chromium = {
 }
 
 test('source contains review receipt support', () => {
-    const source = fs.readFileSync(steroidRun, 'utf-8');
+    const source = fs.readFileSync(compatSourcePath, 'utf-8');
     if (!source.includes('review.json')) throw new Error('review.json support not found in source');
 });
 
 test('source contains verify receipt support', () => {
-    const source = fs.readFileSync(steroidRun, 'utf-8');
+    const source = fs.readFileSync(compatSourcePath, 'utf-8');
     if (!source.includes('verify.json')) throw new Error('verify.json support not found in source');
 });
 
 test('source contains deep verification support', () => {
-    const source = fs.readFileSync(steroidRun, 'utf-8');
+    const source = fs.readFileSync(compatSourcePath, 'utf-8');
     if (!source.includes('--deep')) throw new Error('--deep support not found in source');
     if (!source.includes('deepRequested')) throw new Error('deep receipt fields not found in source');
 });
 
 test('source contains pipe and redirection guards', () => {
-    const source = fs.readFileSync(steroidRun, 'utf-8');
-    if (!source.includes("return '|'")) throw new Error('pipe guard not found in source');
-    if (!source.includes("return '>'")) throw new Error('redirection guard not found in source');
+    const source = fs.readFileSync(compatSourcePath, 'utf-8');
+    if (!source.includes('findCanonicalBlockedShellSyntax')) {
+        throw new Error('canonical shell-guard delegation not found in source');
+    }
+    if (!source.includes("../utils/trust-helpers.cjs")) {
+        throw new Error('trust-helper import not found in source');
+    }
 });
 
 test('source contains prompt intelligence commands', () => {
-    const source = fs.readFileSync(steroidRun, 'utf-8');
+    const source = fs.readFileSync(compatSourcePath, 'utf-8');
     if (!source.includes('normalize-prompt')) throw new Error('normalize-prompt support not found in source');
     if (!source.includes('design-prep')) throw new Error('design-prep support not found in source');
     if (!source.includes('design-route')) throw new Error('design-route support not found in source');
@@ -2209,7 +2214,7 @@ test('source contains prompt intelligence commands', () => {
 });
 
 test('source contains prompt-aware pipeline status and fix-path verification support', () => {
-    const source = fs.readFileSync(steroidRun, 'utf-8');
+    const source = fs.readFileSync(compatSourcePath, 'utf-8');
     if (!source.includes('Prompt Intelligence')) throw new Error('pipeline-status prompt section not found');
     if (!source.includes('Route Guidance')) throw new Error('pipeline-status route guidance not found');
     if (!source.includes('Design Intelligence')) throw new Error('pipeline-status design section not found');
@@ -2223,11 +2228,8 @@ test('source contains prompt-aware pipeline status and fix-path verification sup
     }
     if (!source.includes('Deep scan: Playwright UI audit')) throw new Error('Playwright UI audit deep scan not found');
     if (!source.includes('preview-url.txt')) throw new Error('preview-url support not found');
-    if (!source.includes('resolvePreviewUrlFromProjectFiles')) {
-        throw new Error('project preview receipt discovery not found');
-    }
-    if (!source.includes('resolvePreviewUrlFromPackageMetadata')) {
-        throw new Error('package metadata preview discovery not found');
+    if (!source.includes("../utils/browser-audit-target.cjs") || !source.includes('resolveCanonicalBrowserAuditTarget')) {
+        throw new Error('canonical browser audit target discovery not found');
     }
     if (!source.includes('--url <preview>')) throw new Error('verify-feature --url support not found');
     if (!source.includes('DESIGN GATE BLOCKED')) throw new Error('design gate enforcement not found');

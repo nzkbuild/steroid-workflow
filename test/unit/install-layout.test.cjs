@@ -6,6 +6,7 @@ const path = require('path');
 const {
     resolveMemoryTemplateDir,
     resolveRuntimeAssetsDir,
+    resolveRuntimeSrcDir,
     resolveRuntimeServicesDir,
 } = require('../../src/install/runtime-layout.cjs');
 const pkg = require('../../package.json');
@@ -50,7 +51,7 @@ test('public package files exclude legacy source trees and keep runtime assets',
     if (pkg.files.includes(`${privateForkPrefix}/`)) throw new Error('package.json should not publish the private intake tree');
     if (pkg.files.includes('integrations/')) throw new Error('package.json should not publish integrations/');
     if (pkg.files.includes('sources/')) throw new Error('package.json should not publish sources/');
-    if (!pkg.files.includes('src/services/')) throw new Error('package.json should publish src/services/');
+    if (!pkg.files.includes('src/')) throw new Error('package.json should publish src/');
 });
 
 test('runtime assets resolve to the dedicated .steroid/runtime install location', () => {
@@ -59,7 +60,10 @@ test('runtime assets resolve to the dedicated .steroid/runtime install location'
     if (runtimeDir !== path.join(targetDir, '.steroid', 'runtime')) {
         throw new Error(`Unexpected runtime dir: ${runtimeDir}`);
     }
-    if (resolveRuntimeServicesDir(targetDir) !== path.join(targetDir, '.steroid', 'runtime', 'services')) {
+    if (resolveRuntimeSrcDir(targetDir) !== path.join(targetDir, '.steroid', 'runtime', 'src')) {
+        throw new Error('Unexpected runtime src dir');
+    }
+    if (resolveRuntimeServicesDir(targetDir) !== path.join(targetDir, '.steroid', 'runtime', 'src', 'services')) {
         throw new Error('Unexpected runtime services dir');
     }
 });

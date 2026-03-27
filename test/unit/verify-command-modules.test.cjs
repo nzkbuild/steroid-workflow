@@ -79,6 +79,9 @@ test('verify-feature blocks when governed execution artifacts are missing', () =
     if (!result.stderr.includes('tasks.md is missing for the governed engine path')) {
         throw new Error(`Unexpected stderr: ${result.stderr}`);
     }
+    if (!result.stderr.includes(`Next command: node steroid-run.cjs pipeline-status ${feature}`)) {
+        throw new Error(`Missing next command: ${result.stderr}`);
+    }
 });
 
 test('verify-feature writes verify and completion receipts on success', () => {
@@ -95,6 +98,21 @@ test('verify-feature writes verify and completion receipts on success', () => {
         stage2: 'PASS',
         updatedAt: new Date().toISOString(),
     });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-success',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | Acceptance criteria | PASS | src/app.tsx:42 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified implementation quality at src/app.tsx:42',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
     writeJson(path.join(tmpBase, '.memory', 'knowledge', 'tech-stack.json'), {
         language: 'TypeScript',
         framework: 'React',
@@ -107,6 +125,12 @@ test('verify-feature writes verify and completion receipts on success', () => {
     });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode} ${result.stderr || ''}`);
     if (!result.stdout.includes('Review gate')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes(`Next command: node steroid-run.cjs archive ${feature}`)) {
+        throw new Error(`Missing archive guidance: ${result.stdout}`);
+    }
+    if (!result.stdout.includes('Verification confidence — REDUCED') && !result.stdout.includes('Verification confidence — HIGH')) {
+        throw new Error(`Missing confidence line: ${result.stdout}`);
+    }
 
     const verifyReceipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'verify.json'), 'utf-8'));
     const completionReceipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'completion.json'), 'utf-8'));
@@ -116,6 +140,9 @@ test('verify-feature writes verify and completion receipts on success', () => {
     }
     if (JSON.stringify(completionReceipt.sourceArtifacts) !== JSON.stringify(['verify.json', 'progress.md'])) {
         throw new Error(`Unexpected completion source artifacts: ${JSON.stringify(completionReceipt)}`);
+    }
+    if (!verifyReceipt.confidence) {
+        throw new Error(`Missing verify confidence: ${JSON.stringify(verifyReceipt)}`);
     }
 });
 
@@ -132,6 +159,21 @@ test('verify-feature refreshes ui-review receipts for UI-intensive features', ()
         stage2: 'PASS',
         updatedAt: new Date().toISOString(),
     });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-ui-review-artifact',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | UI hierarchy updated | PASS | src/dashboard.tsx:18 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified component structure in src/dashboard.tsx:18',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
     writeJson(path.join(featureDir, 'prompt.json'), {
         normalizedSummary: 'Refresh the landing page UI hierarchy',
         recommendedPipeline: 'standard-build',
@@ -172,6 +214,21 @@ test('verify-feature writes browser-audit evidence into ui-review without legacy
         stage2: 'PASS',
         updatedAt: new Date().toISOString(),
     });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-mixed-ui-evidence',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | Dashboard loads | PASS | src/dashboard.tsx:11 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified behavior in src/dashboard.tsx:11',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
     writeJson(path.join(featureDir, 'ui-audit.json'), {
         feature,
         finalUrl: 'https://preview.example.com/dashboard',
@@ -222,6 +279,41 @@ test('verify-feature removes stale completion receipts on failure', () => {
     }
 });
 
+test('verify-feature blocks review receipts that lack real review evidence', () => {
+    const feature = 'verify-weak-review-evidence';
+    const featureDir = path.join(changesDir, feature);
+    fs.mkdirSync(featureDir, { recursive: true });
+    writeGovernedPlan(featureDir);
+    writeGovernedTasks(featureDir);
+    writeExecutionReceipt(featureDir, feature);
+    writeJson(path.join(featureDir, 'review.json'), {
+        feature,
+        stage1: 'PASS',
+        stage2: 'PASS',
+        updatedAt: new Date().toISOString(),
+    });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-weak-review-evidence',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | _from spec.md_ | _status_ | _file:line_ |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
+
+    const result = run(['verify-feature', feature], { targetDir: tmpBase });
+    if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
+    if (!result.stderr.includes('review.md still contains the default review template placeholders')) {
+        throw new Error(`Unexpected stderr: ${result.stderr}`);
+    }
+});
+
 test('verify-feature blocks malformed governed diagnosis artifacts', () => {
     const feature = 'verify-bad-diagnosis';
     const featureDir = path.join(changesDir, feature);
@@ -233,6 +325,21 @@ test('verify-feature blocks malformed governed diagnosis artifacts', () => {
         stage2: 'PASS',
         updatedAt: new Date().toISOString(),
     });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-bad-diagnosis',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | Fix path confirmed | PASS | src/fix.ts:9 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified fix path in src/fix.ts:9',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
 
     const result = run(['verify-feature', feature], { targetDir: tmpBase });
     if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
@@ -254,11 +361,29 @@ test('verify-feature rejects invalid --url values before fallback', () => {
         stage2: 'PASS',
         updatedAt: new Date().toISOString(),
     });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-invalid-url',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | URL path supported | PASS | src/app.tsx:5 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified preview flow in src/app.tsx:5',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
 
     const result = run(['verify-feature', feature, '--url', 'not-a-url'], { targetDir: tmpBase });
     if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stderr.includes('--url must be a valid http(s) URL or hostname.')) {
         throw new Error(`Unexpected stderr: ${result.stderr}`);
+    }
+    if (!result.stderr.includes(`Next command: node steroid-run.cjs verify-feature ${feature} --url https://preview.example.com`)) {
+        throw new Error(`Missing next command: ${result.stderr}`);
     }
 });
 
@@ -275,6 +400,21 @@ test('verify-feature handles deep branches without legacy fallback', () => {
         stage2: 'PASS',
         updatedAt: new Date().toISOString(),
     });
+    fs.writeFileSync(
+        path.join(featureDir, 'review.md'),
+        [
+            '# Review Report: verify-deep-modular',
+            '',
+            '## Stage 1: Spec Compliance Review',
+            '| 1 | Deep dashboard route | PASS | src/dashboard.tsx:21 |',
+            '**Stage 1 Result:** PASS',
+            '',
+            '## Stage 2: Code Quality Review',
+            '- Verified route quality in src/dashboard.tsx:21',
+            '**Stage 2 Result:** PASS',
+            '',
+        ].join('\n'),
+    );
     writeJson(path.join(featureDir, 'prompt.json'), {
         normalizedSummary: 'Review the dashboard UI in depth',
         pipelineHint: 'scan → vibe → specify → research → architect → engine → verify',

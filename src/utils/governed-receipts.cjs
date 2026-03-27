@@ -168,6 +168,10 @@ function normalizeVerifyReceipt(receipt, feature) {
     return {
         feature,
         status: normalizeAllowedStatus(receipt.status, ['PASS', 'FAIL', 'CONDITIONAL'], null),
+        confidence:
+            typeof receipt.confidence === 'string' && ['HIGH', 'REDUCED', 'BLOCKED'].includes(receipt.confidence)
+                ? receipt.confidence
+                : null,
         reviewPassed: !!receipt.reviewPassed,
         checks: receipt.checks && typeof receipt.checks === 'object' && !Array.isArray(receipt.checks) ? receipt.checks : {},
         deepRequested: !!receipt.deepRequested,

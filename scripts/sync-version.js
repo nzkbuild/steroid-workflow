@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * sync-version.js — Patches the hardcoded SW_VERSION fallback in steroid-run.cjs
+ * sync-version.js — Patches the hardcoded SW_VERSION fallback in the standalone compatibility runtime
  * Runs automatically via prepublishOnly hook before every npm publish.
  */
 const fs = require('fs');
 const path = require('path');
 
 const pkgPath = path.join(__dirname, '..', 'package.json');
-const cjsPath = path.join(__dirname, '..', 'bin', 'steroid-run.cjs');
+const cjsPath = path.join(__dirname, '..', 'src', 'runtime', 'standalone-compat.cjs');
 
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 const version = pkg.version;
@@ -16,7 +16,7 @@ let code = fs.readFileSync(cjsPath, 'utf-8');
 const pattern = /let SW_VERSION = '[^']+';/;
 
 if (!pattern.test(code)) {
-    console.error('[sync-version] ❌ Could not find SW_VERSION line in steroid-run.cjs');
+    console.error('[sync-version] ❌ Could not find SW_VERSION line in src/runtime/standalone-compat.cjs');
     process.exit(1);
 }
 

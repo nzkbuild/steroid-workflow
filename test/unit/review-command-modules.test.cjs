@@ -58,14 +58,14 @@ fs.writeFileSync(
 );
 
 test('review help prints the two-stage review usage', () => {
-    const result = run(['review'], { targetDir: tmpBase, version: '7.0.0-beta.1' });
+    const result = run(['review'], { targetDir: tmpBase, version: '7.0.0-beta.2' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Two-stage review system')) throw new Error(`Unexpected stdout: ${result.stdout}`);
     if (!result.stdout.includes('review ui <feature>')) throw new Error(`Missing ui usage: ${result.stdout}`);
 });
 
 test('review spec writes template and receipt', () => {
-    const result = run(['review', 'spec', feature], { targetDir: tmpBase, version: '7.0.0-beta.1' });
+    const result = run(['review', 'spec', feature], { targetDir: tmpBase, version: '7.0.0-beta.2' });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Review template written')) throw new Error(`Unexpected stdout: ${result.stdout}`);
 
@@ -92,6 +92,9 @@ test('review status summarizes synced receipt state', () => {
     if (!result.stdout.includes('Stage 1 (Spec Compliance): PASS')) throw new Error(`Unexpected stdout: ${result.stdout}`);
     if (!result.stdout.includes('Stage 2 (Code Quality): FAIL')) throw new Error(`Unexpected stdout: ${result.stdout}`);
     if (!result.stdout.includes('UI Review: CONDITIONAL')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes(`Next command: node steroid-run.cjs review quality ${feature}`)) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
     const reviewJson = JSON.parse(fs.readFileSync(path.join(featureDir, 'review.json'), 'utf-8'));
     if (reviewJson.stage1 !== 'PASS' || reviewJson.stage2 !== 'FAIL') {
         throw new Error(`Review receipt did not sync from markdown: ${JSON.stringify(reviewJson)}`);
@@ -106,6 +109,9 @@ test('review quality blocks until stage 1 passes', () => {
     const result = run(['review', 'quality', feature], { targetDir: tmpBase });
     if (result.exitCode !== 1) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stderr.includes('REVIEW GATE')) throw new Error(`Unexpected stderr: ${result.stderr}`);
+    if (!result.stderr.includes(`Next command: node steroid-run.cjs review status ${feature}`)) {
+        throw new Error(`Missing next command: ${result.stderr}`);
+    }
 });
 
 test('review quality prints next-step guidance once stage 1 passes', () => {
@@ -116,6 +122,9 @@ test('review quality prints next-step guidance once stage 1 passes', () => {
     const result = run(['review', 'quality', feature], { targetDir: tmpBase });
     if (result.exitCode !== 0) throw new Error(`Unexpected exitCode: ${result.exitCode}`);
     if (!result.stdout.includes('Stage 2: Code Quality Review')) throw new Error(`Unexpected stdout: ${result.stdout}`);
+    if (!result.stdout.includes(`Next command: node steroid-run.cjs review status ${feature}`)) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
 });
 
 test('review reset removes local review artifacts', () => {

@@ -188,13 +188,21 @@ function formatReportsSection(runtime) {
 
 function handleDashboard(context = {}) {
     const runtime = buildRuntimeContext(context);
-    const lines = ['', '[steroid-run] 📊 Steroid-Workflow Dashboard', ''];
+    const lines = [
+        '',
+        '[steroid-run] 📊 Steroid-Workflow Dashboard',
+        '',
+        '  Role: high-level workflow health and delivery overview.',
+        '',
+    ];
     lines.push(...formatFeatureSection(runtime));
     lines.push(...formatErrorPatternSection(runtime));
     lines.push(...formatCircuitSection(runtime));
     lines.push(...formatKnowledgeSection(runtime));
     lines.push(...formatReportsSection(runtime));
     lines.push('', '  ─────────────────────────────────────────', '');
+    lines.push('  Next command: node steroid-run.cjs pipeline-status <feature>');
+    lines.push('');
 
     return {
         handled: true,

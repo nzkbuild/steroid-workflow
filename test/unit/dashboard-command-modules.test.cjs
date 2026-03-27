@@ -87,6 +87,12 @@ test('handleDashboard surfaces frontend quality aggregates from metrics', () => 
     if (!result.stdout.includes('Current: 🟠 RE-READ (2/5 errors)')) {
         throw new Error(`Missing circuit breaker status: ${result.stdout}`);
     }
+    if (!result.stdout.includes('Role: high-level workflow health and delivery overview.')) {
+        throw new Error(`Missing role guidance: ${result.stdout}`);
+    }
+    if (!result.stdout.includes('Next command: node steroid-run.cjs pipeline-status <feature>')) {
+        throw new Error(`Missing next command: ${result.stdout}`);
+    }
 });
 
 test('handleDashboard stays informative when metrics are absent', () => {

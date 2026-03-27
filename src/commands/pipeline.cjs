@@ -13,11 +13,12 @@ const { formatPromptMarkdown } = require('../utils/prompt-brief.cjs');
 const {
     loadCompletionReceipt,
     loadRequestReceipt,
+    loadReviewReceipt,
     loadVerifyReceipt,
     saveExecutionReceipt,
     saveRequestReceipt,
 } = require('../utils/receipt-loaders.cjs');
-const { buildFeatureArtifactState, formatPipelineStatus } = require('../utils/pipeline-status.cjs');
+const { buildFeatureArtifactState, buildWorkflowOverview, formatPipelineStatus } = require('../utils/pipeline-status.cjs');
 const { friendlyHint } = require('../utils/friendly-hints.cjs');
 const { parseChecklistStats, validateGovernedPhaseArtifact } = require('../utils/governed-artifacts.cjs');
 const { bootstrapFeatureDesignArtifacts, readJsonFile } = require('../utils/design-workflow.cjs');
@@ -29,9 +30,12 @@ const { generateHandoffReportContent } = require('../utils/handoff-report.cjs');
 const { createArchiveStamp, getArchiveDestinationPath } = require('../utils/trust-helpers.cjs');
 
 const PIPELINE_COMMANDS = new Set([
+    'start',
+    'finish',
     'reset',
     'recover',
     'status',
+    'next',
     'pipeline-status',
     'git-init',
     'init-feature',
@@ -146,14 +150,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.1';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
     } catch {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 }
 
@@ -515,6 +519,147 @@ function handleInitFeature(argv = [], context = {}) {
     };
 }
 
+function handleStart(argv = [], context = {}) {
+    const slug = argv[1];
+    if (!slug) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'start',
+            exitCode: 1,
+            stderr:
+                '[steroid-run] Usage: npx steroid-run start <slug>\n' +
+                '  Example: npx steroid-run start habit-tracker\n',
+        };
+    }
+
+    const initResult = handleInitFeature(['init-feature', slug], context);
+    if (initResult.exitCode !== 0) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'start',
+            exitCode: initResult.exitCode,
+            stderr: initResult.stderr,
+            stdout: initResult.stdout,
+        };
+    }
+
+    const forwardArgs = ['scan', slug];
+    if (argv.includes('--force')) {
+        forwardArgs.push('--force');
+    }
+    const scanResult = handleScan(forwardArgs, context);
+    if (scanResult.exitCode !== 0) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'start',
+            exitCode: scanResult.exitCode,
+            stdout: `${initResult.stdout || ''}${scanResult.stdout || ''}`,
+            stderr: scanResult.stderr,
+        };
+    }
+
+    const lines = [
+        '[steroid-run] 🚀 Feature start complete.',
+        initResult.stdout.trimEnd(),
+        scanResult.stdout.trimEnd(),
+        `  Next command: node steroid-run.cjs next ${slug}`,
+    ].filter(Boolean);
+
+    return {
+        handled: true,
+        area: 'pipeline',
+        command: 'start',
+        exitCode: 0,
+        stdout: `${lines.join('\n')}\n`,
+    };
+}
+
+function handleFinish(argv = [], context = {}) {
+    const runtime = buildRuntimeContext(context);
+    const feature = argv[1];
+    if (!feature) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'finish',
+            exitCode: 1,
+            stderr:
+                '[steroid-run] Usage: npx steroid-run finish <feature>\n' +
+                '  Example: npx steroid-run finish habit-tracker\n',
+        };
+    }
+
+    const featureDir = path.join(runtime.changesDir, feature);
+    if (!fs.existsSync(featureDir)) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'finish',
+            exitCode: 1,
+            stderr: `[steroid-run] ❌ Feature "${feature}" not found.\n`,
+        };
+    }
+
+    const reviewReceipt = loadReviewReceipt(feature, featureDir);
+    const verifyReceipt = loadVerifyReceipt(feature, featureDir);
+    const completionReceipt = loadCompletionReceipt(feature, featureDir);
+    const uiReviewReceipt = loadUiReviewReceipt(feature, featureDir);
+    const uiArchivePolicy = buildUiArchivePolicy(uiReviewReceipt, {
+        deepRequested: !!verifyReceipt.deepRequested,
+    });
+
+    const reviewPassed = reviewReceipt.stage1 === 'PASS' && reviewReceipt.stage2 === 'PASS';
+    const verifyReady = ['PASS', 'CONDITIONAL'].includes(verifyReceipt.status);
+    const completionReady = completionReceipt.status && completionReceipt.status === verifyReceipt.status;
+    const archiveBlocked = uiArchivePolicy.decision === 'BLOCK' || uiArchivePolicy.decision === 'BLOCK_CONDITIONAL';
+
+    let nextCommand = `node steroid-run.cjs review status ${feature}`;
+    let summary = 'Review is still incomplete.';
+    if (!reviewPassed) {
+        nextCommand = `node steroid-run.cjs review status ${feature}`;
+        summary = 'Review must pass before Steroid can finish this feature.';
+    } else if (!verifyReady) {
+        nextCommand = `node steroid-run.cjs verify-feature ${feature}`;
+        summary = 'Verification is still required before archive can proceed.';
+    } else if (!completionReady) {
+        nextCommand = `node steroid-run.cjs verify-feature ${feature}`;
+        summary = 'Completion evidence is not aligned with verification yet.';
+    } else if (archiveBlocked) {
+        nextCommand = uiArchivePolicy.overrideFlag
+            ? `node steroid-run.cjs archive ${feature} ${uiArchivePolicy.overrideFlag}`
+            : `node steroid-run.cjs verify-feature ${feature}${uiReviewReceipt?.previewTarget ? ` --deep --url ${uiReviewReceipt.previewTarget}` : ''}`;
+        summary = uiArchivePolicy.summary;
+    } else {
+        nextCommand = `node steroid-run.cjs archive ${feature}`;
+        summary = 'The feature is ready for final archive.';
+    }
+
+    const lines = [
+        '',
+        `[steroid-run] Finish check for: ${feature}`,
+        '',
+        `  Review: ${reviewReceipt.stage1 || 'PENDING'}/${reviewReceipt.stage2 || 'PENDING'}`,
+        `  Verify: ${verifyReceipt.status || 'MISSING'}${verifyReceipt.confidence ? ` (${verifyReceipt.confidence} confidence)` : ''}`,
+        `  Completion: ${completionReceipt.status || 'MISSING'}`,
+        `  Archive readiness: ${archiveBlocked ? 'BLOCKED' : completionReady && verifyReady && reviewPassed ? 'READY' : 'NOT READY'}`,
+        `  Summary: ${summary}`,
+        `  Next command: ${nextCommand}`,
+        '',
+        '  Tip: Run pipeline-status for the full workflow view.',
+    ];
+
+    return {
+        handled: true,
+        area: 'pipeline',
+        command: 'finish',
+        exitCode: archiveBlocked || !completionReady || !verifyReady || !reviewPassed ? 1 : 0,
+        stdout: `${lines.join('\n')}\n`,
+    };
+}
+
 function getMissingDesignArtifactsForPhase(featureDir, phase, promptReceipt = null) {
     if (!['architect', 'engine'].includes(phase)) {
         return [];
@@ -635,6 +780,9 @@ function handleGate(argv = [], context = {}) {
     };
 
     const gate = gates[phase];
+    const nextCommand = routeSummary?.next?.phase && routeSummary.next.phase !== 'complete'
+        ? `node steroid-run.cjs gate ${routeSummary.next.phase} ${feature}`
+        : `node steroid-run.cjs gate ${phase} ${feature}`;
     if (!gate) {
         return {
             handled: true,
@@ -655,7 +803,8 @@ function handleGate(argv = [], context = {}) {
                 `[steroid-run] 🚫 GATE BLOCKED: governed scan receipt is incomplete.\n` +
                 `  Missing: .memory/changes/${feature}/request.json\n` +
                 `  The "${phase}" phase cannot start until request.json and context.md both exist.\n` +
-                `  Run: node steroid-run.cjs scan ${feature}\n`,
+                `  Run: node steroid-run.cjs scan ${feature}\n` +
+                `  Next command: node steroid-run.cjs scan ${feature}\n`,
         };
     }
 
@@ -678,6 +827,7 @@ function handleGate(argv = [], context = {}) {
                         stderr:
                             `[steroid-run] 🚫 GATE BLOCKED: ${gate.alt.requires} is missing governed structure.\n` +
                             `  ${altGovernedShape.reason}\n` +
+                            `  Next command: ${nextCommand}\n` +
                             `${friendlyHint('gate-incomplete')}\n`,
                     };
                 }
@@ -689,6 +839,7 @@ function handleGate(argv = [], context = {}) {
                         stdout += `  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}\n`;
                     }
                 }
+                stdout += `  Next command: ${nextCommand}\n`;
                 return {
                     handled: true,
                     area: 'pipeline',
@@ -705,6 +856,7 @@ function handleGate(argv = [], context = {}) {
                     stderr += `  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}\n`;
                 }
             }
+            stderr += `  Next command: ${nextCommand}\n`;
             return {
                 handled: true,
                 area: 'pipeline',
@@ -729,6 +881,7 @@ function handleGate(argv = [], context = {}) {
                 stderr += `  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}\n`;
             }
         }
+        stderr += `  Next command: ${nextCommand}\n`;
         stderr += `${friendlyHint('gate-blocked')}\n`;
         return {
             handled: true,
@@ -749,6 +902,7 @@ function handleGate(argv = [], context = {}) {
                 stderr += `  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}\n`;
             }
         }
+        stderr += `  Next command: ${nextCommand}\n`;
         stderr += `${friendlyHint('gate-incomplete')}\n`;
         return {
             handled: true,
@@ -769,6 +923,7 @@ function handleGate(argv = [], context = {}) {
             stderr:
                 `[steroid-run] 🚫 GATE BLOCKED: ${gate.requires} is missing governed structure.\n` +
                 `  ${governedShape.reason}\n` +
+                `  Next command: ${nextCommand}\n` +
                 `${friendlyHint('gate-incomplete')}\n`,
         };
     }
@@ -784,6 +939,7 @@ function handleGate(argv = [], context = {}) {
         stderr +=
             `  Run: node steroid-run.cjs design-route "<user prompt>" --feature ${feature} --write\n` +
             `  Run: node steroid-run.cjs design-system --feature ${feature} --write\n` +
+            `  Next command: node steroid-run.cjs design-route "<user prompt>" --feature ${feature} --write\n` +
             '  UI-intensive work must produce a routing receipt and design system before architecture or engine can proceed.\n';
         return {
             handled: true,
@@ -832,6 +988,7 @@ function handleGate(argv = [], context = {}) {
             stdout += `  Suggested next step: ${routeSummary.next.phase} — ${routeSummary.next.reason}\n`;
         }
     }
+    stdout += `  Next command: ${nextCommand}\n`;
 
     const state = readStateFile(runtime.stateFile);
     appendGateAuditTrail(runtime, feature, phase, gate.requires, lineCount, content, state.error_count || 0);
@@ -1707,6 +1864,66 @@ function handlePipelineStatus(argv = [], context = {}) {
     };
 }
 
+function handleNext(argv = [], context = {}) {
+    const runtime = buildRuntimeContext(context);
+    const feature = argv[1];
+    if (!feature) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'next',
+            exitCode: 1,
+            stderr: '[steroid-run] Usage: npx steroid-run next <feature>\n',
+        };
+    }
+
+    const featureDir = path.join(runtime.changesDir, feature);
+    if (!fs.existsSync(featureDir)) {
+        return {
+            handled: true,
+            area: 'pipeline',
+            command: 'next',
+            exitCode: 1,
+            stderr: `[steroid-run] ❌ Feature "${feature}" not found.\n`,
+        };
+    }
+
+    let promptReceipt = null;
+    try {
+        promptReceipt = JSON.parse(fs.readFileSync(path.join(featureDir, 'prompt.json'), 'utf-8'));
+    } catch {
+        promptReceipt = null;
+    }
+
+    const overview = buildWorkflowOverview(feature, featureDir, promptReceipt);
+    const lines = [
+        '',
+        `[steroid-run] Next step for: ${feature}`,
+        '',
+        `  Route: ${overview.routeName}`,
+        `  Current phase: ${overview.currentPhase}`,
+        `  Blockers: ${
+            overview.blockers.length > 0
+                ? overview.blockers.join('; ')
+                : overview.routeSummary?.next?.phase === 'complete'
+                  ? 'none'
+                  : 'no hard blocker detected'
+        }`,
+        `  Why now: ${overview.routeSummary ? overview.routeSummary.next.reason : 'scan is required before the workflow can continue'}`,
+        `  Next command: ${overview.nextCommand}`,
+        '',
+        '  Tip: Run pipeline-status for the full workflow view.',
+    ];
+
+    return {
+        handled: true,
+        area: 'pipeline',
+        command: 'next',
+        exitCode: 0,
+        stdout: `${lines.join('\n')}\n`,
+    };
+}
+
 function handleVerify(argv = [], context = {}) {
     const runtime = buildRuntimeContext(context);
     const targetFile = argv[1];
@@ -2003,7 +2220,7 @@ function handleNormalizePrompt(argv = [], context = {}) {
                 area: 'pipeline',
                 command: 'normalize-prompt',
                 exitCode: 1,
-                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}\n`,
+                stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run start ${feature}\n`,
             };
         }
         writeJsonFile(path.join(featureDir, 'prompt.json'), {
@@ -2181,7 +2398,7 @@ function handleScan(argv = [], context = {}) {
             area: 'pipeline',
             command: 'scan',
             exitCode: 1,
-            stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run init-feature ${feature}\n`,
+            stderr: `[steroid-run] ❌ Feature "${feature}" not found. Run: npx steroid-run start ${feature}\n`,
         };
     }
 
@@ -2320,6 +2537,12 @@ function run(argv = [], context = {}) {
     if (command === 'init-feature') {
         return handleInitFeature(argv, context);
     }
+    if (command === 'start') {
+        return handleStart(argv, context);
+    }
+    if (command === 'finish') {
+        return handleFinish(argv, context);
+    }
     if (command === 'gate') {
         return handleGate(argv, context);
     }
@@ -2353,6 +2576,9 @@ function run(argv = [], context = {}) {
     if (command === 'status') {
         return handleStatus(context);
     }
+    if (command === 'next') {
+        return handleNext(argv, context);
+    }
     if (command === 'normalize-prompt') {
         return handleNormalizePrompt(argv, context);
     }
@@ -2384,6 +2610,8 @@ function run(argv = [], context = {}) {
 
 module.exports = {
     canHandle,
+    handleStart,
+    handleFinish,
     handleInitFeature,
     handleGate,
     handleCommit,
@@ -2396,6 +2624,7 @@ module.exports = {
     handleReset,
     handleRecover,
     handleStatus,
+    handleNext,
     handlePipelineStatus,
     handleNormalizePrompt,
     handleDetectIntent,

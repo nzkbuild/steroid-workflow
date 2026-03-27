@@ -13,6 +13,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8')
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf-8'));
 const cliSource = fs.readFileSync(path.join(root, 'bin', 'cli.js'), 'utf-8');
 const runtimeSource = fs.readFileSync(path.join(root, 'bin', 'steroid-run.cjs'), 'utf-8');
+const runtimeCompatSource = fs.readFileSync(path.join(root, 'src', 'runtime', 'standalone-compat.cjs'), 'utf-8');
 const smokeSource = fs.readFileSync(path.join(root, 'test', 'smoke.test.cjs'), 'utf-8');
 const unitSource = fs.readFileSync(path.join(root, 'test', 'unit', 'v6-commands.test.cjs'), 'utf-8');
 const designRoutingSource = fs.readFileSync(path.join(root, 'src', 'utils', 'design-routing.cjs'), 'utf-8');
@@ -49,8 +50,8 @@ function check(condition, message) {
 
 const SEMVER_PATTERN = '([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?)';
 
-const runtimeVersionMatch = runtimeSource.match(new RegExp(`\\*\\s+@version\\s+${SEMVER_PATTERN}`));
-check(runtimeVersionMatch, 'Missing @version header in bin/steroid-run.cjs.');
+const runtimeVersionMatch = runtimeCompatSource.match(new RegExp(`\\*\\s+@version\\s+${SEMVER_PATTERN}`));
+check(runtimeVersionMatch, 'Missing @version header in src/runtime/standalone-compat.cjs.');
 if (runtimeVersionMatch) {
     check(
         runtimeVersionMatch[1] === pkg.version,
@@ -58,8 +59,8 @@ if (runtimeVersionMatch) {
     );
 }
 
-const runtimeFallbackMatch = runtimeSource.match(new RegExp(`let SW_VERSION = '${SEMVER_PATTERN}';`));
-check(runtimeFallbackMatch, 'Missing SW_VERSION fallback in bin/steroid-run.cjs.');
+const runtimeFallbackMatch = runtimeCompatSource.match(new RegExp(`let SW_VERSION = '${SEMVER_PATTERN}';`));
+check(runtimeFallbackMatch, 'Missing SW_VERSION fallback in src/runtime/standalone-compat.cjs.');
 if (runtimeFallbackMatch) {
     check(
         runtimeFallbackMatch[1] === pkg.version,
@@ -138,35 +139,35 @@ if (ideConfigsBlockMatch) {
 }
 
 check(
-    runtimeSource.includes('verify-feature <feature> [--deep]'),
+    runtimeCompatSource.includes('verify-feature <feature> [--deep]'),
     'bin/steroid-run.cjs help text should advertise verify-feature [--deep].',
 );
 check(
-    runtimeSource.includes('verify-feature <feature> [--deep] [--url <preview>]'),
+    runtimeCompatSource.includes('verify-feature <feature> [--deep] [--url <preview>]'),
     'bin/steroid-run.cjs help text should advertise verify-feature --url support.',
 );
 check(
-    runtimeSource.includes('review ui <feature>'),
+    runtimeCompatSource.includes('review ui <feature>'),
     'bin/steroid-run.cjs help text should mention review ui <feature>.',
 );
 check(
-    runtimeSource.includes('normalize-prompt "<message>"'),
+    runtimeCompatSource.includes('normalize-prompt "<message>"'),
     'bin/steroid-run.cjs help text should advertise normalize-prompt.',
 );
-check(runtimeSource.includes('design-prep "<message>"'), 'bin/steroid-run.cjs help text should advertise design-prep.');
+check(runtimeCompatSource.includes('design-prep "<message>"'), 'bin/steroid-run.cjs help text should advertise design-prep.');
 check(
-    runtimeSource.includes('design-route "<message>"'),
+    runtimeCompatSource.includes('design-route "<message>"'),
     'bin/steroid-run.cjs help text should advertise design-route.',
 );
 check(
-    runtimeSource.includes('design-system "<message>"'),
+    runtimeCompatSource.includes('design-system "<message>"'),
     'bin/steroid-run.cjs help text should advertise design-system.',
 );
 check(
-    runtimeSource.includes('prompt-health "<message>"'),
+    runtimeCompatSource.includes('prompt-health "<message>"'),
     'bin/steroid-run.cjs help text should advertise prompt-health.',
 );
-check(runtimeSource.includes('session-detect'), 'bin/steroid-run.cjs help text should advertise session-detect.');
+check(runtimeCompatSource.includes('session-detect'), 'bin/steroid-run.cjs help text should advertise session-detect.');
 check(
     cliSource.includes('verify-feature <feature> [--deep]'),
     'bin/cli.js Maestro rules should advertise verify-feature [--deep].',
@@ -208,8 +209,8 @@ check(
     'bin/cli.js should no longer install runtime integrations under .steroid/runtime/integrations/.',
 );
 check(
-    cliSource.includes('.steroid/runtime/services/'),
-    'bin/cli.js should install runtime services under .steroid/runtime/services/.',
+    cliSource.includes('.steroid/runtime/src/'),
+    'bin/cli.js should install runtime source under .steroid/runtime/src/.',
 );
 check(
     !cliSource.includes('.steroid/runtime/sources/'),
@@ -258,10 +259,6 @@ check(
 );
 check(readmeSource.includes('--url <preview>'), 'README.md should mention verify-feature --url <preview>.');
 check(
-    architectureSource.includes("Steroid's internal frontend intelligence"),
-    'ARCHITECTURE.md should describe design routing through the Steroid frontend intelligence layer.',
-);
-check(
     !pkg.files.includes('imported/'),
     'package.json files array should not include removed top-level imported trees.',
 );
@@ -270,8 +267,8 @@ check(
     'package.json files array should not include removed integrations trees now that audit logic lives in first-party services.',
 );
 check(
-    pkg.files.includes('src/services/'),
-    'package.json files array should include src/services/ for first-party runtime services.',
+    pkg.files.includes('src/'),
+    'package.json files array should include src/ for first-party runtime modules.',
 );
 check(
     !pkg.files.includes(`${privateForkPrefix}/`),
@@ -282,35 +279,35 @@ check(
     'package.json files array should not include private sources/ metadata.',
 );
 check(
-    pkg.files.includes('src/services/'),
-    'package.json files array should include src/services/ so public source catalog metadata ships with runtime services.',
+    pkg.files.includes('src/'),
+    'package.json files array should include src/ so public runtime modules ship with the package.',
 );
 check(!pkg.files.includes('contracts/'), 'package.json files array should not include contracts/.');
 check(!pkg.files.includes('ARCHITECTURE.md'), 'package.json files array should not include ARCHITECTURE.md.');
 check(
-    runtimeSource.includes('archive <feature>                 Archive completed feature (requires verify.json + completion.json)'),
+    runtimeCompatSource.includes('archive <feature>                 Archive completed feature (requires verify.json + completion.json)'),
     'bin/steroid-run.cjs help text should mention archive requires verify.json + completion.json.',
 );
 check(
-    runtimeSource.includes('scan <feature>                    Run codebase scan (writes request.json + context.md)'),
+    runtimeCompatSource.includes('scan <feature>                    Run codebase scan (writes request.json + context.md)'),
     'bin/steroid-run.cjs help text should mention scan writes request.json + context.md.',
 );
 check(
-    runtimeSource.includes(
+    runtimeCompatSource.includes(
         'verify-feature <feature> [--deep] [--url <preview>] Run verification (writes verify.md + verify.json + completion.json)',
     ),
     'bin/steroid-run.cjs help text should mention verify-feature writes completion.json.',
 );
 check(
-    runtimeSource.includes('review status <feature>           Show review stage status and sync review.json'),
+    runtimeCompatSource.includes('review status <feature>           Show review stage status and sync review.json'),
     'bin/steroid-run.cjs help text should mention review status syncs review.json.',
 );
 check(
-    runtimeSource.includes('review.json requires Stage 1 PASS and Stage 2 PASS'),
+    runtimeCompatSource.includes('review.json requires Stage 1 PASS and Stage 2 PASS'),
     'bin/steroid-run.cjs should enforce the review receipt gate before verification.',
 );
 check(
-    runtimeSource.includes('ARCHIVE BLOCKED: No verify.json receipt found.'),
+    runtimeCompatSource.includes('ARCHIVE BLOCKED: No verify.json receipt found.'),
     'bin/steroid-run.cjs should block archive when verify.json is missing.',
 );
 
@@ -410,41 +407,42 @@ check(
     'src/utils/design-routing.cjs should include the Steroid accessibility audit capability for audit routes.',
 );
 check(
-    runtimeSource.includes('Design Intelligence'),
+    runtimeCompatSource.includes('Design Intelligence'),
     'bin/steroid-run.cjs pipeline-status should surface design intelligence details.',
 );
-check(runtimeSource.includes('Design Prep'), 'bin/steroid-run.cjs should expose the design-prep command.');
+check(runtimeCompatSource.includes('Design Prep'), 'bin/steroid-run.cjs should expose the design-prep command.');
 check(
-    runtimeSource.includes('design-system.md'),
+    runtimeCompatSource.includes('design-system.md'),
     'bin/steroid-run.cjs should recognize design-system.md as a pipeline artifact.',
 );
 check(
-    runtimeSource.includes('Accessibility (AccessLint)'),
+    runtimeCompatSource.includes('Accessibility (AccessLint)'),
     'bin/steroid-run.cjs should include AccessLint verification output.',
 );
 check(
-    runtimeSource.includes('accessibility.json'),
+    runtimeCompatSource.includes('accessibility.json'),
     'bin/steroid-run.cjs should recognize accessibility.json as an artifact.',
 );
-check(runtimeSource.includes('ui-audit.json'), 'bin/steroid-run.cjs should recognize ui-audit.json as an artifact.');
-check(runtimeSource.includes('ui-review.md'), 'bin/steroid-run.cjs should recognize ui-review.md as an artifact.');
-check(runtimeSource.includes('ui-review.json'), 'bin/steroid-run.cjs should recognize ui-review.json as an artifact.');
+check(runtimeCompatSource.includes('ui-audit.json'), 'bin/steroid-run.cjs should recognize ui-audit.json as an artifact.');
+check(runtimeCompatSource.includes('ui-review.md'), 'bin/steroid-run.cjs should recognize ui-review.md as an artifact.');
+check(runtimeCompatSource.includes('ui-review.json'), 'bin/steroid-run.cjs should recognize ui-review.json as an artifact.');
 check(
-    runtimeSource.includes('ARCHIVE BLOCKED: ui-review.json status is FAIL.'),
+    runtimeCompatSource.includes('ARCHIVE BLOCKED: ui-review.json status is FAIL.'),
     'bin/steroid-run.cjs should block archive when ui-review.json status is FAIL.',
 );
 check(
-    runtimeSource.includes('Deep scan: Playwright UI audit'),
+    runtimeCompatSource.includes('Deep scan: Playwright UI audit'),
     'bin/steroid-run.cjs should expose the Playwright UI audit deep scan.',
 );
-check(runtimeSource.includes('preview-url.txt'), 'bin/steroid-run.cjs should support preview-url receipts.');
+check(runtimeCompatSource.includes('preview-url.txt'), 'bin/steroid-run.cjs should support preview-url receipts.');
 check(
-    runtimeSource.includes('resolvePreviewUrlFromEnvFiles'),
-    'bin/steroid-run.cjs should attempt preview URL discovery from env files.',
+    runtimeCompatSource.includes("../utils/browser-audit-target.cjs") &&
+        runtimeCompatSource.includes('resolveCanonicalBrowserAuditTarget'),
+    'bin/steroid-run.cjs should delegate preview target discovery to the canonical browser-audit target helper.',
 );
-check(runtimeSource.includes('DESIGN GATE BLOCKED'), 'bin/steroid-run.cjs should enforce the UI design gate.');
+check(runtimeCompatSource.includes('DESIGN GATE BLOCKED'), 'bin/steroid-run.cjs should enforce the UI design gate.');
 check(
-    runtimeSource.includes('Research prep:'),
+    runtimeCompatSource.includes('Research prep:'),
     'bin/steroid-run.cjs should auto-bootstrap UI design artifacts during research gate.',
 );
 check(

@@ -21,47 +21,47 @@ function test(name, fn) {
 console.log('[unit] monolith-delegation.test.cjs');
 
 const source = fs.readFileSync(path.join(__dirname, '..', '..', 'bin', 'steroid-run.cjs'), 'utf-8');
+const compatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'runtime', 'standalone-compat.cjs'), 'utf-8');
 
-test('monolith includes repo-only modular delegation for migrated commands', () => {
-    if (!source.includes('const MODULAR_OWNED_COMMAND_NAMES = [')) {
-        throw new Error('Missing modular-owned command registry');
+test('entrypoint prefers modular runtime and falls back to compatibility runtime', () => {
+    for (const requiredPath of [
+        "const repoCliEntry = path.join(__dirname, '..', 'src', 'cli', 'index.cjs');",
+        "const installedCliEntry = path.join(targetDir, '.steroid', 'runtime', 'src', 'cli', 'index.cjs');",
+        "const repoCompatEntry = path.join(__dirname, '..', 'src', 'runtime', 'standalone-compat.cjs');",
+        "const installedCompatEntry = path.join(targetDir, '.steroid', 'runtime', 'src', 'runtime', 'standalone-compat.cjs');",
+    ]) {
+        if (!source.includes(requiredPath)) {
+            throw new Error(`Missing runtime entry resolution path: ${requiredPath}`);
+        }
     }
-    if (!source.includes('const MODULAR_OWNED_COMMANDS = new Set(MODULAR_OWNED_COMMAND_NAMES);')) {
-        throw new Error('Missing modular-owned command allowlist');
+    if (!source.includes('if (!runCliEntry(installedCliEntry) && !runCliEntry(repoCliEntry)) {')) {
+        throw new Error('Missing modular-first entrypoint flow');
     }
-    if (!source.includes('const KNOWN_COMMANDS = [...new Set([...MODULAR_OWNED_COMMAND_NAMES, ...MONOLITH_ONLY_COMMAND_NAMES])]')) {
-        throw new Error('Missing unified known-command registry');
-    }
-    if (!source.includes("const dispatchPath = path.join(packageRootDir, 'src', 'cli', 'dispatch.cjs');")) {
-        throw new Error('Missing repo-local dispatch path');
-    }
-    if (!source.includes('tryRunModularCommand(args);')) {
-        throw new Error('Missing early modular delegation hook');
+    if (!source.includes('runCompatEntry(installedCompatEntry)') || !source.includes('runCompatEntry(repoCompatEntry)')) {
+        throw new Error('Missing compatibility fallback flow');
     }
 });
 
-test('modular-owned command registry includes recently migrated workflow commands', () => {
+test('compatibility runtime still contains the migrated workflow command registry', () => {
     for (const command of ['archive', 'smoke-test', 'git-init', 'pipeline-status']) {
-        if (!source.includes(`'${command}'`)) {
+        if (!compatSource.includes(`'${command}'`)) {
             throw new Error(`Missing migrated command in modular registry: ${command}`);
         }
     }
 });
 
-test('monolith includes repo-local utility delegation for canonical helper modules', () => {
-    if (!source.includes('function loadRepoLocalUtilityModule(relativePath) {')) {
-        throw new Error('Missing repo-local utility module loader');
-    }
+test('compatibility runtime imports canonical helper modules directly', () => {
     for (const utilityPath of [
-        "path.join('src', 'utils', 'receipt-loaders.cjs')",
-        "path.join('src', 'utils', 'frontend-receipt-loaders.cjs')",
-        "path.join('src', 'utils', 'trust-helpers.cjs')",
-        "path.join('src', 'utils', 'frontend-review.cjs')",
-        "path.join('src', 'utils', 'ui-archive-policy.cjs')",
-        "path.join('src', 'utils', 'pipeline-status.cjs')",
+        "../utils/receipt-loaders.cjs",
+        "../utils/frontend-receipt-loaders.cjs",
+        "../utils/trust-helpers.cjs",
+        "../utils/frontend-review.cjs",
+        "../utils/ui-archive-policy.cjs",
+        "../utils/pipeline-status.cjs",
+        "../utils/prompt-intelligence.cjs",
     ]) {
-        if (!source.includes(utilityPath)) {
-            throw new Error(`Missing utility delegation path: ${utilityPath}`);
+        if (!compatSource.includes(utilityPath)) {
+            throw new Error(`Missing canonical utility import: ${utilityPath}`);
         }
     }
 });

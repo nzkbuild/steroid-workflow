@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { pathToFileURL } = require('url');
 const { spawnSync } = require('child_process');
 
 const {
@@ -24,6 +23,7 @@ const {
     refreshUiReviewArtifacts,
     summarizeBrowserAuditResult,
 } = require('../utils/frontend-review.cjs');
+const { collectHtmlAuditTargets, resolveBrowserAuditTarget } = require('../utils/browser-audit-target.cjs');
 const { auditFiles } = require('../services/audit/accesslint-audit.cjs');
 
 function canHandle(command) {
@@ -45,14 +45,14 @@ function buildRuntimeContext(context = {}) {
 function loadPackageVersion(targetDir) {
     const pkgPath = path.join(targetDir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 
     try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.1';
+        return typeof pkg.version === 'string' ? pkg.version : '7.0.0-beta.2';
     } catch {
-        return '7.0.0-beta.1';
+        return '7.0.0-beta.2';
     }
 }
 
@@ -78,13 +78,51 @@ function formatStep(step) {
     return `- ${step.status}: ${step.step} — ${step.detail}`;
 }
 
+function formatVerifyNextCommand(feature, command) {
+    return `  Next command: ${command || `node steroid-run.cjs pipeline-status ${feature}`}\n`;
+}
+
+function assessVerificationConfidence(results, hasFailure) {
+    if (hasFailure) return 'BLOCKED';
+    const hasWarnings = results.some((entry) => entry.status === 'WARN');
+    const hasSkips = results.some((entry) => entry.status === 'SKIP');
+    return hasWarnings || hasSkips ? 'REDUCED' : 'HIGH';
+}
+
+function assessReviewAuthenticity(featureDir) {
+    const reviewFile = path.join(featureDir, 'review.md');
+    if (!fs.existsSync(reviewFile)) {
+        return { ok: false, reason: 'review.md is missing alongside review.json' };
+    }
+
+    const reviewContent = fs.readFileSync(reviewFile, 'utf-8');
+    if (reviewContent.includes('_from spec.md_') || reviewContent.includes('_status_') || reviewContent.includes('_file:line_')) {
+        return { ok: false, reason: 'review.md still contains the default review template placeholders' };
+    }
+
+    const hasStage1Pass = /\*\*Stage 1 Result:\*\*\s*PASS/.test(reviewContent);
+    const hasStage2Pass = /\*\*Stage 2 Result:\*\*\s*PASS/.test(reviewContent);
+    if (!hasStage1Pass || !hasStage2Pass) {
+        return { ok: false, reason: 'review.md does not record PASS results for both review stages' };
+    }
+
+    const hasEvidenceReference = /[A-Za-z0-9_./\\-]+\.(?:[cm]?[jt]sx?|ts|js|md|json|css|scss|html):\d+/.test(reviewContent);
+    if (!hasEvidenceReference) {
+        return { ok: false, reason: 'review.md does not include file:line evidence references' };
+    }
+
+    return { ok: true };
+}
+
 function writeVerifyArtifacts(paths, feature, reviewPassed, deepRequested, deepCompleted, results, hasFailure) {
     const warnCount = results.filter((entry) => entry.status === 'WARN').length;
     const status = hasFailure ? 'FAIL' : warnCount > 0 ? 'CONDITIONAL' : 'PASS';
+    const confidence = assessVerificationConfidence(results, hasFailure);
     const verifyMd = [
         `# Verify Report: ${feature}`,
         '',
         `**Status:** ${status}`,
+        `**Confidence:** ${confidence}`,
         `**Spec Score:** ${results.filter((entry) => entry.status === 'PASS').length}/${results.length}`,
         `**Result:** ${hasFailure ? 'Verification blocked' : 'Verification passed'}`,
         '',
@@ -98,6 +136,7 @@ function writeVerifyArtifacts(paths, feature, reviewPassed, deepRequested, deepC
     saveVerifyReceipt(paths.featureDir, {
         feature,
         status,
+        confidence,
         reviewPassed,
         checks: Object.fromEntries(results.map((entry) => [entry.step, entry.status])),
         deepRequested,
@@ -153,87 +192,6 @@ function runPackageScript(runtime, scriptName, timeoutMs) {
     }
 }
 
-function collectAccessibilityAuditTargets(targetDir) {
-    const targets = [];
-    const seen = new Set();
-    const roots = ['out', 'dist', 'build', 'public', '.next/server/app', '.next/server/pages', 'src'];
-    const exactFiles = ['index.html'];
-
-    const pushFile = (filePath) => {
-        const absolutePath = path.resolve(filePath);
-        if (!fs.existsSync(absolutePath)) return;
-        if (!/\.html?$/i.test(absolutePath)) return;
-        if (seen.has(absolutePath)) return;
-        seen.add(absolutePath);
-        targets.push(absolutePath);
-    };
-
-    const walkDir = (dirPath) => {
-        for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
-            if (entry.name.startsWith('.git') || entry.name === 'node_modules') continue;
-            const fullPath = path.join(dirPath, entry.name);
-            if (entry.isDirectory()) {
-                walkDir(fullPath);
-            } else if (entry.isFile()) {
-                pushFile(fullPath);
-            }
-        }
-    };
-
-    for (const relativeRoot of roots) {
-        const rootPath = path.join(targetDir, relativeRoot);
-        if (fs.existsSync(rootPath) && fs.statSync(rootPath).isDirectory()) {
-            walkDir(rootPath);
-        }
-    }
-
-    for (const relativeFile of exactFiles) {
-        pushFile(path.join(targetDir, relativeFile));
-    }
-
-    return targets.slice(0, 25);
-}
-
-function resolveBrowserAuditTarget(targetDir, featureDir, htmlTargets = [], options = {}) {
-    const explicitUrl = normalizePreviewUrlCandidate(options.url);
-    if (explicitUrl) {
-        return {
-            target: explicitUrl,
-            source: 'verify-feature --url',
-            mode: 'url',
-        };
-    }
-
-    const previewUrlText = normalizePreviewUrlCandidate(readOptionalText(path.join(featureDir, 'preview-url.txt')));
-    if (previewUrlText) {
-        return {
-            target: previewUrlText,
-            source: 'preview-url.txt',
-            mode: 'url',
-        };
-    }
-
-    const previewUrlJson = readOptionalJson(path.join(featureDir, 'preview-url.json'));
-    const previewUrlJsonValue = normalizePreviewUrlCandidate(previewUrlJson?.url);
-    if (previewUrlJsonValue) {
-        return {
-            target: previewUrlJsonValue,
-            source: 'preview-url.json',
-            mode: 'url',
-        };
-    }
-
-    if (htmlTargets.length > 0) {
-        return {
-            target: pathToFileURL(htmlTargets[0]).href,
-            source: path.relative(targetDir, htmlTargets[0]) || path.basename(htmlTargets[0]),
-            mode: 'file',
-        };
-    }
-
-    return null;
-}
-
 function readOptionalText(filePath) {
     if (!fs.existsSync(filePath)) return '';
     try {
@@ -265,7 +223,7 @@ function runAccesslintStep(runtime, featureDir, designReceipt) {
         };
     }
 
-    const htmlTargets = collectAccessibilityAuditTargets(runtime.targetDir);
+    const htmlTargets = collectHtmlAuditTargets(runtime.targetDir);
     if (htmlTargets.length === 0) {
         return {
             result: {
@@ -306,6 +264,10 @@ function runAccesslintStep(runtime, featureDir, designReceipt) {
     }
 }
 
+function collectAccessibilityAuditTargets(targetDir) {
+    return collectHtmlAuditTargets(targetDir);
+}
+
 function runBrowserAuditStep(runtime, featureDir, promptReceipt, designReceipt, previewUrl) {
     const step = 'Deep scan: Playwright UI audit';
     const browserAuditArtifact = path.join(featureDir, 'ui-audit.json');
@@ -323,7 +285,7 @@ function runBrowserAuditStep(runtime, featureDir, promptReceipt, designReceipt, 
         };
     }
 
-    const htmlTargets = collectAccessibilityAuditTargets(runtime.targetDir);
+    const htmlTargets = collectHtmlAuditTargets(runtime.targetDir);
     const browserTarget = resolveBrowserAuditTarget(runtime.targetDir, featureDir, htmlTargets, { url: previewUrl });
     if (!browserTarget) {
         return {
@@ -527,7 +489,9 @@ function run(argv = [], context = {}) {
             area: 'verify',
             command: 'verify-feature',
             exitCode: 1,
-            stderr: '[steroid-run] Usage: npx steroid-run verify-feature <feature> [--deep] [--url <preview>]\n',
+            stderr:
+                '[steroid-run] Usage: npx steroid-run verify-feature <feature> [--deep] [--url <preview>]\n' +
+                '  Next command: node steroid-run.cjs pipeline-status <feature>\n',
         };
     }
 
@@ -539,7 +503,9 @@ function run(argv = [], context = {}) {
             area: 'verify',
             command: 'verify-feature',
             exitCode: 1,
-            stderr: '[steroid-run] ❌ --url requires an http(s) preview URL.\n',
+            stderr:
+                '[steroid-run] ❌ --url requires an http(s) preview URL.\n' +
+                formatVerifyNextCommand(feature, `node steroid-run.cjs verify-feature ${feature} --url https://preview.example.com`),
         };
     }
     if (previewUrlFlagIndex !== -1 && !normalizePreviewUrlCandidate(previewUrl)) {
@@ -548,7 +514,9 @@ function run(argv = [], context = {}) {
             area: 'verify',
             command: 'verify-feature',
             exitCode: 1,
-            stderr: '[steroid-run] ❌ --url must be a valid http(s) URL or hostname.\n',
+            stderr:
+                '[steroid-run] ❌ --url must be a valid http(s) URL or hostname.\n' +
+                formatVerifyNextCommand(feature, `node steroid-run.cjs verify-feature ${feature} --url https://preview.example.com`),
         };
     }
 
@@ -562,7 +530,9 @@ function run(argv = [], context = {}) {
             area: 'verify',
             command: 'verify-feature',
             exitCode: 1,
-            stderr: '[steroid-run] ❌ No plan.md or diagnosis.md found. Complete the engine or diagnose phase first.\n',
+            stderr:
+                '[steroid-run] ❌ No plan.md or diagnosis.md found. Complete the engine or diagnose phase first.\n' +
+                formatVerifyNextCommand(feature),
         };
     }
 
@@ -575,6 +545,7 @@ function run(argv = [], context = {}) {
     let hasFailure = false;
     const reviewReceipt = loadReviewReceipt(feature, paths.featureDir);
     const reviewPassed = reviewReceipt.stage1 === 'PASS' && reviewReceipt.stage2 === 'PASS';
+    const reviewAuthenticity = assessReviewAuthenticity(paths.featureDir);
     const promptReceipt = readOptionalJson(path.join(paths.featureDir, 'prompt.json'));
     const designReceipt = readOptionalJson(path.join(paths.featureDir, 'design-routing.json'));
 
@@ -590,6 +561,21 @@ function run(argv = [], context = {}) {
             step: 'Review gate',
             status: 'PASS',
             detail: `Two-stage review passed (${reviewReceipt.stage1}/${reviewReceipt.stage2})`,
+        });
+    }
+
+    if (!reviewAuthenticity.ok) {
+        results.push({
+            step: 'Review evidence',
+            status: 'FAIL',
+            detail: reviewAuthenticity.reason,
+        });
+        hasFailure = true;
+    } else {
+        results.push({
+            step: 'Review evidence',
+            status: 'PASS',
+            detail: 'review.md contains completed review results with file-backed evidence',
         });
     }
 
@@ -718,6 +704,7 @@ function run(argv = [], context = {}) {
     }
 
     const verifyStatus = writeVerifyArtifacts(paths, feature, reviewPassed, deepMode, deepMode, results, hasFailure);
+    const verifyConfidence = assessVerificationConfidence(results, hasFailure);
 
     const uiReviewRefresh = refreshUiReviewArtifacts(feature, paths.featureDir, {
         verifyStatus,
@@ -734,7 +721,15 @@ function run(argv = [], context = {}) {
             area: 'verify',
             command: 'verify-feature',
             exitCode: 1,
-            stderr: `${results.filter((entry) => entry.status === 'FAIL').map(formatStep).join('\n')}\n`,
+            stderr:
+                `${results.filter((entry) => entry.status === 'FAIL').map(formatStep).join('\n')}\n` +
+                `- INFO: Verification confidence — ${verifyConfidence}\n` +
+                formatVerifyNextCommand(
+                    feature,
+                    reviewPassed
+                        ? `node steroid-run.cjs pipeline-status ${feature}`
+                        : `node steroid-run.cjs review status ${feature}`,
+                ),
         };
     }
 
@@ -757,13 +752,14 @@ function run(argv = [], context = {}) {
     } else if (uiReviewRefresh.skipped) {
         lines.push(`- SKIP: UI Review — ${uiReviewRefresh.reason}`);
     }
+    lines.push(`- INFO: Verification confidence — ${verifyConfidence}`);
 
     return {
         handled: true,
         area: 'verify',
         command: 'verify-feature',
         exitCode: 0,
-        stdout: `${lines.join('\n')}\n`,
+        stdout: `${lines.join('\n')}\n${formatVerifyNextCommand(feature, `node steroid-run.cjs archive ${feature}`)}`,
     };
 }
 

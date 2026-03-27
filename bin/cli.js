@@ -4,6 +4,7 @@ const path = require('path');
 const { copyRecursiveSync } = require('../src/install/fs-helpers.cjs');
 const {
     resolveMemoryTemplateDir,
+    resolveRuntimeSrcDir,
     resolveRuntimeServicesDir,
 } = require('../src/install/runtime-layout.cjs');
 
@@ -179,7 +180,10 @@ This is a non-negotiable physical constraint. The wrapper tracks errors and will
 
 ## Pipeline Enforcement Commands (MUST USE)
 The AI MUST use these physical commands — they cannot be skipped:
-- \\\`node steroid-run.cjs init-feature <slug>\\\` — Create feature folder (validates kebab-case)
+- \\\`node steroid-run.cjs start <slug>\\\` — Initialize a feature and bootstrap the scan
+- \\\`node steroid-run.cjs next <feature>\\\` — Show the current phase, blockers, and the exact next action
+- \\\`node steroid-run.cjs finish <feature>\\\` — Check whether review, verify, and archive are actually ready
+- \\\`node steroid-run.cjs init-feature <slug>\\\` — Advanced: create the feature folder only (without scan)
 - \\\`node steroid-run.cjs scan <feature>\\\` — Bootstrap codebase context (writes request.json + context.md)
 - \\\`node steroid-run.cjs gate <phase> <feature>\\\` — Check phase prerequisites before proceeding
 - \\\`node steroid-run.cjs commit "<message>"\\\` — Atomic git commit in steroid format
@@ -339,11 +343,11 @@ copyRecursiveSync(path.join(sourceDir, 'skills'), destSkills);
 console.log(`   ✅ Skills installed to ${skillsTarget}/`);
 console.log(`      → scan → vibe-capture → specify → research → architect → engine → verify (+ diagnose)`);
 
-// Step 3: Install runtime assets + steroid-run.cjs
+// Step 3: Install runtime source + steroid-run.cjs
 console.log('📦 [3/7] Installing Steroid runtime assets and pipeline enforcer...');
-copyRecursiveSync(path.join(sourceDir, 'src', 'services'), resolveRuntimeServicesDir(targetDir));
+copyRecursiveSync(path.join(sourceDir, 'src'), resolveRuntimeSrcDir(targetDir));
 fs.copyFileSync(path.join(sourceDir, 'bin', 'steroid-run.cjs'), path.join(targetDir, 'steroid-run.cjs'));
-console.log('   ✅ Runtime services installed to .steroid/runtime/services/');
+console.log('   ✅ Runtime source installed to .steroid/runtime/src/');
 console.log('   ✅ steroid-run.cjs copied to project root (pipeline enforcer)');
 
 // Step 4: Inject IDE Trigger Rules (The Maestro) — ALL major IDEs

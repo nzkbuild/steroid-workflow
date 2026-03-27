@@ -16,11 +16,16 @@ function resolveRuntimeAssetsDir(targetDir) {
 }
 
 function resolveRuntimeServicesDir(targetDir) {
-    return path.join(resolveRuntimeAssetsDir(targetDir), 'services');
+    return path.join(resolveRuntimeAssetsDir(targetDir), 'src', 'services');
+}
+
+function resolveRuntimeSrcDir(targetDir) {
+    return path.join(resolveRuntimeAssetsDir(targetDir), 'src');
 }
 
 module.exports = {
     resolveMemoryTemplateDir,
     resolveRuntimeAssetsDir,
+    resolveRuntimeSrcDir,
     resolveRuntimeServicesDir,
 };

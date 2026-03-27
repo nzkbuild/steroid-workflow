@@ -61,25 +61,37 @@ Use the steroid pipeline.
 
 Works with any AI-powered IDE or CLI that can follow project instructions.
 
+Once Steroid is installed, the simplest workflow is:
+
+```bash
+node steroid-run.cjs start habit-tracker
+node steroid-run.cjs next habit-tracker
+node steroid-run.cjs finish habit-tracker
+```
+
 ## What Steroid Does
 
 Steroid turns vague requests into a real workflow with checkpoints.
 
-### Build path
+### Primary journey
 
-For normal feature work, the flow is:
-
-```text
-scan -> vibe -> spec -> research -> architect -> engine -> verify
-```
-
-### Fix path
-
-For bug work, the flow is:
+For most work, the top-level flow is:
 
 ```text
-scan -> diagnose -> fix -> verify
+start <feature> -> next <feature> -> finish <feature>
 ```
+
+`start` bootstraps the feature and scan, `next` answers what to do now, and `finish` tells you whether review, verification, and archive are actually ready.
+
+### Under the hood
+
+Under the hood, Steroid still routes the work through a stricter internal pipeline. For normal feature work that usually means:
+
+```text
+scan -> vibe -> spec -> research -> architect -> engine -> review -> verify -> archive
+```
+
+For bug and repair work, the route becomes more diagnose-and-fix oriented instead of forcing the full feature path.
 
 ### What gets produced
 

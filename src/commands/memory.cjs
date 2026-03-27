@@ -46,6 +46,10 @@ function summarizeProgressContent(progressContent) {
     return normalized || null;
 }
 
+function formatMemoryNextCommand(command) {
+    return `  Next command: ${command}\n`;
+}
+
 function collectMemorySummary(runtime) {
     ensureKnowledgeDir(runtime.knowledgeDir);
 
@@ -317,7 +321,12 @@ function handleMemoryWrite(argv = [], context = {}) {
 function handleMemoryStats(context = {}) {
     const runtime = buildRuntimeContext(context);
     ensureKnowledgeDir(runtime.knowledgeDir);
-    const lines = ['[steroid-run] 🧠 Memory Statistics', ''];
+    const lines = [
+        '[steroid-run] 🧠 Memory Statistics',
+        '',
+        '  Role: detailed health view for long-lived project context.',
+        '',
+    ];
     let totalEntries = 0;
 
     for (const store of VALID_STORES) {
@@ -361,6 +370,7 @@ function handleMemoryStats(context = {}) {
 
     lines.push('');
     lines.push(`  Total knowledge entries: ${totalEntries}`);
+    lines.push(formatMemoryNextCommand('node steroid-run.cjs memory summary').trimEnd());
     return {
         handled: true,
         area: 'memory',
@@ -377,6 +387,8 @@ function handleMemorySummary(context = {}) {
     const lines = [
         '[steroid-run] 🧠 Memory Summary',
         '',
+        '  Role: operational context snapshot for the current project.',
+        '',
         `  Populated stores: ${populatedStores.length > 0 ? populatedStores.join(', ') : 'none'}`,
         `  Total knowledge entries: ${summary.totalEntries}`,
         `  Latest update: ${summary.latestUpdate || 'unknown'}`,
@@ -392,6 +404,8 @@ function handleMemorySummary(context = {}) {
             lines.push(`  - ${action}`);
         }
     }
+    lines.push('');
+    lines.push(`  Next command: ${summary.recommendedActions.length > 0 ? 'node steroid-run.cjs memory save' : 'node steroid-run.cjs pipeline-status <feature>'}`);
 
     return {
         handled: true,
@@ -413,7 +427,9 @@ function handleMemorySave(context = {}) {
         area: 'memory',
         command: 'memory',
         exitCode: 0,
-        stdout: `[steroid-run] ✅ Session memory checkpoint written to .memory/knowledge/session-summary.json\n`,
+        stdout:
+            `[steroid-run] ✅ Session memory checkpoint written to .memory/knowledge/session-summary.json\n` +
+            formatMemoryNextCommand('node steroid-run.cjs memory summary'),
     };
 }
 
@@ -428,6 +444,9 @@ function handleMemory(argv = [], context = {}) {
             exitCode: 0,
             stdout:
                 '\n[steroid-run] memory — Structured project knowledge store.\n\n' +
+                'Primary use:\n' +
+                '  memory summary  — the easiest way to see what Steroid still knows and what to refresh\n' +
+                '  memory save     — checkpoint current working context before a handoff or pause\n\n' +
                 'Usage:\n' +
                 '  node steroid-run.cjs memory show [store]       Show a knowledge store (tech-stack|patterns|decisions|gotchas)\n' +
                 '  node steroid-run.cjs memory show-all           Show all knowledge stores\n' +
@@ -439,7 +458,8 @@ function handleMemory(argv = [], context = {}) {
                 '  tech-stack   — Language, framework, deps (from scan/research)\n' +
                 '  patterns     — Codebase patterns and conventions (from AGENTS.md/scan)\n' +
                 '  decisions    — Locked architectural decisions (from architect phase)\n' +
-                '  gotchas      — Known pitfalls and workarounds (from engine/verify)\n',
+                '  gotchas      — Known pitfalls and workarounds (from engine/verify)\n\n' +
+                formatMemoryNextCommand('node steroid-run.cjs memory summary'),
         };
     }
 
